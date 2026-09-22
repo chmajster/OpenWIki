@@ -16,7 +16,7 @@ final class InstallService
 
     public function requirements(): array
     {
-        $requiredExtensions = ['pdo', 'pdo_mysql', 'mbstring', 'openssl', 'dom', 'phar'];
+        $requiredExtensions = ['pdo', 'pdo_mysql', 'mbstring', 'openssl', 'dom', 'phar', 'curl'];
         $extensions = [];
         foreach ($requiredExtensions as $extension) {
             $extensions[$extension] = extension_loaded($extension);
