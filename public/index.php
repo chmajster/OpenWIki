@@ -28,6 +28,10 @@ try {
         if ($user !== null && !str_starts_with($request->path(), '/api/')) {
             $mfa = new MfaService($app->database());
             $mfaVerified = Session::get('mfa_verified') === true;
+            if ($mfaVerified && $mfa->required((int) $user['id']) && !$mfa->enabled((int) $user['id'])) {
+                Session::put('mfa_verified', false);
+                $mfaVerified = false;
+            }
             $allowedDuringMfa = in_array(
                 $request->path(),
                 ['/mfa/challenge', '/account/mfa/setup', '/account/mfa/confirm', '/logout', '/health'],
