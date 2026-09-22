@@ -10,7 +10,8 @@ final class Response
         private readonly string $body = '',
         private readonly int $status = 200,
         private readonly array $headers = [],
-        private readonly ?string $filePath = null
+        private readonly ?string $filePath = null,
+        private readonly bool $deleteFileAfterSend = false
     ) {
     }
 
@@ -25,7 +26,13 @@ final class Response
         return new self($json, $status, ['Content-Type' => 'application/json; charset=UTF-8'] + $headers);
     }
 
-    public static function file(string $path, string $mimeType, string $downloadName, bool $inline = false): self
+    public static function file(
+        string $path,
+        string $mimeType,
+        string $downloadName,
+        bool $inline = false,
+        bool $deleteAfterSend = false
+    ): self
     {
         if (!is_file($path) || !is_readable($path)) {
             throw new \RuntimeException('File is not available.');
@@ -40,7 +47,20 @@ final class Response
             'Content-Disposition' => $disposition,
             'X-Content-Type-Options' => 'nosniff',
             'Cache-Control' => 'private, no-store',
-        ], $path);
+        ], $path, $deleteAfterSend);
+    }
+
+    public static function download(string $content, string $mimeType, string $downloadName): self
+    {
+        $safeName = preg_replace('/[^A-Za-z0-9._-]+/', '_', basename($downloadName)) ?: 'download';
+
+        return new self($content, 200, [
+            'Content-Type' => $mimeType,
+            'Content-Length' => (string) strlen($content),
+            'Content-Disposition' => 'attachment; filename="' . $safeName . '"',
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, no-store',
+        ]);
     }
 
     public static function redirect(string $location, int $status = 302): self
@@ -67,6 +87,9 @@ final class Response
             }
             fpassthru($handle);
             fclose($handle);
+            if ($this->deleteFileAfterSend) {
+                @unlink($this->filePath);
+            }
             exit;
         }
 
