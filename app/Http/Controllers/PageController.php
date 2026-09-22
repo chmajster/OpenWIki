@@ -10,6 +10,7 @@ use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
 use OpenWiki\Http\Controller;
+use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
@@ -47,7 +48,7 @@ final class PageController extends Controller
             'space' => $space,
             'page' => null,
             'serverDraft' => null,
-            'pages' => (new PageRepository($this->app->database()))->tree((int) $space['id']),
+            'pages' => $this->visibleTree($space),
             'templates' => $templates,
             'tags' => [],
             'canPublish' => $this->app->auth()->can('page.publish'),
@@ -177,7 +178,8 @@ final class PageController extends Controller
             return $this->render('errors/404', ['title' => 'Page not found'], 404);
         }
 
-        if (!$this->canViewPage($page, $space, $access)) {
+        $pageAccess = new PageAclService($this->app);
+        if (!$pageAccess->canView($page, $space)) {
             return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
@@ -190,7 +192,7 @@ final class PageController extends Controller
         $metadata = new WikiMetadataService($this->app->database());
         $backlinks = array_values(array_filter(
             $metadata->backlinks((int) $page['id']),
-            function (array $source) use ($access): bool {
+            function (array $source) use ($access, $pageAccess): bool {
                 $sourceSpace = [
                     'id' => (int) $source['space_id'],
                     'owner_id' => (int) $source['space_owner_id'],
@@ -200,7 +202,7 @@ final class PageController extends Controller
                 ];
 
                 return $access->canView($sourceSpace)
-                    && $this->canViewPage($source, $sourceSpace, $access);
+                    && $pageAccess->canView($source, $sourceSpace);
             }
         ));
 
@@ -208,11 +210,13 @@ final class PageController extends Controller
             'title' => $page['title'],
             'space' => $space,
             'page' => $page,
-            'pages' => $repository->tree((int) $space['id']),
-            'canEdit' => $access->canEdit($space) && $this->app->auth()->can('page.edit'),
-            'canDeletePage' => $user !== null
-                && $access->canEdit($space)
-                && $this->app->auth()->can('page.delete'),
+            'pages' => array_values(array_filter(
+                $repository->tree((int) $space['id']),
+                fn (array $treePage): bool => $pageAccess->canView($treePage, $space)
+            )),
+            'canEdit' => $pageAccess->canEdit($page, $space),
+            'canManagePermissions' => $pageAccess->canEdit($page, $space),
+            'canDeletePage' => $user !== null && $pageAccess->can($page, $space, 'page.delete'),
             'isFavorite' => $user !== null && $engagement->isFavorite((int) $user['id'], (int) $page['id']),
             'isWatching' => $user !== null && $engagement->isWatching((int) $user['id'], 'page', (int) $page['id']),
             'comments' => (new CommentService($this->app->database()))->listForPage((int) $page['id']),
@@ -220,10 +224,10 @@ final class PageController extends Controller
             'canDeleteComment' => $user !== null && $this->app->auth()->can('comment.delete'),
             'attachments' => (new AttachmentService($this->app->database(), $this->app->basePath()))->listForPage((int) $page['id']),
             'canUploadAttachment' => $user !== null
-                && $access->canEdit($space)
+                && $pageAccess->canEdit($page, $space)
                 && $this->app->auth()->can('attachment.upload'),
             'canDeleteAttachment' => $user !== null
-                && $access->canEdit($space)
+                && $pageAccess->canEdit($page, $space)
                 && $this->app->auth()->can('attachment.delete'),
             'tags' => $metadata->tagsForPage((int) $page['id']),
             'backlinks' => $backlinks,
@@ -251,6 +255,9 @@ final class PageController extends Controller
         if ($page === null) {
             return $this->render('errors/404', ['title' => 'Page not found'], 404);
         }
+        if (!(new PageAclService($this->app))->canEdit($page, $space)) {
+            return $this->render('errors/403', ['title' => 'Permission denied'], 403);
+        }
 
         $user = $this->app->auth()->user();
         $serverDraft = (new EditSessionService($this->app->database()))->draft(
@@ -263,7 +270,7 @@ final class PageController extends Controller
             'space' => $space,
             'page' => $page,
             'serverDraft' => $serverDraft,
-            'pages' => $repository->tree((int) $space['id']),
+            'pages' => $this->visibleTree($space),
             'templates' => [],
             'tags' => (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
             'canPublish' => $this->app->auth()->can('page.publish'),
@@ -294,6 +301,9 @@ final class PageController extends Controller
         $current = $repository->findBySlug((int) $space['id'], $slug);
         if ($current === null) {
             return $this->render('errors/404', ['title' => 'Page not found'], 404);
+        }
+        if (!(new PageAclService($this->app))->canEdit($current, $space)) {
+            return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
         try {
@@ -397,7 +407,8 @@ final class PageController extends Controller
             return $this->render('errors/404', ['title' => 'Page not found'], 404);
         }
 
-        if (!$this->canViewPage($page, $space, $access)) {
+        $pageAccess = new PageAclService($this->app);
+        if (!$pageAccess->canView($page, $space)) {
             return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
@@ -406,7 +417,7 @@ final class PageController extends Controller
             'space' => $space,
             'page' => $page,
             'revisions' => $repository->revisions((int) $page['id']),
-            'canRestore' => $access->canEdit($space) && $this->app->auth()->can('page.edit'),
+            'canRestore' => $pageAccess->canEdit($page, $space),
         ]);
     }
 
@@ -435,6 +446,9 @@ final class PageController extends Controller
 
         if ($page === null || $revisionNumber === false || $revisionNumber < 1) {
             return $this->render('errors/404', ['title' => 'Revision not found'], 404);
+        }
+        if (!(new PageAclService($this->app))->canEdit($page, $space)) {
+            return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
         $revision = $repository->revision((int) $page['id'], (int) $revisionNumber);
@@ -515,6 +529,15 @@ final class PageController extends Controller
         if ($status === 'archived' && !$this->app->auth()->can('page.archive')) {
             throw new \InvalidArgumentException('You do not have permission to archive pages.');
         }
+        if ($current !== null) {
+            $pageAccess = new PageAclService($this->app);
+            if ($status === 'published' && !$pageAccess->can($current, $space, 'page.publish')) {
+                throw new \InvalidArgumentException('Page ACL does not allow publishing this page.');
+            }
+            if ($status === 'archived' && !$pageAccess->can($current, $space, 'page.archive')) {
+                throw new \InvalidArgumentException('Page ACL does not allow archiving this page.');
+            }
+        }
 
         $parentId = $request->input('parent_id');
         $parentId = ($parentId === null || $parentId === '') ? null : filter_var($parentId, FILTER_VALIDATE_INT);
@@ -527,12 +550,43 @@ final class PageController extends Controller
             if ($parent === null || (int) $parent['space_id'] !== (int) $space['id']) {
                 throw new \InvalidArgumentException('Parent page must belong to the same space.');
             }
+
+            $pageAccess = new PageAclService($this->app);
+            if ($current === null) {
+                if (!$pageAccess->can($parent, $space, 'page.create')) {
+                    throw new \InvalidArgumentException('You cannot create a child page under the selected parent.');
+                }
+            } else {
+                $parentChanged = (int) ($current['parent_id'] ?? 0) !== (int) $parentId;
+                if ($parentChanged) {
+                    if (
+                        !$this->app->auth()->can('page.move')
+                        || !$pageAccess->can($current, $space, 'page.move')
+                        || !$pageAccess->canView($parent, $space)
+                    ) {
+                        throw new \InvalidArgumentException('You do not have permission to move this page to the selected parent.');
+                    }
+                }
+            }
+
             if (
                 $current !== null
                 && (new PageRepository($this->app->database()))->wouldCreateCycle((int) $current['id'], (int) $parentId)
             ) {
                 throw new \InvalidArgumentException('The selected parent would create a cycle in the page tree.');
             }
+        }
+
+        if (
+            $current !== null
+            && $parentId === null
+            && $current['parent_id'] !== null
+            && (
+                !$this->app->auth()->can('page.move')
+                || !(new PageAclService($this->app))->can($current, $space, 'page.move')
+            )
+        ) {
+            throw new \InvalidArgumentException('You do not have permission to move this page to the root level.');
         }
 
         $format = (string) $request->input('content_format', 'visual');
@@ -555,20 +609,15 @@ final class PageController extends Controller
         ];
     }
 
-    private function canViewPage(array $page, array $space, SpaceAccessService $access): bool
+    private function visibleTree(array $space): array
     {
-        if ($page['status'] === 'published') {
-            return true;
-        }
+        $access = new PageAclService($this->app);
+        $pages = (new PageRepository($this->app->database()))->tree((int) $space['id']);
 
-        $user = $this->app->auth()->user();
-        if ($user === null) {
-            return false;
-        }
-
-        return (int) $page['owner_id'] === (int) $user['id']
-            || (int) $page['author_id'] === (int) $user['id']
-            || $access->canEdit($space);
+        return array_values(array_filter(
+            $pages,
+            fn (array $page): bool => $access->canView($page, $space)
+        ));
     }
 
     private function space(string $spaceKey): array|Response
