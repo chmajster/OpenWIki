@@ -6,6 +6,7 @@ use OpenWiki\Http\Controllers\AccountPasswordController;
 use OpenWiki\Http\Controllers\Api\ApiV1Controller;
 use OpenWiki\Http\Controllers\ApiTokenController;
 use OpenWiki\Http\Controllers\AttachmentController;
+use OpenWiki\Http\Controllers\BackupController;
 use OpenWiki\Http\Controllers\AuthController;
 use OpenWiki\Http\Controllers\CommentController;
 use OpenWiki\Http\Controllers\DashboardController;
@@ -100,6 +101,10 @@ $router->get('/account/change-password', [AccountPasswordController::class, 'edi
 $router->post('/account/change-password', [AccountPasswordController::class, 'update']);
 
 $router->get('/admin', [DirectoryAdminController::class, 'dashboard']);
+$router->get('/admin/backups', [BackupController::class, 'index']);
+$router->post('/admin/backups', [BackupController::class, 'create']);
+$router->get('/admin/backups/{name}/download', [BackupController::class, 'download']);
+
 $router->get('/admin/users', [DirectoryAdminController::class, 'users']);
 $router->get('/admin/users/create', [DirectoryAdminController::class, 'createUserForm']);
 $router->post('/admin/users', [DirectoryAdminController::class, 'createUser']);
