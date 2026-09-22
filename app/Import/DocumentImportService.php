@@ -14,10 +14,8 @@ use ZipArchive;
 
 final class DocumentImportService
 {
-    public function __construct(
-        private readonly Database $database,
-        private readonly string $basePath
-    ) {
+    public function __construct(private readonly Database $database)
+    {
     }
 
     public function importUploaded(
