@@ -11,6 +11,7 @@ use OpenWiki\Core\Database;
 use OpenWiki\Database\MigrationRunner;
 use OpenWiki\Install\InstallService;
 use OpenWiki\Security\RateLimiter;
+use OpenWiki\Search\SearchIndexer;
 use OpenWiki\Webhooks\WebhookService;
 
 final class ConsoleApplication
@@ -36,6 +37,7 @@ final class ConsoleApplication
                 'user:disable' => $this->userDisable($argv[2] ?? null),
                 'admin:reset-password' => $this->adminResetPassword($argv[2] ?? null),
                 'backup:create' => $this->backupCreate(),
+                'search:index' => $this->searchIndex(),
                 default => $this->unknown($command),
             };
         } catch (\Throwable $exception) {
@@ -64,6 +66,7 @@ Commands:
   admin:reset-password <user>
                         Generate a temporary password and force change on next login
   backup:create         Create a database, attachments and configuration backup
+  search:index          Rebuild searchable plain-text page content
   help                  Show this help
 
 TEXT);
@@ -297,6 +300,23 @@ TEXT);
 
         fwrite(STDOUT, '[ OK ] Backup: ' . $backup['path'] . PHP_EOL);
         fwrite(STDOUT, '[INFO] Size: ' . $backup['size_bytes'] . ' bytes' . PHP_EOL);
+        return 0;
+    }
+
+    private function searchIndex(): int
+    {
+        $app = Application::boot($this->basePath);
+        if (!$app->installed()) {
+            throw new \RuntimeException('OpenWiki is not installed.');
+        }
+
+        fwrite(STDOUT, '[1/2] Rebuilding page search content' . PHP_EOL);
+        $result = (new SearchIndexer($app->database()))->rebuild();
+
+        fwrite(STDOUT, '[2/2] Search index refresh completed' . PHP_EOL);
+        fwrite(STDOUT, '[ OK ] Scanned: ' . $result['scanned'] . PHP_EOL);
+        fwrite(STDOUT, '[INFO] Updated: ' . $result['updated'] . PHP_EOL);
+        fwrite(STDOUT, '[INFO] Unchanged: ' . $result['unchanged'] . PHP_EOL);
         return 0;
     }
 
