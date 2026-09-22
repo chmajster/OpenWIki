@@ -191,6 +191,9 @@ final class PageController extends Controller
             'page' => $page,
             'pages' => $repository->tree((int) $space['id']),
             'canEdit' => $access->canEdit($space) && $this->app->auth()->can('page.edit'),
+            'canDeletePage' => $user !== null
+                && $access->canEdit($space)
+                && $this->app->auth()->can('page.delete'),
             'isFavorite' => $user !== null && $engagement->isFavorite((int) $user['id'], (int) $page['id']),
             'isWatching' => $user !== null && $engagement->isWatching((int) $user['id'], 'page', (int) $page['id']),
             'comments' => (new CommentService($this->app->database()))->listForPage((int) $page['id']),
