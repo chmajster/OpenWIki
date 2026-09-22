@@ -408,3 +408,26 @@ textarea { resize: vertical; }
     .attachment-row { flex-direction: column; }
     .attachment-row__actions { justify-content: flex-start; width: 100%; }
 }
+
+
+.tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin-top: .7rem;
+}
+.tag-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: .25rem .55rem;
+    border: 1px solid var(--border, #dfe3e8);
+    border-radius: 999px;
+    font-size: .82rem;
+    text-decoration: none;
+}
+.wiki-link--broken {
+    text-decoration-style: dashed;
+    text-decoration-color: currentColor;
+    opacity: .75;
+}
+.backlinks-section { margin-top: 1.5rem; }
