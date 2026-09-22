@@ -743,11 +743,33 @@ final class ApiV1Controller extends Controller
         }
 
         $tokenService = new ApiTokenService($this->app->database());
-        if ($status === 'published' && !$tokenService->hasPermission($context, 'page.publish')) {
-            throw new \InvalidArgumentException('The token owner cannot publish pages.');
+        $pageAccess = new PageAclService($this->app);
+        $userId = (int) $context['user']['id'];
+        $superAdmin = $this->isSuperAdmin($context);
+
+        if ($status === 'published') {
+            $hasPublish = $tokenService->hasPermission($context, 'page.publish');
+            if (!$hasPublish) {
+                throw new \InvalidArgumentException('The token owner cannot publish pages.');
+            }
+            if (
+                $current !== null
+                && !$pageAccess->canFor($current, $space, 'page.publish', $userId, $superAdmin, $hasPublish)
+            ) {
+                throw new \InvalidArgumentException('Page ACL does not allow publishing this page.');
+            }
         }
-        if ($status === 'archived' && !$tokenService->hasPermission($context, 'page.archive')) {
-            throw new \InvalidArgumentException('The token owner cannot archive pages.');
+        if ($status === 'archived') {
+            $hasArchive = $tokenService->hasPermission($context, 'page.archive');
+            if (!$hasArchive) {
+                throw new \InvalidArgumentException('The token owner cannot archive pages.');
+            }
+            if (
+                $current !== null
+                && !$pageAccess->canFor($current, $space, 'page.archive', $userId, $superAdmin, $hasArchive)
+            ) {
+                throw new \InvalidArgumentException('Page ACL does not allow archiving this page.');
+            }
         }
 
         $parentValue = $request->input('parent_id', $current['parent_id'] ?? null);
@@ -762,9 +784,49 @@ final class ApiV1Controller extends Controller
             if ($parent === null || (int) $parent['space_id'] !== (int) $space['id']) {
                 throw new \InvalidArgumentException('Parent page must belong to the same space.');
             }
+
+            if ($current === null) {
+                if (!$pageAccess->canFor($parent, $space, 'page.create', $userId, $superAdmin, true)) {
+                    throw new \InvalidArgumentException('Page ACL does not allow creating a child under this parent.');
+                }
+            } else {
+                $parentChanged = (int) ($current['parent_id'] ?? 0) !== (int) $parentId;
+                if ($parentChanged) {
+                    $hasMove = $tokenService->hasPermission($context, 'page.move');
+                    if (
+                        !$pageAccess->canFor($current, $space, 'page.move', $userId, $superAdmin, $hasMove)
+                        || !$pageAccess->canViewFor(
+                            $parent,
+                            $space,
+                            $userId,
+                            $superAdmin,
+                            $tokenService->hasPermission($context, 'page.view')
+                        )
+                    ) {
+                        throw new \InvalidArgumentException('The token owner cannot move this page to the selected parent.');
+                    }
+                }
+            }
+
             if ($current !== null && $repository->wouldCreateCycle((int) $current['id'], (int) $parentId)) {
                 throw new \InvalidArgumentException('The selected parent would create a cycle.');
             }
+        }
+
+        if (
+            $current !== null
+            && $parentId === null
+            && $current['parent_id'] !== null
+            && !$pageAccess->canFor(
+                $current,
+                $space,
+                'page.move',
+                $userId,
+                $superAdmin,
+                $tokenService->hasPermission($context, 'page.move')
+            )
+        ) {
+            throw new \InvalidArgumentException('The token owner cannot move this page to the root level.');
         }
 
         $format = (string) $request->input('content_format', $current['content_format'] ?? 'visual');
@@ -854,23 +916,6 @@ final class ApiV1Controller extends Controller
         }
 
         return ['spaces' => $spaces, 'visible_ids' => $visibleIds, 'editable_ids' => $editableIds];
-    }
-
-    private function pageVisibilitySql(array $context, array $state): array
-    {
-        $userId = (int) $context['user']['id'];
-        if ($this->isSuperAdmin($context)) {
-            return ['1=1', []];
-        }
-
-        $parts = ['p.status = "published"', 'p.owner_id = ?', 'p.author_id = ?'];
-        $params = [$userId, $userId];
-        if ($state['editable_ids'] !== []) {
-            $parts[] = 'p.space_id IN (' . implode(',', array_fill(0, count($state['editable_ids']), '?')) . ')';
-            $params = array_merge($params, $state['editable_ids']);
-        }
-
-        return ['(' . implode(' OR ', $parts) . ')', $params];
     }
 
     private function contextHasPermission(array $context, string $permission): bool
