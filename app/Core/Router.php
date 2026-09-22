@@ -35,6 +35,17 @@ final class Router
 
     public function add(string $method, string $pattern, callable|array $handler): void
     {
+        if (is_array($handler) && is_string($handler[0] ?? null)) {
+            if (!class_exists($handler[0])) {
+                throw new \LogicException('Route controller does not exist: ' . $handler[0]);
+            }
+            if (!isset($handler[1]) || !is_string($handler[1]) || !method_exists($handler[0], $handler[1])) {
+                throw new \LogicException(
+                    'Route controller method does not exist: ' . $handler[0] . '::' . (string) ($handler[1] ?? '')
+                );
+            }
+        }
+
         $pattern = $this->normalizePath($pattern);
         $segments = explode('/', trim($pattern, '/'));
         $parts = [];
