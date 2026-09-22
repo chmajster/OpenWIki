@@ -239,6 +239,36 @@ final class AttachmentService
         return $row;
     }
 
+    public function storageKeysForPage(int $pageId): array
+    {
+        $rows = $this->database->fetchAll(
+            'SELECT DISTINCT av.storage_key
+             FROM attachment_versions av
+             INNER JOIN attachments a ON a.id = av.attachment_id
+             WHERE a.page_id = :page_id',
+            ['page_id' => $pageId]
+        );
+
+        return array_values(array_map(
+            static fn (array $row): string => (string) $row['storage_key'],
+            $rows
+        ));
+    }
+
+    public function purgeStorageKeys(array $storageKeys): void
+    {
+        foreach (array_unique(array_map('strval', $storageKeys)) as $storageKey) {
+            try {
+                $path = $this->safeStoredPath($storageKey);
+                if (is_file($path) && !@unlink($path)) {
+                    error_log('[OpenWiki attachment purge] Unable to remove ' . $storageKey);
+                }
+            } catch (\RuntimeException $exception) {
+                error_log('[OpenWiki attachment purge] ' . $exception->getMessage());
+            }
+        }
+    }
+
     public function mayPreview(string $mimeType): bool
     {
         return in_array(strtolower($mimeType), [
