@@ -264,6 +264,25 @@ final class DirectoryAdminService
         $permissionIds = $this->validatedIds($input['permission_ids'] ?? []);
         $this->assertExistingIds('permissions', $permissionIds);
 
+        $existingRole = $id === null ? null : $this->role($id);
+        if ($id !== null && $existingRole === null) {
+            throw new \InvalidArgumentException('Role not found.');
+        }
+        if ($existingRole !== null && (bool) $existingRole['is_system']) {
+            $name = (string) $existingRole['name'];
+            $slug = (string) $existingRole['slug'];
+        }
+        if ($existingRole !== null && $existingRole['slug'] === 'super-admin') {
+            $wildcard = $this->database->fetchOne(
+                'SELECT id FROM permissions WHERE name = "*" LIMIT 1'
+            );
+            if ($wildcard === null) {
+                throw new \RuntimeException('Wildcard permission is missing.');
+            }
+            $permissionIds[(int) $wildcard['id']] = (int) $wildcard['id'];
+            $permissionIds = array_values($permissionIds);
+        }
+
         return $this->database->transaction(function (Database $db) use ($id, $name, $slug, $description, $permissionIds): int {
             if ($id === null) {
                 $id = $db->insert(
@@ -272,11 +291,6 @@ final class DirectoryAdminService
                     ['name' => $name, 'slug' => $slug, 'description' => $description ?: null]
                 );
             } else {
-                $existing = $this->role($id);
-                if ($existing === null) {
-                    throw new \InvalidArgumentException('Role not found.');
-                }
-
                 $db->execute(
                     'UPDATE roles
                      SET name = :name, slug = :slug, description = :description, updated_at = UTC_TIMESTAMP()
