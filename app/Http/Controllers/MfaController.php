@@ -71,6 +71,17 @@ final class MfaController extends Controller
                 $request
             );
 
+            if (Session::get('mfa_pending_login') === true) {
+                (new AuditLogger($this->app->database()))->log(
+                    'LOGIN_SUCCEEDED',
+                    'user',
+                    (int) $user['id'],
+                    (int) $user['id'],
+                    $request
+                );
+                Session::forget('mfa_pending_login');
+            }
+
             return Response::redirect('/account/mfa/setup');
         } catch (\InvalidArgumentException $exception) {
             Session::flash('error', $exception->getMessage());
@@ -152,13 +163,16 @@ final class MfaController extends Controller
             (int) $user['id'],
             $request
         );
-        (new AuditLogger($this->app->database()))->log(
-            'LOGIN_SUCCEEDED',
-            'user',
-            (int) $user['id'],
-            (int) $user['id'],
-            $request
-        );
+        if (Session::get('mfa_pending_login') === true) {
+            (new AuditLogger($this->app->database()))->log(
+                'LOGIN_SUCCEEDED',
+                'user',
+                (int) $user['id'],
+                (int) $user['id'],
+                $request
+            );
+            Session::forget('mfa_pending_login');
+        }
 
         if ((bool) ($user['force_password_change'] ?? false)) {
             return Response::redirect('/account/change-password');
