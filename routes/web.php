@@ -25,6 +25,7 @@ use OpenWiki\Http\Controllers\PageEngagementController;
 use OpenWiki\Http\Controllers\SearchController;
 use OpenWiki\Http\Controllers\SpaceController;
 use OpenWiki\Http\Controllers\SystemAdminController;
+use OpenWiki\Http\Controllers\TemplateAdminController;
 use OpenWiki\Http\Controllers\TrashController;
 use OpenWiki\Http\Controllers\WikiMetadataController;
 use OpenWiki\Http\Controllers\WebhookAdminController;
@@ -160,3 +161,10 @@ $router->post('/admin/ldap', [LdapAdminController::class, 'save']);
 $router->post('/admin/ldap/test', [LdapAdminController::class, 'test']);
 
 $router->get('/admin/system', [SystemAdminController::class, 'index']);
+
+$router->get('/admin/templates', [TemplateAdminController::class, 'index']);
+$router->get('/admin/templates/create', [TemplateAdminController::class, 'create']);
+$router->post('/admin/templates', [TemplateAdminController::class, 'save']);
+$router->get('/admin/templates/{id}/edit', [TemplateAdminController::class, 'edit']);
+$router->post('/admin/templates/{id}', [TemplateAdminController::class, 'save']);
+$router->post('/admin/templates/{id}/delete', [TemplateAdminController::class, 'delete']);
