@@ -9,6 +9,7 @@ use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
 use OpenWiki\Http\Controller;
+use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
@@ -118,11 +119,11 @@ final class SpaceController extends Controller
         }
 
         $canEdit = $access->canEdit($space);
-        $pages = (new PageRepository($this->app->database()))->tree((int) $space['id']);
-
-        if (!$canEdit) {
-            $pages = array_values(array_filter($pages, static fn (array $page): bool => $page['status'] === 'published'));
-        }
+        $pageAccess = new PageAclService($this->app);
+        $pages = array_values(array_filter(
+            (new PageRepository($this->app->database()))->tree((int) $space['id']),
+            fn (array $page): bool => $pageAccess->canView($page, $space)
+        ));
 
         return $this->render('spaces/show', [
             'title' => $space['name'],
