@@ -43,6 +43,10 @@ final class DirectoryAdminServiceTest extends TestCase
         $service = new DirectoryAdminService($this->database);
         $suffix = bin2hex(random_bytes(4));
 
+        $this->database->execute(
+            'INSERT IGNORE INTO permissions (name, description, created_at)
+             VALUES ("page.view", "View pages", UTC_TIMESTAMP())'
+        );
         $permission = $this->database->fetchOne(
             'SELECT id FROM permissions WHERE name = "page.view" LIMIT 1'
         );
