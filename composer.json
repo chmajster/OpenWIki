@@ -12,7 +12,8 @@
     "ext-dom": "*",
     "ext-phar": "*",
     "ext-curl": "*",
-    "ext-ldap": "*"
+    "ext-ldap": "*",
+    "ext-zip": "*"
   },
   "autoload": {
     "psr-4": {
