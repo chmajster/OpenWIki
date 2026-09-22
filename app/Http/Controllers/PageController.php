@@ -13,6 +13,7 @@ use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Wiki\ContentService;
+use OpenWiki\Wiki\EditSessionService;
 use OpenWiki\Wiki\Slugger;
 
 final class PageController extends Controller
@@ -40,6 +41,7 @@ final class PageController extends Controller
             'title' => 'Create page',
             'space' => $space,
             'page' => null,
+            'serverDraft' => null,
             'pages' => (new PageRepository($this->app->database()))->tree((int) $space['id']),
             'templates' => $templates,
             'canPublish' => $this->app->auth()->can('page.publish'),
@@ -160,10 +162,17 @@ final class PageController extends Controller
             return $this->render('errors/404', ['title' => 'Page not found'], 404);
         }
 
+        $user = $this->app->auth()->user();
+        $serverDraft = (new EditSessionService($this->app->database()))->draft(
+            (int) $page['id'],
+            (int) $user['id']
+        );
+
         return $this->render('pages/editor', [
             'title' => 'Edit ' . $page['title'],
             'space' => $space,
             'page' => $page,
+            'serverDraft' => $serverDraft,
             'pages' => $repository->tree((int) $space['id']),
             'templates' => [],
             'canPublish' => $this->app->auth()->can('page.publish'),
@@ -411,6 +420,12 @@ final class PageController extends Controller
             'title' => $page === null ? 'Create page' : 'Edit ' . $page['title'],
             'space' => $space,
             'page' => $page,
+            'serverDraft' => $page === null
+                ? null
+                : (new EditSessionService($this->app->database()))->draft(
+                    (int) $page['id'],
+                    (int) $this->app->auth()->user()['id']
+                ),
             'pages' => $repository->tree((int) $space['id']),
             'templates' => $page === null
                 ? $this->app->database()->fetchAll('SELECT id, name, description, content_html, content_markdown FROM page_templates ORDER BY is_system DESC, name ASC')
