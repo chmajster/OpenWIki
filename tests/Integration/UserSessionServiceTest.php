@@ -81,7 +81,7 @@ final class UserSessionServiceTest extends TestCase
         self::assertTrue($sessions[0]['current']);
         self::assertSame('127.0.0.2', $sessions[0]['ip_address']);
         self::assertSame(64, strlen($sessions[0]['fingerprint']));
-        self::assertStringNotContainsString(session_id(), $sessions[0]['label']);
+        self::assertNotSame(session_id(), $sessions[0]['label']);
 
         $oldSessionId = session_id();
         session_regenerate_id(true);
