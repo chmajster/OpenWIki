@@ -11,7 +11,8 @@
     "ext-openssl": "*",
     "ext-dom": "*",
     "ext-phar": "*",
-    "ext-curl": "*"
+    "ext-curl": "*",
+    "ext-ldap": "*"
   },
   "autoload": {
     "psr-4": {
