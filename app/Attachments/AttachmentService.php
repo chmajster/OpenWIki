@@ -38,6 +38,7 @@ final class AttachmentService
     {
         return $this->database->fetchOne(
             'SELECT a.*, p.space_id, p.title AS page_title, p.slug AS page_slug, p.status AS page_status,
+                    p.parent_id AS page_parent_id, p.inherit_acl AS page_inherit_acl,
                     p.owner_id AS page_owner_id, p.author_id AS page_author_id,
                     s.space_key, s.name AS space_name, s.visibility AS space_visibility,
                     s.owner_id AS space_owner_id, s.status AS space_status, s.deleted_at AS space_deleted_at,
