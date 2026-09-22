@@ -33,6 +33,7 @@ final class DirectoryAdminController extends Controller
             'pages' => 'SELECT COUNT(*) AS total FROM pages WHERE deleted_at IS NULL',
             'broken_links' => 'SELECT COUNT(*) AS total FROM page_links WHERE is_broken = 1',
             'webhooks' => 'SELECT COUNT(*) AS total FROM webhooks',
+            'templates' => 'SELECT COUNT(*) AS total FROM page_templates',
         ] as $key => $sql) {
             $row = $this->app->database()->fetchOne($sql);
             $counts[$key] = (int) ($row['total'] ?? 0);
