@@ -12,6 +12,7 @@ $sections = [
     ['MFA policy', '/admin/mfa', $counts['mfa_policy']],
     ['LDAP / AD', '/admin/ldap', $counts['ldap']],
     ['System', '/admin/system', $counts['system']],
+    ['Templates', '/admin/templates', $counts['templates']],
 ];
 ?>
 <section class="content-container">
