@@ -278,10 +278,33 @@ final class PageController extends Controller
             $data = $this->validatedPageData($request, $space, $current);
             $user = $this->app->auth()->user();
             $data['author_id'] = (int) $user['id'];
-            $data['base_version'] = (int) $request->input('base_version', 0);
+
+            $baseVersion = filter_var($request->input('base_version'), FILTER_VALIDATE_INT);
+            if ($baseVersion === false || $baseVersion < 1) {
+                throw new \InvalidArgumentException('Invalid base page version.');
+            }
+            $data['base_version'] = (int) $baseVersion;
+
+            $metadata = new WikiMetadataService($this->app->database());
+            $tagInput = (string) $request->input('tags', '');
+            $metadata->normalizeTags($tagInput);
+            $decorated = $metadata->decorateWikiLinks(
+                (int) $space['id'],
+                (string) $space['space_key'],
+                (string) $data['content_html']
+            );
+            $data['content_html'] = $decorated['html'];
 
             $before = ['title' => $current['title'], 'slug' => $current['slug'], 'status' => $current['status'], 'version' => $current['version']];
-            $result = $repository->update($current, $data);
+            $result = $this->app->database()->transaction(
+                function () use ($repository, $current, $data, $metadata, $tagInput, $decorated, $space): array {
+                    $updated = $repository->update($current, $data);
+                    $metadata->syncTags((int) $current['id'], $tagInput);
+                    $metadata->syncLinks((int) $current['id'], (int) $space['id'], $decorated['references']);
+                    $metadata->refreshSpaceLinks((int) $space['id']);
+                    return $updated;
+                }
+            );
 
             (new AuditLogger($this->app->database()))->log(
                 'PAGE_UPDATED',
