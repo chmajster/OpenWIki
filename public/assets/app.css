@@ -287,3 +287,31 @@ textarea { resize: vertical; }
     .page-actions { width: 100%; }
     .page-actions .button { flex: 1; }
 }
+
+
+.inline-form { display: inline-flex; margin: 0; }
+.notification-link { position: relative; gap: .4rem; }
+.notification-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 .35rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 700;
+    background: rgba(127, 127, 127, .18);
+}
+.notification-list { list-style: none; padding: 0; margin: 0; }
+.notification-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border, #dfe3e8);
+}
+.notification-item:last-child { border-bottom: 0; }
+.notification-item.is-unread strong { font-weight: 800; }
+.notification-item p { margin: .35rem 0; }

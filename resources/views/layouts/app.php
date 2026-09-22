@@ -1,6 +1,9 @@
 <?php
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $pageTitle = isset($title) ? $title . ' · ' . $app->name() : $app->name();
+$notificationCount = $currentUser === null
+    ? 0
+    : (new \OpenWiki\Wiki\PageEngagementService($app->database()))->unreadCount((int) $currentUser['id']);
 ?>
 <!doctype html>
 <html lang="en">
@@ -26,6 +29,9 @@ $pageTitle = isset($title) ? $title . ' · ' . $app->name() : $app->name();
                     <?php if ($app->auth()->can('space.create')): ?>
                         <a class="button button--secondary" href="/spaces/create">Create space</a>
                     <?php endif; ?>
+                    <a class="button button--ghost notification-link" href="/notifications">
+                        Notifications<?php if ($notificationCount > 0): ?><span class="notification-badge"><?= (int) $notificationCount ?></span><?php endif; ?>
+                    </a>
                     <span class="user-chip"><?= $e($currentUser['username']) ?></span>
                     <form method="post" action="/logout">
                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
