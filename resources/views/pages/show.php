@@ -50,6 +50,14 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                         <button class="button button--ghost" type="submit"><?= $isWatching ? 'Stop watching' : 'Watch' ?></button>
                     </form>
                 <?php endif; ?>
+                <details class="export-menu">
+                    <summary class="button button--ghost">Export</summary>
+                    <div class="export-menu__items">
+                        <a href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/export/html">HTML</a>
+                        <a href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/export/markdown">Markdown</a>
+                        <a href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/export/pdf">PDF</a>
+                    </div>
+                </details>
                 <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/history">History</a>
                 <?php if (!empty($canManagePermissions)): ?>
                     <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/permissions">Permissions</a>
