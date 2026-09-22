@@ -10,6 +10,7 @@ use OpenWiki\Http\Controllers\PageController;
 use OpenWiki\Http\Controllers\PageDraftController;
 use OpenWiki\Http\Controllers\SearchController;
 use OpenWiki\Http\Controllers\SpaceController;
+use OpenWiki\Http\Controllers\WikiMetadataController;
 
 $router = $app->router();
 
@@ -76,3 +77,7 @@ $router->post('/spaces/{spaceKey}/pages/{slug}/attachments/{id}/delete', [Attach
 $router->get('/attachments/{id}/download', [AttachmentController::class, 'download']);
 $router->get('/attachments/{id}/preview', [AttachmentController::class, 'preview']);
 $router->get('/attachments/{id}/versions/{version}/download', [AttachmentController::class, 'downloadVersion']);
+
+$router->get('/spaces/{spaceKey}/wiki/{reference}', [WikiMetadataController::class, 'resolve']);
+$router->get('/tags/{slug}', [WikiMetadataController::class, 'tag']);
+$router->get('/admin/broken-links', [WikiMetadataController::class, 'brokenLinks']);
