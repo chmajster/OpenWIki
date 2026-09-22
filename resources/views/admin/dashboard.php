@@ -11,6 +11,7 @@ $sections = [
     ['Webhooks', '/admin/webhooks', $counts['webhooks']],
     ['MFA policy', '/admin/mfa', $counts['mfa_policy']],
     ['LDAP / AD', '/admin/ldap', $counts['ldap']],
+    ['System', '/admin/system', $counts['system']],
 ];
 ?>
 <section class="content-container">
