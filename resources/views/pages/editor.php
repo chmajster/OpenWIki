@@ -16,6 +16,7 @@ $markdownValue = $field('content_markdown', $page['content_markdown'] ?? '');
 $trustedVisual = !array_key_exists('content_html', $old);
 $visualValue = $field('content_html', $page['content_html'] ?? '<p></p>');
 $changeSummary = $field('change_summary', '');
+$tagValue = $field('tags', isset($tags) ? implode(', ', array_column($tags, 'name')) : '');
 
 $children = [];
 foreach ($pages as $candidate) {
@@ -131,6 +132,11 @@ $walk(0, 0);
                     </label>
                 </div>
 
+                <label>Tags
+                    <input name="tags" maxlength="1500" value="<?= $e($tagValue) ?>" placeholder="linux, network, procedure">
+                    <span class="field-help">Separate tags with commas. Maximum 30 tags.</span>
+                </label>
+
                 <?php if (!$isEdit && $templates !== []): ?>
                     <label>Start from template
                         <select data-template-selector>
@@ -175,7 +181,7 @@ $walk(0, 0);
 
             <div class="editor-pane" data-pane="markdown">
                 <textarea name="content_markdown" class="markdown-editor" rows="24" data-markdown-editor spellcheck="false"><?= $e($markdownValue) ?></textarea>
-                <p class="field-help">Supports headings, lists, blockquotes, links, emphasis, inline code and fenced code blocks.</p>
+                <p class="field-help">Supports headings, lists, blockquotes, links, emphasis, inline code, fenced code blocks and wiki links such as [[Linux]].</p>
             </div>
         </div>
 
