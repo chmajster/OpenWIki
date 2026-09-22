@@ -124,3 +124,20 @@ php bin/console backup:create
 ```
 
 Backups are stored outside the public document root in `storage/backups/` as TAR archives. Each archive contains a MySQL schema/data dump, protected attachments, a manifest and non-secret application configuration. `APP_KEY`, `DB_USERNAME` and `DB_PASSWORD` are intentionally excluded.
+
+
+## Webhooks
+
+Administrators with `webhook.manage` can configure outbound webhooks under `/admin/webhooks`.
+
+Supported events:
+
+- `page.created`
+- `page.updated`
+- `page.deleted`
+- `page.published`
+- `space.created`
+- `comment.created`
+- `user.created`
+
+Webhook requests are JSON POST requests signed with `X-OpenWiki-Signature: sha256=<HMAC>`. Secrets are encrypted at rest with AES-256-GCM using the application key. Delivery retries are processed by `php bin/console cron:run`. Redirects are disabled and private, reserved and loopback destinations are rejected to reduce SSRF risk.
