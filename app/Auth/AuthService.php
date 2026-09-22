@@ -61,10 +61,10 @@ final class AuthService
         $user = $this->app->database()->fetchOne(
             'SELECT id, password_hash, status
              FROM users
-             WHERE (LOWER(username) = LOWER(:identifier) OR LOWER(email) = LOWER(:identifier))
+             WHERE (LOWER(username) = LOWER(:identifier_username) OR LOWER(email) = LOWER(:identifier_email))
                AND deleted_at IS NULL
              LIMIT 1',
-            ['identifier' => $identifier]
+            ['identifier_username' => $identifier, 'identifier_email' => $identifier]
         );
 
         $valid = $user !== null
