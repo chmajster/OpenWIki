@@ -38,7 +38,9 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                         <button class="button button--ghost" type="submit"><?= $isWatchingSpace ? 'Stop watching' : 'Watch space' ?></button>
                     </form>
                 <?php endif; ?>
+                <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/export">Export ZIP</a>
                 <?php if ($canCreatePage): ?>
+                    <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/import">Import</a>
                     <a class="button button--primary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create">Create page</a>
                 <?php endif; ?>
             </div>
