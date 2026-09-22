@@ -10,6 +10,7 @@ use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
 use OpenWiki\Http\Controller;
+use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
@@ -24,9 +25,9 @@ final class TrashController extends Controller
             return $failure;
         }
 
-        $access = new SpaceAccessService($this->app);
+        $pageAccess = new PageAclService($this->app);
         $rows = $this->app->database()->fetchAll(
-            'SELECT p.id, p.space_id, p.title, p.slug, p.status, p.deleted_at, p.owner_id, p.author_id,
+            'SELECT p.id, p.space_id, p.parent_id, p.inherit_acl, p.title, p.slug, p.status, p.deleted_at, p.owner_id, p.author_id,
                     s.name AS space_name, s.space_key, s.owner_id AS space_owner_id,
                     s.visibility, s.status AS space_status, s.deleted_at AS space_deleted_at
              FROM pages p
@@ -35,7 +36,7 @@ final class TrashController extends Controller
              ORDER BY p.deleted_at DESC'
         );
 
-        $pages = array_values(array_filter($rows, static function (array $row) use ($access): bool {
+        $pages = array_values(array_filter($rows, static function (array $row) use ($pageAccess): bool {
             $space = [
                 'id' => (int) $row['space_id'],
                 'owner_id' => (int) $row['space_owner_id'],
@@ -44,7 +45,7 @@ final class TrashController extends Controller
                 'deleted_at' => $row['space_deleted_at'],
             ];
 
-            return $access->canEdit($space);
+            return $pageAccess->can($row, $space, 'page.delete');
         }));
 
         return $this->render('trash/index', [
@@ -66,13 +67,12 @@ final class TrashController extends Controller
         if ($space === null) {
             return $this->render('errors/404', ['title' => 'Space not found'], 404);
         }
-        if (!(new SpaceAccessService($this->app))->canEdit($space)) {
-            return $this->render('errors/403', ['title' => 'Permission denied'], 403);
-        }
-
         $page = (new PageRepository($this->app->database()))->findBySlug((int) $space['id'], $slug);
         if ($page === null) {
             return $this->render('errors/404', ['title' => 'Page not found'], 404);
+        }
+        if (!(new PageAclService($this->app))->can($page, $space, 'page.delete')) {
+            return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
         $user = $this->app->auth()->user();
@@ -236,7 +236,7 @@ final class TrashController extends Controller
             'deleted_at' => $page['space_deleted_at'],
         ];
 
-        if (!(new SpaceAccessService($this->app))->canEdit($space)) {
+        if (!(new PageAclService($this->app))->can($page, $space, 'page.delete')) {
             return [null, null, $this->render('errors/403', ['title' => 'Permission denied'], 403)];
         }
 
