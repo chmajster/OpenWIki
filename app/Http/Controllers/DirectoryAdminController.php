@@ -12,6 +12,7 @@ use OpenWiki\Backup\BackupService;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
+use OpenWiki\Database\MigrationRunner;
 use OpenWiki\Http\Controller;
 use OpenWiki\Webhooks\WebhookService;
 
@@ -43,6 +44,21 @@ final class DirectoryAdminController extends Controller
         $mfaPolicy = (new MfaService($this->app->database()))->policy();
         $counts['mfa_policy'] = count($mfaPolicy['role_ids']) + ($mfaPolicy['enforce_global'] ? 1 : 0);
         $counts['ldap'] = (new LdapService($this->app->database()))->enabled() ? 1 : 0;
+
+        $migrationStatus = (new MigrationRunner(
+            $this->app->database(),
+            $this->app->basePath('database/migrations')
+        ))->status();
+        $pendingMigrations = count(array_filter(
+            $migrationStatus,
+            static fn (array $migration): bool => !$migration['applied']
+        ));
+        $cron = $this->app->database()->fetchOne(
+            'SELECT setting_value FROM settings WHERE setting_key = "system.cron_last_run" LIMIT 1'
+        );
+        $cronTimestamp = $cron === null ? false : strtotime((string) $cron['setting_value']);
+        $cronStale = $cronTimestamp === false || (time() - $cronTimestamp) > 600;
+        $counts['system'] = $pendingMigrations + ($cronStale ? 1 : 0);
 
         return $this->render('admin/dashboard', [
             'title' => 'Administration',
