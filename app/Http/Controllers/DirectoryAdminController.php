@@ -6,6 +6,7 @@ namespace OpenWiki\Http\Controllers;
 
 use OpenWiki\Admin\DirectoryAdminService;
 use OpenWiki\Audit\AuditLogger;
+use OpenWiki\Backup\BackupService;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
@@ -31,6 +32,10 @@ final class DirectoryAdminController extends Controller
             $row = $this->app->database()->fetchOne($sql);
             $counts[$key] = (int) ($row['total'] ?? 0);
         }
+
+        $counts['backups'] = count(
+            (new BackupService($this->app->database(), $this->app->basePath()))->list()
+        );
 
         return $this->render('admin/dashboard', [
             'title' => 'Administration',
