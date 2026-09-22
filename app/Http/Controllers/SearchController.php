@@ -7,7 +7,7 @@ namespace OpenWiki\Http\Controllers;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Http\Controller;
-use OpenWiki\Permissions\SpaceAccessService;
+use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Repositories\SearchRepository;
 use OpenWiki\Security\RateLimiter;
 
@@ -42,7 +42,7 @@ final class SearchController extends Controller
             }
 
             $limiter->hit('search', $key);
-            $access = new SpaceAccessService($this->app);
+            $pageAccess = new PageAclService($this->app);
 
             foreach ((new SearchRepository($this->app->database()))->searchPages($query) as $result) {
                 $space = [
@@ -53,14 +53,8 @@ final class SearchController extends Controller
                     'deleted_at' => $result['space_deleted_at'],
                 ];
 
-                if (!$access->canView($space)) {
+                if (!$pageAccess->canView($result, $space)) {
                     continue;
-                }
-
-                if ($result['status'] !== 'published') {
-                    if ($user === null || !$access->canEdit($space)) {
-                        continue;
-                    }
                 }
 
                 $text = trim((string) $result['content_text']);
