@@ -13,6 +13,7 @@ use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Wiki\Slugger;
+use OpenWiki\Webhooks\WebhookService;
 
 final class SpaceController extends Controller
 {
@@ -75,6 +76,18 @@ final class SpaceController extends Controller
                 null,
                 ['name' => $name, 'space_key' => $spaceKey, 'visibility' => $visibility]
             );
+
+            try {
+                (new WebhookService($this->app->database()))->queue('space.created', [
+                    'id' => $spaceId,
+                    'name' => $name,
+                    'space_key' => $spaceKey,
+                    'visibility' => $visibility,
+                    'owner_id' => (int) $user['id'],
+                ]);
+            } catch (\Throwable $webhookError) {
+                error_log('[OpenWiki webhook queue] ' . $webhookError->getMessage());
+            }
 
             Session::flash('success', 'Space created.');
             return Response::redirect('/spaces/' . rawurlencode($spaceKey));
