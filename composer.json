@@ -13,12 +13,12 @@
   },
   "autoload": {
     "psr-4": {
-      "OpenWiki\\\\": "app/"
+      "OpenWiki\\": "app/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "OpenWiki\\\\Tests\\\\": "tests/"
+      "OpenWiki\\Tests\\": "tests/"
     }
   },
   "scripts": {
