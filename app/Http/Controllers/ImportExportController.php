@@ -159,8 +159,7 @@ final class ImportExportController extends Controller
             $user = $this->app->auth()->user();
 
             $result = (new DocumentImportService(
-                $this->app->database(),
-                $this->app->basePath()
+                $this->app->database()
             ))->importUploaded(
                 $space,
                 (int) $user['id'],
