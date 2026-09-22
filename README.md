@@ -141,3 +141,18 @@ Supported events:
 - `user.created`
 
 Webhook requests are JSON POST requests signed with `X-OpenWiki-Signature: sha256=<HMAC>`. Secrets are encrypted at rest with AES-256-GCM using the application key. Delivery retries are processed by `php bin/console cron:run`. Redirects are disabled and private, reserved and loopback destinations are rejected to reduce SSRF risk.
+
+
+## Multi-factor authentication
+
+OpenWiki supports TOTP MFA compatible with Google Authenticator, Microsoft Authenticator, Authy and 1Password.
+
+Users can enroll from `/account/mfa/setup`. TOTP secrets are encrypted at rest with AES-256-GCM. Enrollment generates ten one-time recovery codes; only SHA-256 hashes of recovery codes are stored.
+
+Administrators can configure MFA policy under `/admin/mfa`:
+
+- require MFA globally,
+- require MFA for selected roles,
+- reset a user's MFA from user administration.
+
+Password authentication alone does not complete a browser login when MFA is enabled or required. The session remains restricted until TOTP or an unused recovery code is verified.
