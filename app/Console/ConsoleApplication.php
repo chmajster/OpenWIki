@@ -11,6 +11,7 @@ use OpenWiki\Core\Database;
 use OpenWiki\Database\MigrationRunner;
 use OpenWiki\Install\InstallService;
 use OpenWiki\Security\RateLimiter;
+use OpenWiki\Webhooks\WebhookService;
 
 final class ConsoleApplication
 {
@@ -224,6 +225,16 @@ TEXT);
         $database->execute(
             'DELETE FROM draft_autosaves WHERE updated_at < :cutoff',
             ['cutoff' => $expiredDraftCutoff]
+        );
+
+        $webhooks = (new WebhookService($database))->processDue(25);
+        fwrite(
+            STDOUT,
+            '[INFO] Webhook deliveries: processed=' . $webhooks['processed']
+            . ', delivered=' . $webhooks['delivered']
+            . ', retrying=' . $webhooks['retrying']
+            . ', failed=' . $webhooks['failed']
+            . PHP_EOL
         );
 
         fwrite(STDOUT, '[ OK ] Housekeeping completed.' . PHP_EOL);
