@@ -87,6 +87,19 @@ final class PageController extends Controller
                 ['title' => $data['title'], 'slug' => $data['slug'], 'status' => $data['status']]
             );
 
+            try {
+                (new PageEngagementService($this->app->database()))->notifyWatchers(
+                    $pageId,
+                    (int) $space['id'],
+                    (int) $user['id'],
+                    'page.created',
+                    'New page: ' . $data['title'],
+                    '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($data['slug'])
+                );
+            } catch (\Throwable $notificationError) {
+                error_log('[OpenWiki notification] ' . $notificationError->getMessage());
+            }
+
             Session::flash('success', 'Page created.');
             return Response::redirect(
                 '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($data['slug'])
@@ -131,12 +144,16 @@ final class PageController extends Controller
             $repository->recordView((int) $page['id'], (int) $user['id']);
         }
 
+        $engagement = new PageEngagementService($this->app->database());
+
         return $this->render('pages/show', [
             'title' => $page['title'],
             'space' => $space,
             'page' => $page,
             'pages' => $repository->tree((int) $space['id']),
             'canEdit' => $access->canEdit($space) && $this->app->auth()->can('page.edit'),
+            'isFavorite' => $user !== null && $engagement->isFavorite((int) $user['id'], (int) $page['id']),
+            'isWatching' => $user !== null && $engagement->isWatching((int) $user['id'], 'page', (int) $page['id']),
         ]);
     }
 
@@ -223,6 +240,19 @@ final class PageController extends Controller
                 $before,
                 ['title' => $data['title'], 'slug' => $data['slug'], 'status' => $data['status'], 'version' => $result['version']]
             );
+
+            try {
+                (new PageEngagementService($this->app->database()))->notifyWatchers(
+                    (int) $current['id'],
+                    (int) $space['id'],
+                    (int) $user['id'],
+                    'page.updated',
+                    'Page updated: ' . $data['title'],
+                    '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($data['slug'])
+                );
+            } catch (\Throwable $notificationError) {
+                error_log('[OpenWiki notification] ' . $notificationError->getMessage());
+            }
 
             Session::flash('success', 'Page saved.');
             return Response::redirect(
@@ -312,6 +342,19 @@ final class PageController extends Controller
             ['version' => $page['version']],
             ['version' => $newVersion, 'restored_revision' => (int) $revisionNumber]
         );
+
+        try {
+            (new PageEngagementService($this->app->database()))->notifyWatchers(
+                (int) $page['id'],
+                (int) $space['id'],
+                (int) $user['id'],
+                'page.updated',
+                'Page revision restored: ' . $page['title'],
+                '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($page['slug'])
+            );
+        } catch (\Throwable $notificationError) {
+            error_log('[OpenWiki notification] ' . $notificationError->getMessage());
+        }
 
         Session::flash('success', 'Revision restored as a new version.');
         return Response::redirect(

@@ -39,3 +39,10 @@ $router->post('/spaces/{spaceKey}/pages/{slug}/restore', [PageController::class,
 $router->post('/spaces/{spaceKey}/pages/{slug}/edit-lock', [PageDraftController::class, 'lock']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/edit-unlock', [PageDraftController::class, 'unlock']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/autosave', [PageDraftController::class, 'autosave']);
+
+$router->post('/spaces/{spaceKey}/watch', [PageEngagementController::class, 'watchSpace']);
+$router->post('/spaces/{spaceKey}/pages/{slug}/favorite', [PageEngagementController::class, 'favorite']);
+$router->post('/spaces/{spaceKey}/pages/{slug}/watch', [PageEngagementController::class, 'watch']);
+$router->get('/notifications', [NotificationController::class, 'index']);
+$router->post('/notifications/read-all', [NotificationController::class, 'readAll']);
+$router->post('/notifications/{id}/read', [NotificationController::class, 'read']);

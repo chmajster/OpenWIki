@@ -62,6 +62,7 @@ final class DashboardController extends Controller
             'spaces' => $spaces,
             'recentUpdated' => $recentUpdated,
             'recentViewed' => $user === null ? [] : $pageRepository->recentForUser((int) $user['id'], 10),
+            'favorites' => $user === null ? [] : (new PageEngagementService($this->app->database()))->favoritesForUser((int) $user['id'], 10),
             'drafts' => $user === null ? [] : $pageRepository->draftsForUser((int) $user['id'], 10),
             'canCreateSpace' => $this->app->auth()->can('space.create'),
         ]);
