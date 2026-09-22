@@ -13,6 +13,7 @@ use OpenWiki\Http\Controllers\DashboardController;
 use OpenWiki\Http\Controllers\DirectoryAdminController;
 use OpenWiki\Http\Controllers\HealthController;
 use OpenWiki\Http\Controllers\InstallerController;
+use OpenWiki\Http\Controllers\LdapAdminController;
 use OpenWiki\Http\Controllers\MfaAdminController;
 use OpenWiki\Http\Controllers\MfaController;
 use OpenWiki\Http\Controllers\NotificationController;
@@ -143,3 +144,7 @@ $router->post('/admin/webhooks/{id}/delete', [WebhookAdminController::class, 'de
 
 $router->get('/admin/mfa', [MfaAdminController::class, 'index']);
 $router->post('/admin/mfa', [MfaAdminController::class, 'update']);
+
+$router->get('/admin/ldap', [LdapAdminController::class, 'index']);
+$router->post('/admin/ldap', [LdapAdminController::class, 'save']);
+$router->post('/admin/ldap/test', [LdapAdminController::class, 'test']);
