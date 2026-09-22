@@ -48,6 +48,7 @@ final class PageController extends Controller
             'serverDraft' => null,
             'pages' => (new PageRepository($this->app->database()))->tree((int) $space['id']),
             'templates' => $templates,
+            'tags' => [],
             'canPublish' => $this->app->auth()->can('page.publish'),
             'formAction' => '/spaces/' . rawurlencode($space['space_key']) . '/pages',
         ]);
@@ -167,6 +168,22 @@ final class PageController extends Controller
         }
 
         $engagement = new PageEngagementService($this->app->database());
+        $metadata = new WikiMetadataService($this->app->database());
+        $backlinks = array_values(array_filter(
+            $metadata->backlinks((int) $page['id']),
+            function (array $source) use ($access): bool {
+                $sourceSpace = [
+                    'id' => (int) $source['space_id'],
+                    'owner_id' => (int) $source['space_owner_id'],
+                    'visibility' => $source['space_visibility'],
+                    'status' => $source['space_status'],
+                    'deleted_at' => $source['space_deleted_at'],
+                ];
+
+                return $access->canView($sourceSpace)
+                    && $this->canViewPage($source, $sourceSpace, $access);
+            }
+        ));
 
         return $this->render('pages/show', [
             'title' => $page['title'],
@@ -186,6 +203,8 @@ final class PageController extends Controller
             'canDeleteAttachment' => $user !== null
                 && $access->canEdit($space)
                 && $this->app->auth()->can('attachment.delete'),
+            'tags' => $metadata->tagsForPage((int) $page['id']),
+            'backlinks' => $backlinks,
         ]);
     }
 
@@ -224,6 +243,7 @@ final class PageController extends Controller
             'serverDraft' => $serverDraft,
             'pages' => $repository->tree((int) $space['id']),
             'templates' => [],
+            'tags' => (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
             'canPublish' => $this->app->auth()->can('page.publish'),
             'formAction' => '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($page['slug']),
         ]);
@@ -505,6 +525,9 @@ final class PageController extends Controller
             'templates' => $page === null
                 ? $this->app->database()->fetchAll('SELECT id, name, description, content_html, content_markdown FROM page_templates ORDER BY is_system DESC, name ASC')
                 : [],
+            'tags' => $page === null
+                ? []
+                : (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
             'canPublish' => $this->app->auth()->can('page.publish'),
             'formAction' => $page === null
                 ? '/spaces/' . rawurlencode($space['space_key']) . '/pages'
