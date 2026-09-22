@@ -58,12 +58,15 @@ final class AuthController extends Controller
 
         $mfa = new MfaService($this->app->database());
         if ($mfa->enabled((int) $user['id'])) {
+            Session::put('mfa_pending_login', true);
             return Response::redirect('/mfa/challenge');
         }
         if ($mfa->required((int) $user['id'])) {
+            Session::put('mfa_pending_login', true);
             return Response::redirect('/account/mfa/setup');
         }
 
+        Session::forget('mfa_pending_login');
         Session::put('mfa_verified', true);
         (new AuditLogger($this->app->database()))->log(
             'LOGIN_SUCCEEDED',
