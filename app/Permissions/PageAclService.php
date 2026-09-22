@@ -14,39 +14,56 @@ final class PageAclService
 
     public function canView(array $page, array $space): bool
     {
+        $user = $this->app->auth()->user();
+
+        return $this->canViewFor(
+            $page,
+            $space,
+            $user === null ? null : (int) $user['id'],
+            $this->app->auth()->can('*'),
+            $this->app->auth()->can('page.view')
+        );
+    }
+
+    public function canViewFor(
+        array $page,
+        array $space,
+        ?int $userId,
+        bool $superAdmin = false,
+        bool $hasPageViewPermission = true
+    ): bool {
         $spaceAccess = new SpaceAccessService($this->app);
-        if (!$spaceAccess->canView($space)) {
+        if (!$spaceAccess->canViewFor($space, $userId, $superAdmin)) {
             return false;
         }
 
-        $user = $this->app->auth()->user();
-        if ($user !== null && $this->app->auth()->can('*')) {
+        if ($superAdmin) {
             return true;
         }
 
-        $decision = $this->decision($page, 'page.view');
+        $decision = $this->decision($page, 'page.view', $userId);
         if ($decision === false) {
             return false;
         }
 
-        if ($page['status'] === 'published') {
+        if (($page['status'] ?? null) === 'published') {
             if ($decision === true) {
-                return $user !== null && $this->app->auth()->can('page.view');
+                return $userId !== null && $hasPageViewPermission;
             }
             return true;
         }
 
-        if ($user === null) {
+        if ($userId === null) {
             return false;
         }
 
-        if ($decision === true && $this->app->auth()->can('page.view')) {
+        if ($decision === true && $hasPageViewPermission) {
             return true;
         }
 
-        return (int) $page['owner_id'] === (int) $user['id']
-            || (int) $page['author_id'] === (int) $user['id']
-            || $spaceAccess->canEdit($space);
+        return (int) ($page['owner_id'] ?? 0) === $userId
+            || (int) ($page['author_id'] ?? 0) === $userId
+            || $spaceAccess->canEditFor($space, $userId, $superAdmin);
     }
 
     public function canEdit(array $page, array $space): bool
@@ -57,28 +74,50 @@ final class PageAclService
     public function can(array $page, array $space, string $permission): bool
     {
         $user = $this->app->auth()->user();
-        if ($user === null || !$this->app->auth()->can($permission)) {
+        if ($user === null) {
             return false;
         }
 
-        if ($this->app->auth()->can('*')) {
+        return $this->canFor(
+            $page,
+            $space,
+            $permission,
+            (int) $user['id'],
+            $this->app->auth()->can('*'),
+            $this->app->auth()->can($permission)
+        );
+    }
+
+    public function canFor(
+        array $page,
+        array $space,
+        string $permission,
+        int $userId,
+        bool $superAdmin = false,
+        bool $hasPermission = true
+    ): bool {
+        if (!$hasPermission) {
+            return false;
+        }
+
+        if ($superAdmin) {
             return true;
         }
 
         $spaceAccess = new SpaceAccessService($this->app);
         $baseAllowed = $permission === 'page.view'
-            ? $spaceAccess->canView($space)
-            : $spaceAccess->canEdit($space);
+            ? $spaceAccess->canViewFor($space, $userId, $superAdmin)
+            : $spaceAccess->canEditFor($space, $userId, $superAdmin);
 
         if (!$baseAllowed) {
             return false;
         }
 
-        if ((int) $space['owner_id'] === (int) $user['id']) {
+        if ((int) ($space['owner_id'] ?? 0) === $userId) {
             return true;
         }
 
-        return $this->decision($page, $permission) !== false;
+        return $this->decision($page, $permission, $userId) !== false;
     }
 
     public function entries(int $pageId): array
@@ -200,10 +239,8 @@ final class PageAclService
         );
     }
 
-    private function decision(array $page, string $permission): ?bool
+    private function decision(array $page, string $permission, ?int $userId): ?bool
     {
-        $user = $this->app->auth()->user();
-        $userId = $user === null ? null : (int) $user['id'];
 
         $direct = $this->scopeDecision(
             (int) $page['id'],
