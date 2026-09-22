@@ -30,9 +30,18 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                     <p class="lead"><?= nl2br($e($space['description'])) ?></p>
                 <?php endif; ?>
             </div>
-            <?php if ($canCreatePage): ?>
-                <a class="button button--primary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create">Create page</a>
-            <?php endif; ?>
+            <div class="page-actions">
+                <?php if ($currentUser !== null): ?>
+                    <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/watch">
+                        <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                        <input type="hidden" name="enabled" value="<?= $isWatchingSpace ? '0' : '1' ?>">
+                        <button class="button button--ghost" type="submit"><?= $isWatchingSpace ? 'Stop watching' : 'Watch space' ?></button>
+                    </form>
+                <?php endif; ?>
+                <?php if ($canCreatePage): ?>
+                    <a class="button button--primary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create">Create page</a>
+                <?php endif; ?>
+            </div>
         </div>
 
         <?php if ($pages === []): ?>
