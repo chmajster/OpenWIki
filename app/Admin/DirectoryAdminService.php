@@ -279,8 +279,10 @@ final class DirectoryAdminService
             if ($wildcard === null) {
                 throw new \RuntimeException('Wildcard permission is missing.');
             }
-            $permissionIds[(int) $wildcard['id']] = (int) $wildcard['id'];
-            $permissionIds = array_values($permissionIds);
+            $permissionIds = array_values(array_unique(array_merge(
+                $permissionIds,
+                [(int) $wildcard['id']]
+            )));
         }
 
         return $this->database->transaction(function (Database $db) use ($id, $name, $slug, $description, $permissionIds): int {
