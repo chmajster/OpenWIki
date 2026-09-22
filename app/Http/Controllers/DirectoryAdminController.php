@@ -6,6 +6,7 @@ namespace OpenWiki\Http\Controllers;
 
 use OpenWiki\Admin\DirectoryAdminService;
 use OpenWiki\Audit\AuditLogger;
+use OpenWiki\Auth\MfaService;
 use OpenWiki\Backup\BackupService;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
@@ -38,6 +39,8 @@ final class DirectoryAdminController extends Controller
         $counts['backups'] = count(
             (new BackupService($this->app->database(), $this->app->basePath()))->list()
         );
+        $mfaPolicy = (new MfaService($this->app->database()))->policy();
+        $counts['mfa_policy'] = count($mfaPolicy['role_ids']) + ($mfaPolicy['enforce_global'] ? 1 : 0);
 
         return $this->render('admin/dashboard', [
             'title' => 'Administration',
