@@ -195,6 +195,21 @@ $walk(0, 0);
             <?php else: ?>
                 <p class="field-help">The initial save creates revision 1.</p>
             <?php endif; ?>
+            <details class="editor-macro-help">
+                <summary>Macros</summary>
+                <p class="field-help">Macros are resolved when the page is viewed and are not written into revisions as generated HTML.</p>
+                <code>{{toc}}</code>
+                <code>{{child-pages}}</code>
+                <code>{{page-properties}}</code>
+                <code>{{attachments}}</code>
+                <code>{{recent-updates}}</code>
+                <code>{{user-profile:username}}</code>
+                <code>{{status:In progress}}</code>
+                <code>{{info:Information}}</code>
+                <code>{{warning:Warning}}</code>
+                <code>{{note:Note}}</code>
+                <code>{{code:echo "hello";}}</code>
+            </details>
             <div class="editor-save-state" data-save-state>Recovery copy enabled.</div>
             <button class="button button--primary button--block" type="submit" data-save-button><?= $isEdit ? 'Save page' : 'Create page' ?></button>
         </aside>
