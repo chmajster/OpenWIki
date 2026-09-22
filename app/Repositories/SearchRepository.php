@@ -12,8 +12,13 @@ final class SearchRepository
     {
     }
 
-    public function searchPages(string $query, array $filters = [], int $limit = 100): array
+    public function searchPages(string $query, array|int $filters = [], int $limit = 100): array
     {
+        if (is_int($filters)) {
+            $limit = $filters;
+            $filters = [];
+        }
+
         $query = trim($query);
         if ($query === '') {
             return [];
