@@ -14,20 +14,40 @@ final class SpaceAccessService
 
     public function canView(array $space): bool
     {
+        $user = $this->app->auth()->user();
+
+        return $this->canViewFor(
+            $space,
+            $user === null ? null : (int) $user['id'],
+            $this->app->auth()->can('*')
+        );
+    }
+
+    public function canEdit(array $space): bool
+    {
+        $user = $this->app->auth()->user();
+        if ($user === null) {
+            return false;
+        }
+
+        return $this->canEditFor($space, (int) $user['id'], $this->app->auth()->can('*'));
+    }
+
+    public function canViewFor(array $space, ?int $userId, bool $superAdmin = false): bool
+    {
         if (($space['deleted_at'] ?? null) !== null || ($space['status'] ?? 'active') !== 'active') {
             return false;
         }
 
-        $user = $this->app->auth()->user();
-        if ($user === null) {
+        if ($userId === null) {
             return ($space['visibility'] ?? 'private') === 'public';
         }
 
-        if ($this->app->auth()->can('*') || (int) $space['owner_id'] === (int) $user['id']) {
+        if ($superAdmin || (int) $space['owner_id'] === $userId) {
             return true;
         }
 
-        $decision = $this->aclDecision((int) $space['id'], (int) $user['id'], 'space.view');
+        $decision = $this->aclDecision((int) $space['id'], $userId, 'space.view');
         if ($decision === false) {
             return false;
         }
@@ -39,18 +59,17 @@ final class SpaceAccessService
         return $decision === true;
     }
 
-    public function canEdit(array $space): bool
+    public function canEditFor(array $space, int $userId, bool $superAdmin = false): bool
     {
-        $user = $this->app->auth()->user();
-        if ($user === null) {
+        if (($space['deleted_at'] ?? null) !== null || ($space['status'] ?? 'active') !== 'active') {
             return false;
         }
 
-        if ($this->app->auth()->can('*') || (int) $space['owner_id'] === (int) $user['id']) {
+        if ($superAdmin || (int) $space['owner_id'] === $userId) {
             return true;
         }
 
-        return $this->aclDecision((int) $space['id'], (int) $user['id'], 'space.edit') === true;
+        return $this->aclDecision((int) $space['id'], $userId, 'space.edit') === true;
     }
 
     private function aclDecision(int $spaceId, int $userId, string $permission): ?bool
