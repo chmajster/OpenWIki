@@ -122,16 +122,12 @@ final class DocumentExportService
                     . $this->escape((string) $page['title']) . '</a></li>';
 
                 foreach ($attachments->listForPage((int) $page['id']) as $attachment) {
-                    try {
-                        $source = $attachments->currentPath($attachment);
-                        $attachmentName = 'attachments/' . $baseName . '/'
-                            . (int) $attachment['id'] . '-'
-                            . $this->safeFileName((string) $attachment['name']);
-                        if (!$zip->addFile($source, $attachmentName)) {
-                            throw new \RuntimeException('Unable to add attachment to Space export.');
-                        }
-                    } catch (\Throwable $exception) {
-                        error_log('[OpenWiki space export attachment] ' . $exception->getMessage());
+                    $source = $attachments->currentPath($attachment);
+                    $attachmentName = 'attachments/' . $baseName . '/'
+                        . (int) $attachment['id'] . '-'
+                        . $this->safeFileName((string) $attachment['name']);
+                    if (!$zip->addFile($source, $attachmentName)) {
+                        throw new \RuntimeException('Unable to add attachment to Space export.');
                     }
                 }
             }
