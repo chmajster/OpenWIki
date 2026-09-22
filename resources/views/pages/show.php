@@ -29,6 +29,13 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                     <span>Created by <?= $e($page['author_username']) ?></span>
                     <span>Updated <?= $e($page['updated_at']) ?></span>
                 </div>
+                <?php if ($tags !== []): ?>
+                    <div class="tag-list" aria-label="Tags">
+                        <?php foreach ($tags as $tag): ?>
+                            <a class="tag-chip" href="/tags/<?= rawurlencode($tag['slug']) ?>">#<?= $e($tag['name']) ?></a>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
             </div>
             <div class="page-actions">
                 <?php if ($currentUser !== null): ?>
@@ -53,6 +60,27 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
         <div class="document card" data-document-content>
             <?= $page['content_html'] ?>
         </div>
+
+        <?php if ($backlinks !== []): ?>
+            <section class="backlinks-section" id="backlinks">
+                <div class="panel__header">
+                    <h2>Referenced by</h2>
+                    <span class="count"><?= count($backlinks) ?></span>
+                </div>
+                <div class="card panel">
+                    <ul class="item-list">
+                        <?php foreach ($backlinks as $backlink): ?>
+                            <li>
+                                <a href="/spaces/<?= rawurlencode($backlink['space_key']) ?>/pages/<?= rawurlencode($backlink['slug']) ?>">
+                                    <strong><?= $e($backlink['title']) ?></strong>
+                                    <span><?= $e($backlink['space_name']) ?> · <?= $e($backlink['updated_at']) ?></span>
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            </section>
+        <?php endif; ?>
 
         <section class="attachments-section" id="attachments">
             <div class="panel__header">
