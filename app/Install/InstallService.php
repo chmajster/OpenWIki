@@ -338,11 +338,11 @@ final class InstallService
         $lines = [];
         foreach ($values as $key => $value) {
             $value = (string) $value;
-            if (str_contains($value, "\n") || str_contains($value, "\r")) {
-                throw new \InvalidArgumentException('Environment values cannot contain line breaks.');
-            }
-            $escaped = str_replace(['\\', '"'], ['\\\\', '\\"'], $value);
-            $lines[] = $key . '="' . $escaped . '"';
+            $encoded = json_encode(
+                $value,
+                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+            );
+            $lines[] = $key . '=' . $encoded;
         }
 
         $path = $this->basePath . '/.env';
