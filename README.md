@@ -205,3 +205,32 @@ Users can manage sessions under `/account/sessions`:
 - sign out all sessions immediately.
 
 Raw PHP session IDs are never displayed in the UI. Session actions use SHA-256 fingerprints. The session ID is rotated after successful MFA verification and the registry entry is atomically replaced.
+
+
+## Search
+
+Global search at `/search` covers pages, Spaces, users, comments, tags and attachment names.
+
+Filters include:
+
+- result type,
+- Space,
+- author,
+- tag,
+- created date range,
+- updated date range.
+
+Page-related results are filtered through Page ACL before they are rendered. Matching fragments are highlighted only after HTML escaping. Anonymous users do not receive user-directory search results.
+
+Rebuild searchable plain-text page content after imports or data repair with:
+
+```bash
+php bin/console search:index
+```
+
+
+## System diagnostics
+
+Administrators can inspect `/admin/system` for application/PHP/database versions, database size, attachment and backup storage usage, filesystem capacity, required PHP extensions, writable directories, migration status and scheduler state.
+
+A successful `php bin/console cron:run` stores its last-run timestamp. The administration UI marks the scheduler stale when no successful run has been recorded for more than 10 minutes.
