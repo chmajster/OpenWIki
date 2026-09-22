@@ -101,6 +101,7 @@ final class AuthService
     public function logout(): void
     {
         Session::forget('user_id');
+        Session::forget('mfa_verified');
         Session::regenerate();
         Csrf::rotate();
         $this->resolved = true;
