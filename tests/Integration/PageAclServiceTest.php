@@ -47,6 +47,10 @@ final class PageAclServiceTest extends TestCase
         $this->app = Application::boot($basePath);
         (new MigrationRunner($this->app->database(), $basePath . '/database/migrations'))->migrate();
         $this->app->database()->pdo()->beginTransaction();
+        $this->app->database()->execute(
+            'INSERT IGNORE INTO permissions (name, description, created_at)
+             VALUES ("page.view", "View pages", UTC_TIMESTAMP())'
+        );
     }
 
     protected function tearDown(): void
