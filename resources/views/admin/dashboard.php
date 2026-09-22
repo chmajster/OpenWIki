@@ -9,6 +9,7 @@ $sections = [
     ['Broken links', '/admin/broken-links', $counts['broken_links']],
     ['Backups', '/admin/backups', $counts['backups']],
     ['Webhooks', '/admin/webhooks', $counts['webhooks']],
+    ['MFA policy', '/admin/mfa', $counts['mfa_policy']],
 ];
 ?>
 <section class="content-container">
