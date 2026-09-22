@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OpenWiki\Console;
 
+use OpenWiki\Admin\DirectoryAdminService;
 use OpenWiki\Core\Application;
 use OpenWiki\Core\Database;
 use OpenWiki\Database\MigrationRunner;
@@ -29,6 +30,9 @@ final class ConsoleApplication
                 'cache:clear' => $this->cacheClear(),
                 'cron:run' => $this->cronRun(),
                 'system:check' => $this->systemCheck(),
+                'user:create' => $this->userCreate(),
+                'user:disable' => $this->userDisable($argv[2] ?? null),
+                'admin:reset-password' => $this->adminResetPassword($argv[2] ?? null),
                 default => $this->unknown($command),
             };
         } catch (\Throwable $exception) {
@@ -51,8 +55,12 @@ Commands:
   db:status     Show database and migration status
   cache:clear   Remove application cache files
   cron:run      Run scheduled housekeeping tasks
-  system:check  Validate runtime, database and writable storage
-  help          Show this help
+  system:check          Validate runtime, database and writable storage
+  user:create           Create a local user
+  user:disable <user>   Disable a user by ID, username or email
+  admin:reset-password <user>
+                        Generate a temporary password and force change on next login
+  help                  Show this help
 
 TEXT);
         return 0;
@@ -256,6 +264,116 @@ TEXT);
         }
 
         return $failed ? 1 : 0;
+    }
+
+    private function userCreate(): int
+    {
+        $app = Application::boot($this->basePath);
+        if (!$app->installed()) {
+            throw new \RuntimeException('OpenWiki is not installed.');
+        }
+
+        $database = $app->database();
+        $service = new DirectoryAdminService($database);
+
+        fwrite(STDOUT, '[1/3] User details' . PHP_EOL);
+        $username = $this->prompt('Username');
+        $email = $this->prompt('Email');
+        $firstName = $this->prompt('First name', '');
+        $lastName = $this->prompt('Last name', '');
+        $password = $this->promptHidden('Initial password (minimum 12 characters)');
+
+        fwrite(STDOUT, '[2/3] Default role' . PHP_EOL);
+        $roleSlug = $this->prompt('Role slug', 'viewer');
+        $role = $database->fetchOne(
+            'SELECT id, slug FROM roles WHERE slug = :slug LIMIT 1',
+            ['slug' => $roleSlug]
+        );
+        if ($role === null) {
+            throw new \InvalidArgumentException('Role not found: ' . $roleSlug);
+        }
+
+        fwrite(STDOUT, '[3/3] Creating user' . PHP_EOL);
+        $id = $service->createUser([
+            'username' => $username,
+            'email' => $email,
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'password' => $password,
+            'status' => 'active',
+            'force_password_change' => 1,
+            'role_ids' => [(int) $role['id']],
+            'group_ids' => [],
+        ]);
+
+        fwrite(STDOUT, '[ OK ] Created user #' . $id . ' with role ' . $role['slug'] . '.' . PHP_EOL);
+        return 0;
+    }
+
+    private function userDisable(?string $identifier): int
+    {
+        if ($identifier === null || trim($identifier) === '') {
+            throw new \InvalidArgumentException('Usage: php bin/console user:disable <id|username|email>');
+        }
+
+        $app = Application::boot($this->basePath);
+        if (!$app->installed()) {
+            throw new \RuntimeException('OpenWiki is not installed.');
+        }
+
+        $database = $app->database();
+        $user = $this->resolveUser($database, $identifier);
+        if ($user === null) {
+            throw new \InvalidArgumentException('User not found: ' . $identifier);
+        }
+
+        (new DirectoryAdminService($database))->disableUser((int) $user['id']);
+        fwrite(STDOUT, '[ OK ] Disabled user ' . $user['username'] . ' (#' . $user['id'] . ').' . PHP_EOL);
+        return 0;
+    }
+
+    private function adminResetPassword(?string $identifier): int
+    {
+        if ($identifier === null || trim($identifier) === '') {
+            throw new \InvalidArgumentException('Usage: php bin/console admin:reset-password <id|username|email>');
+        }
+
+        $app = Application::boot($this->basePath);
+        if (!$app->installed()) {
+            throw new \RuntimeException('OpenWiki is not installed.');
+        }
+
+        $database = $app->database();
+        $user = $this->resolveUser($database, $identifier);
+        if ($user === null) {
+            throw new \InvalidArgumentException('User not found: ' . $identifier);
+        }
+
+        $password = (new DirectoryAdminService($database))->resetPassword((int) $user['id']);
+        fwrite(STDOUT, '[ OK ] Password reset for ' . $user['username'] . ' (#' . $user['id'] . ').' . PHP_EOL);
+        fwrite(STDOUT, '[INFO] Temporary password: ' . $password . PHP_EOL);
+        fwrite(STDOUT, '[INFO] User must change it on next login.' . PHP_EOL);
+        return 0;
+    }
+
+    private function resolveUser(Database $database, string $identifier): ?array
+    {
+        $identifier = trim($identifier);
+        if (ctype_digit($identifier) && (int) $identifier > 0) {
+            return $database->fetchOne(
+                'SELECT id, username, email FROM users WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+                ['id' => (int) $identifier]
+            );
+        }
+
+        return $database->fetchOne(
+            'SELECT id, username, email
+             FROM users
+             WHERE deleted_at IS NULL
+               AND (LOWER(username) = LOWER(:username) OR LOWER(email) = LOWER(:email))
+             LIMIT 1',
+            ['username' => $identifier, 'email' => $identifier]
+        );
     }
 
     private function prompt(string $label, ?string $default = null): string
