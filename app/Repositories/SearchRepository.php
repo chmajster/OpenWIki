@@ -23,7 +23,8 @@ final class SearchRepository
         $like = '%' . $this->escapeLike($query) . '%';
 
         return $this->database->fetchAll(
-            'SELECT p.id, p.title, p.slug, p.content_text, p.status, p.updated_at,
+            'SELECT p.id, p.parent_id, p.inherit_acl, p.owner_id, p.author_id,
+                    p.title, p.slug, p.content_text, p.status, p.updated_at,
                     s.id AS space_id, s.space_key, s.name AS space_name, s.visibility,
                     s.status AS space_status, s.owner_id AS space_owner_id, s.deleted_at AS space_deleted_at,
                     CASE
