@@ -16,6 +16,7 @@ use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Security\RateLimiter;
 use OpenWiki\Wiki\ContentService;
 use OpenWiki\Wiki\Slugger;
+use OpenWiki\Wiki\WikiMetadataService;
 
 final class ApiV1Controller extends Controller
 {
@@ -225,7 +226,28 @@ final class ApiV1Controller extends Controller
             $data['author_id'] = (int) $context['user']['id'];
             $data['owner_id'] = (int) $context['user']['id'];
 
-            $id = (new PageRepository($this->app->database()))->create($data);
+            $metadata = new WikiMetadataService($this->app->database());
+            $tagInput = $request->input('tags', []);
+            if (!is_string($tagInput) && !is_array($tagInput) && $tagInput !== null) {
+                throw new \InvalidArgumentException('tags must be a string or array.');
+            }
+            $metadata->normalizeTags($tagInput);
+            $decorated = $metadata->decorateWikiLinks(
+                (int) $space['id'],
+                (string) $space['space_key'],
+                (string) $data['content_html']
+            );
+            $data['content_html'] = $decorated['html'];
+
+            $id = $this->app->database()->transaction(
+                function () use ($data, $metadata, $tagInput, $decorated, $space): int {
+                    $pageId = (new PageRepository($this->app->database()))->create($data);
+                    $metadata->syncTags($pageId, $tagInput);
+                    $metadata->syncLinks($pageId, (int) $space['id'], $decorated['references']);
+                    $metadata->refreshSpaceLinks((int) $space['id']);
+                    return $pageId;
+                }
+            );
             $row = $this->pageRow($id);
 
             (new AuditLogger($this->app->database()))->log(
@@ -279,8 +301,29 @@ final class ApiV1Controller extends Controller
             $data['author_id'] = (int) $context['user']['id'];
             $data['base_version'] = (int) $baseVersion;
 
+            $metadata = new WikiMetadataService($this->app->database());
+            $tagInput = $request->input('tags', array_column($metadata->tagsForPage($pageId), 'name'));
+            if (!is_string($tagInput) && !is_array($tagInput) && $tagInput !== null) {
+                throw new \InvalidArgumentException('tags must be a string or array.');
+            }
+            $metadata->normalizeTags($tagInput);
+            $decorated = $metadata->decorateWikiLinks(
+                (int) $space['id'],
+                (string) $space['space_key'],
+                (string) $data['content_html']
+            );
+            $data['content_html'] = $decorated['html'];
+
             $before = ['title' => $row['title'], 'slug' => $row['slug'], 'status' => $row['status'], 'version' => (int) $row['version']];
-            $result = (new PageRepository($this->app->database()))->update($row, $data);
+            $result = $this->app->database()->transaction(
+                function () use ($row, $data, $metadata, $tagInput, $decorated, $space, $pageId): array {
+                    $updatedResult = (new PageRepository($this->app->database()))->update($row, $data);
+                    $metadata->syncTags($pageId, $tagInput);
+                    $metadata->syncLinks($pageId, (int) $space['id'], $decorated['references']);
+                    $metadata->refreshSpaceLinks((int) $space['id']);
+                    return $updatedResult;
+                }
+            );
             $updated = $this->pageRow($pageId);
 
             (new AuditLogger($this->app->database()))->log(
@@ -300,7 +343,8 @@ final class ApiV1Controller extends Controller
             if ($exception->getMessage() === 'EDIT_CONFLICT') {
                 return $this->error('edit_conflict', 'The page has changed. Reload it and retry with the current base_version.', 409);
             }
-            throw $exception;
+            error_log('[OpenWiki API page update] ' . $exception->getMessage());
+            return $this->error('server_error', 'Unable to update page.', 500);
         } catch (\Throwable $exception) {
             if (str_contains(strtolower($exception->getMessage()), 'duplicate')) {
                 return $this->error('conflict', 'A page with this slug already exists in the space.', 409);
@@ -826,6 +870,7 @@ final class ApiV1Controller extends Controller
             'content_format' => $page['content_format'],
             'content_html' => $page['content_html'],
             'content_markdown' => $page['content_markdown'],
+            'tags' => (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
         ];
     }
 
