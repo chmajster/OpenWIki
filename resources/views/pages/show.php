@@ -51,6 +51,9 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                     </form>
                 <?php endif; ?>
                 <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/history">History</a>
+                <?php if (!empty($canManagePermissions)): ?>
+                    <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/permissions">Permissions</a>
+                <?php endif; ?>
                 <?php if ($canEdit): ?>
                     <a class="button button--primary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit">Edit</a>
                 <?php endif; ?>
