@@ -230,6 +230,21 @@ TEXT);
             ['cutoff' => $expiredDraftCutoff]
         );
 
+        $tempRemoved = 0;
+        $tempPath = $this->basePath . '/storage/temp';
+        if (is_dir($tempPath)) {
+            $tempCutoff = time() - 86400;
+            foreach (new \FilesystemIterator($tempPath, \FilesystemIterator::SKIP_DOTS) as $tempFile) {
+                if (!$tempFile->isFile() || $tempFile->getMTime() >= $tempCutoff) {
+                    continue;
+                }
+                if (@unlink($tempFile->getPathname())) {
+                    $tempRemoved++;
+                }
+            }
+        }
+        fwrite(STDOUT, '[INFO] Temporary files removed: ' . $tempRemoved . PHP_EOL);
+
         $webhooks = (new WebhookService($database))->processDue(25);
         fwrite(
             STDOUT,
