@@ -19,6 +19,7 @@ use OpenWiki\Wiki\EditSessionService;
 use OpenWiki\Wiki\PageEngagementService;
 use OpenWiki\Wiki\Slugger;
 use OpenWiki\Wiki\WikiMetadataService;
+use OpenWiki\Webhooks\WebhookService;
 
 final class PageController extends Controller
 {
@@ -121,6 +122,24 @@ final class PageController extends Controller
                 );
             } catch (\Throwable $notificationError) {
                 error_log('[OpenWiki notification] ' . $notificationError->getMessage());
+            }
+
+            try {
+                $webhooks = new WebhookService($this->app->database());
+                $payload = [
+                    'id' => $pageId,
+                    'space_id' => (int) $space['id'],
+                    'title' => $data['title'],
+                    'slug' => $data['slug'],
+                    'status' => $data['status'],
+                    'author_id' => (int) $user['id'],
+                ];
+                $webhooks->queue('page.created', $payload);
+                if ($data['status'] === 'published') {
+                    $webhooks->queue('page.published', $payload);
+                }
+            } catch (\Throwable $webhookError) {
+                error_log('[OpenWiki webhook queue] ' . $webhookError->getMessage());
             }
 
             Session::flash('success', 'Page created.');
@@ -330,6 +349,25 @@ final class PageController extends Controller
                 );
             } catch (\Throwable $notificationError) {
                 error_log('[OpenWiki notification] ' . $notificationError->getMessage());
+            }
+
+            try {
+                $webhooks = new WebhookService($this->app->database());
+                $payload = [
+                    'id' => (int) $current['id'],
+                    'space_id' => (int) $space['id'],
+                    'title' => $data['title'],
+                    'slug' => $data['slug'],
+                    'status' => $data['status'],
+                    'version' => $result['version'],
+                    'author_id' => (int) $user['id'],
+                ];
+                $webhooks->queue('page.updated', $payload);
+                if ($data['status'] === 'published' && $current['status'] !== 'published') {
+                    $webhooks->queue('page.published', $payload);
+                }
+            } catch (\Throwable $webhookError) {
+                error_log('[OpenWiki webhook queue] ' . $webhookError->getMessage());
             }
 
             Session::flash('success', 'Page saved.');
