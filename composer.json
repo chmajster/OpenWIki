@@ -8,7 +8,8 @@
     "ext-pdo": "*",
     "ext-json": "*",
     "ext-mbstring": "*",
-    "ext-openssl": "*"
+    "ext-openssl": "*",
+    "ext-dom": "*"
   },
   "require_dev": {
     "phpunit/phpunit": "^11.0"
