@@ -79,7 +79,25 @@ final class PageController extends Controller
             $data['author_id'] = (int) $user['id'];
             $data['owner_id'] = (int) $user['id'];
 
-            $pageId = (new PageRepository($this->app->database()))->create($data);
+            $metadata = new WikiMetadataService($this->app->database());
+            $tagInput = (string) $request->input('tags', '');
+            $metadata->normalizeTags($tagInput);
+            $decorated = $metadata->decorateWikiLinks(
+                (int) $space['id'],
+                (string) $space['space_key'],
+                (string) $data['content_html']
+            );
+            $data['content_html'] = $decorated['html'];
+
+            $pageId = $this->app->database()->transaction(
+                function () use ($data, $metadata, $tagInput, $decorated, $space): int {
+                    $id = (new PageRepository($this->app->database()))->create($data);
+                    $metadata->syncTags($id, $tagInput);
+                    $metadata->syncLinks($id, (int) $space['id'], $decorated['references']);
+                    $metadata->refreshSpaceLinks((int) $space['id']);
+                    return $id;
+                }
+            );
 
             (new AuditLogger($this->app->database()))->log(
                 'PAGE_CREATED',
