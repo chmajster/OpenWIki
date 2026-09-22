@@ -59,7 +59,7 @@ final class AuthService
     {
         $identifier = trim($identifier);
         $user = $this->app->database()->fetchOne(
-            'SELECT id, password_hash, status
+            'SELECT id, username, email, password_hash, status, auth_source
              FROM users
              WHERE (LOWER(username) = LOWER(:identifier_username) OR LOWER(email) = LOWER(:identifier_email))
                AND deleted_at IS NULL
@@ -67,32 +67,66 @@ final class AuthService
             ['identifier_username' => $identifier, 'identifier_email' => $identifier]
         );
 
-        $valid = $user !== null
-            && $user['status'] === 'active'
-            && is_string($user['password_hash'])
-            && password_verify($password, $user['password_hash']);
-
-        if (!$valid) {
+        if ($user !== null && $user['status'] !== 'active') {
             return false;
         }
 
-        if (password_needs_rehash($user['password_hash'], self::passwordAlgorithm())) {
-            $this->app->database()->execute(
-                'UPDATE users SET password_hash = :hash WHERE id = :id',
-                ['hash' => password_hash($password, self::passwordAlgorithm()), 'id' => (int) $user['id']]
-            );
+        $userId = null;
+
+        if ($user !== null && $user['auth_source'] === 'local') {
+            $valid = is_string($user['password_hash'])
+                && password_verify($password, $user['password_hash']);
+
+            if (!$valid) {
+                return false;
+            }
+
+            if (password_needs_rehash($user['password_hash'], self::passwordAlgorithm())) {
+                $this->app->database()->execute(
+                    'UPDATE users SET password_hash = :hash WHERE id = :id',
+                    ['hash' => password_hash($password, self::passwordAlgorithm()), 'id' => (int) $user['id']]
+                );
+            }
+
+            $userId = (int) $user['id'];
+        } else {
+            if ($user !== null && $user['auth_source'] !== 'ldap') {
+                return false;
+            }
+
+            try {
+                $ldap = new LdapService($this->app->database());
+                $profile = $ldap->authenticate($identifier, $password);
+                if ($profile === null) {
+                    return false;
+                }
+
+                $userId = $ldap->provision($profile);
+                if ($user !== null && $userId !== (int) $user['id']) {
+                    throw new \RuntimeException('LDAP identity resolved to a different local account.');
+                }
+            } catch (\Throwable $exception) {
+                error_log('[OpenWiki LDAP login] ' . $exception->getMessage());
+                return false;
+            }
+        }
+
+        if ($userId === null) {
+            return false;
         }
 
         Session::regenerate();
         Csrf::rotate();
-        Session::put('user_id', (int) $user['id']);
+        Session::put('user_id', $userId);
+        Session::forget('mfa_verified');
+        Session::forget('mfa_pending_login');
         $this->resolved = false;
         $this->user = null;
         $this->permissions = null;
 
         $this->app->database()->execute(
             'UPDATE users SET last_login_at = UTC_TIMESTAMP() WHERE id = :id',
-            ['id' => (int) $user['id']]
+            ['id' => $userId]
         );
 
         return true;
