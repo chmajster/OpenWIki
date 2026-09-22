@@ -68,3 +68,11 @@ $router->get('/api/v1/attachments', [ApiV1Controller::class, 'attachments']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/comments', [CommentController::class, 'create']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/comments/{id}/edit', [CommentController::class, 'update']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/comments/{id}/delete', [CommentController::class, 'delete']);
+
+$router->post('/spaces/{spaceKey}/pages/{slug}/attachments', [AttachmentController::class, 'upload']);
+$router->post('/spaces/{spaceKey}/pages/{slug}/attachments/{id}/version', [AttachmentController::class, 'version']);
+$router->post('/spaces/{spaceKey}/pages/{slug}/attachments/{id}/rename', [AttachmentController::class, 'rename']);
+$router->post('/spaces/{spaceKey}/pages/{slug}/attachments/{id}/delete', [AttachmentController::class, 'delete']);
+$router->get('/attachments/{id}/download', [AttachmentController::class, 'download']);
+$router->get('/attachments/{id}/preview', [AttachmentController::class, 'preview']);
+$router->get('/attachments/{id}/versions/{version}/download', [AttachmentController::class, 'downloadVersion']);
