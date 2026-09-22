@@ -31,6 +31,18 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                 </div>
             </div>
             <div class="page-actions">
+                <?php if ($currentUser !== null): ?>
+                    <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/favorite">
+                        <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                        <input type="hidden" name="enabled" value="<?= $isFavorite ? '0' : '1' ?>">
+                        <button class="button button--ghost" type="submit"><?= $isFavorite ? 'Unfavorite' : 'Favorite' ?></button>
+                    </form>
+                    <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/watch">
+                        <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                        <input type="hidden" name="enabled" value="<?= $isWatching ? '0' : '1' ?>">
+                        <button class="button button--ghost" type="submit"><?= $isWatching ? 'Stop watching' : 'Watch' ?></button>
+                    </form>
+                <?php endif; ?>
                 <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/history">History</a>
                 <?php if ($canEdit): ?>
                     <a class="button button--primary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit">Edit</a>

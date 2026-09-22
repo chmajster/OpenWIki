@@ -70,6 +70,24 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             </section>
 
             <section class="card panel">
+                <div class="panel__header"><h2>Favorites</h2></div>
+                <?php if ($favorites === []): ?>
+                    <div class="empty-state">No favorite pages.</div>
+                <?php else: ?>
+                    <ul class="item-list">
+                        <?php foreach ($favorites as $page): ?>
+                            <li>
+                                <a href="/spaces/<?= rawurlencode($page['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>">
+                                    <strong><?= $e($page['title']) ?></strong>
+                                    <span><?= $e($page['space_name']) ?></span>
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+            </section>
+
+            <section class="card panel">
                 <div class="panel__header"><h2>My drafts</h2></div>
                 <?php if ($drafts === []): ?>
                     <div class="empty-state">No drafts.</div>
