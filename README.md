@@ -174,3 +174,20 @@ Group mapping syntax:
 CN=Wiki Editors,OU=Groups,DC=example,DC=com => editor
 Wiki Viewers => viewer
 ```
+
+
+## Page ACL
+
+OpenWiki supports per-page ACL rules for users, groups and roles. Page ACL is evaluated on top of global RBAC and Space access and does not replace backend permission checks.
+
+Page permissions can be managed from the page action **Permissions**. Rules support:
+
+- `allow` and `deny`,
+- users, groups and roles as principals,
+- granular `page.*` permissions,
+- optional propagation to child pages,
+- page-level switch for inheriting ACL from parent pages.
+
+A matching `deny` takes precedence over `allow`. If an ACL scope contains one or more `allow` rules for a permission, it acts as an allowlist for that scope. Direct page rules are evaluated before inherited rules. Setting `inherit_acl` off stops inheritance from ancestors.
+
+Page ACL is enforced consistently for page rendering, editor/autosave/locks, history/restore, delete/trash, comments, favorites/watches, attachment access, search, tags/wiki links, dashboard page lists and REST API resources.
