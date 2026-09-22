@@ -53,5 +53,78 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
         <div class="document card" data-document-content>
             <?= $page['content_html'] ?>
         </div>
+
+        <section class="comments-section" id="comments">
+            <div class="panel__header">
+                <h2>Comments</h2>
+                <span class="count"><?= count($comments) ?></span>
+            </div>
+
+            <?php if ($canComment): ?>
+                <form class="card form-card comment-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/comments">
+                    <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                    <label>Add comment
+                        <textarea name="body" rows="4" maxlength="10000" required placeholder="Write a comment. Use @username to mention someone."></textarea>
+                    </label>
+                    <div class="form-actions">
+                        <button class="button button--primary" type="submit">Comment</button>
+                    </div>
+                </form>
+            <?php endif; ?>
+
+            <?php if ($comments === []): ?>
+                <div class="card empty-state">No comments yet.</div>
+            <?php else: ?>
+                <div class="comment-list">
+                    <?php foreach ($comments as $comment): ?>
+                        <?php
+                        $isOwnComment = $currentUser !== null && (int) $comment['author_id'] === (int) $currentUser['id'];
+                        $plainBody = preg_replace('/<br\s*\/?\s*>/i', "\n", (string) $comment['body_html']);
+                        $plainBody = html_entity_decode(strip_tags((string) $plainBody), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                        ?>
+                        <article class="card comment <?= $comment['parent_id'] !== null ? 'comment--reply' : '' ?>" id="comment-<?= (int) $comment['id'] ?>">
+                            <div class="comment__header">
+                                <strong><?= $e($comment['username']) ?></strong>
+                                <span><?= $e($comment['created_at']) ?></span>
+                                <?php if ($comment['updated_at'] !== $comment['created_at']): ?><span>edited</span><?php endif; ?>
+                            </div>
+                            <div class="comment__body"><?= $comment['body_html'] ?></div>
+
+                            <div class="comment__actions">
+                                <?php if ($canComment): ?>
+                                    <details>
+                                        <summary class="button button--ghost">Reply</summary>
+                                        <form method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/comments" class="form-stack compact-form">
+                                            <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                                            <input type="hidden" name="parent_id" value="<?= (int) $comment['id'] ?>">
+                                            <textarea name="body" rows="3" maxlength="10000" required placeholder="Reply to <?= $e($comment['username']) ?>"></textarea>
+                                            <button class="button button--secondary" type="submit">Reply</button>
+                                        </form>
+                                    </details>
+                                <?php endif; ?>
+
+                                <?php if ($isOwnComment): ?>
+                                    <details>
+                                        <summary class="button button--ghost">Edit</summary>
+                                        <form method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/comments/<?= (int) $comment['id'] ?>/edit" class="form-stack compact-form">
+                                            <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                                            <textarea name="body" rows="3" maxlength="10000" required><?= $e($plainBody) ?></textarea>
+                                            <button class="button button--secondary" type="submit">Save</button>
+                                        </form>
+                                    </details>
+                                <?php endif; ?>
+
+                                <?php if ($isOwnComment || $canDeleteComment): ?>
+                                    <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/comments/<?= (int) $comment['id'] ?>/delete" onsubmit="return confirm('Delete this comment?')">
+                                        <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                                        <button class="button button--ghost" type="submit">Delete</button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </section>
     </article>
 </section>
