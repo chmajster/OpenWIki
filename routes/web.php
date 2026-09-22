@@ -24,6 +24,7 @@ use OpenWiki\Http\Controllers\PageDraftController;
 use OpenWiki\Http\Controllers\PageEngagementController;
 use OpenWiki\Http\Controllers\SearchController;
 use OpenWiki\Http\Controllers\SpaceController;
+use OpenWiki\Http\Controllers\SystemAdminController;
 use OpenWiki\Http\Controllers\TrashController;
 use OpenWiki\Http\Controllers\WikiMetadataController;
 use OpenWiki\Http\Controllers\WebhookAdminController;
@@ -157,3 +158,5 @@ $router->post('/admin/mfa', [MfaAdminController::class, 'update']);
 $router->get('/admin/ldap', [LdapAdminController::class, 'index']);
 $router->post('/admin/ldap', [LdapAdminController::class, 'save']);
 $router->post('/admin/ldap/test', [LdapAdminController::class, 'test']);
+
+$router->get('/admin/system', [SystemAdminController::class, 'index']);
