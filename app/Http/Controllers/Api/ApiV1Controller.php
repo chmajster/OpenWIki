@@ -138,6 +138,7 @@ final class ApiV1Controller extends Controller
         if (!isset($sortMap[$sort])) {
             return $this->error('validation_error', 'Invalid sort field.', 422);
         }
+
         $order = strtolower((string) $request->query('order', 'desc'));
         if (!in_array($order, ['asc', 'desc'], true)) {
             return $this->error('validation_error', 'Invalid sort order.', 422);
@@ -147,39 +148,42 @@ final class ApiV1Controller extends Controller
             return Response::json(['data' => [], 'meta' => $this->paginationMeta($page, $perPage, 0)]);
         }
 
-        [$visibilitySql, $params] = $this->pageVisibilitySql($context, $state);
-        $where = 'p.deleted_at IS NULL AND p.space_id IN (' . implode(',', array_fill(0, count($state['visible_ids']), '?')) . ') AND ' . $visibilitySql;
-        $allParams = array_merge($state['visible_ids'], $params);
+        $where = 'p.deleted_at IS NULL AND p.space_id IN ('
+            . implode(',', array_fill(0, count($state['visible_ids']), '?')) . ')';
+        $params = $state['visible_ids'];
 
         $query = trim((string) $request->query('q', ''));
         if ($query !== '') {
             $where .= ' AND (p.title LIKE ? OR p.content_text LIKE ?)';
             $like = '%' . $query . '%';
-            $allParams[] = $like;
-            $allParams[] = $like;
+            $params[] = $like;
+            $params[] = $like;
         }
 
-        $count = $this->app->database()->fetchOne(
-            'SELECT COUNT(*) AS total FROM pages p WHERE ' . $where,
-            $allParams
-        );
-        $total = (int) ($count['total'] ?? 0);
-
         $rows = $this->app->database()->fetchAll(
-            'SELECT p.id, p.space_id, p.parent_id, p.title, p.slug, p.status, p.version,
-                    p.author_id, p.owner_id, p.created_at, p.updated_at, p.published_at,
-                    s.space_key, s.name AS space_name, u.username AS author_username
+            'SELECT p.*, u.username AS author_username,
+                    s.space_key, s.name AS space_name, s.visibility AS space_visibility,
+                    s.owner_id AS space_owner_id, s.status AS space_status, s.deleted_at AS space_deleted_at
              FROM pages p
              INNER JOIN spaces s ON s.id = p.space_id
              INNER JOIN users u ON u.id = p.author_id
              WHERE ' . $where . '
-             ORDER BY ' . $sortMap[$sort] . ' ' . strtoupper($order) . '
-             LIMIT ' . $perPage . ' OFFSET ' . $offset,
-            $allParams
+             ORDER BY ' . $sortMap[$sort] . ' ' . strtoupper($order),
+            $params
         );
 
+        $filtered = [];
+        foreach ($rows as $row) {
+            if ($this->canViewPage($context, $row)) {
+                $filtered[] = $row;
+            }
+        }
+
+        $total = count($filtered);
+        $slice = array_slice($filtered, $offset, $perPage);
+
         return Response::json([
-            'data' => array_map([$this, 'pageListResource'], $rows),
+            'data' => array_map([$this, 'pageListResource'], $slice),
             'meta' => $this->paginationMeta($page, $perPage, $total),
         ]);
     }
@@ -528,24 +532,65 @@ final class ApiV1Controller extends Controller
         }
 
         [$page, $perPage, $offset] = $this->pagination($request);
-        $count = $this->app->database()->fetchOne('SELECT COUNT(*) AS total FROM tags');
         $rows = $this->app->database()->fetchAll(
-            'SELECT t.id, t.name, t.slug, COUNT(pt.page_id) AS page_count
+            'SELECT t.id AS tag_id, t.name AS tag_name, t.slug AS tag_slug,
+                    p.id AS page_id, p.space_id, p.parent_id, p.inherit_acl,
+                    p.status AS page_status, p.owner_id AS page_owner_id, p.author_id AS page_author_id,
+                    s.space_key, s.name AS space_name, s.visibility AS space_visibility,
+                    s.owner_id AS space_owner_id, s.status AS space_status, s.deleted_at AS space_deleted_at
              FROM tags t
              LEFT JOIN page_tags pt ON pt.tag_id = t.id
-             GROUP BY t.id
-             ORDER BY t.name ASC
-             LIMIT ' . $perPage . ' OFFSET ' . $offset
+             LEFT JOIN pages p ON p.id = pt.page_id AND p.deleted_at IS NULL
+             LEFT JOIN spaces s ON s.id = p.space_id AND s.deleted_at IS NULL
+             ORDER BY t.name ASC, t.id ASC, p.id ASC'
         );
 
+        $tags = [];
+        foreach ($rows as $row) {
+            $tagId = (int) $row['tag_id'];
+            if (!isset($tags[$tagId])) {
+                $tags[$tagId] = [
+                    'id' => $tagId,
+                    'name' => $row['tag_name'],
+                    'slug' => $row['tag_slug'],
+                    'page_count' => 0,
+                ];
+            }
+
+            if ($row['page_id'] === null || $row['space_key'] === null) {
+                continue;
+            }
+
+            $pageRow = [
+                'id' => (int) $row['page_id'],
+                'space_id' => (int) $row['space_id'],
+                'parent_id' => $row['parent_id'] === null ? null : (int) $row['parent_id'],
+                'inherit_acl' => (int) $row['inherit_acl'],
+                'status' => $row['page_status'],
+                'owner_id' => (int) $row['page_owner_id'],
+                'author_id' => (int) $row['page_author_id'],
+                'space_key' => $row['space_key'],
+                'space_name' => $row['space_name'],
+                'space_visibility' => $row['space_visibility'],
+                'space_owner_id' => (int) $row['space_owner_id'],
+                'space_status' => $row['space_status'],
+                'space_deleted_at' => $row['space_deleted_at'],
+            ];
+
+            if ($this->canViewPage($context, $pageRow)) {
+                $tags[$tagId]['page_count']++;
+            }
+        }
+
+        $visibleTags = array_values(array_filter(
+            $tags,
+            static fn (array $tag): bool => $tag['page_count'] > 0
+        ));
+        $total = count($visibleTags);
+
         return Response::json([
-            'data' => array_map(static fn (array $row): array => [
-                'id' => (int) $row['id'],
-                'name' => $row['name'],
-                'slug' => $row['slug'],
-                'page_count' => (int) $row['page_count'],
-            ], $rows),
-            'meta' => $this->paginationMeta($page, $perPage, (int) ($count['total'] ?? 0)),
+            'data' => array_slice($visibleTags, $offset, $perPage),
+            'meta' => $this->paginationMeta($page, $perPage, $total),
         ]);
     }
 
@@ -566,43 +611,67 @@ final class ApiV1Controller extends Controller
             return Response::json(['data' => [], 'meta' => $this->paginationMeta($page, $perPage, 0)]);
         }
 
-        [$visibilitySql, $visibilityParams] = $this->pageVisibilitySql($context, $state);
-        $spacePlaceholders = implode(',', array_fill(0, count($state['visible_ids']), '?'));
-        $where = 'a.deleted_at IS NULL AND p.deleted_at IS NULL AND p.space_id IN (' . $spacePlaceholders . ') AND ' . $visibilitySql;
-        $params = array_merge($state['visible_ids'], $visibilityParams);
-
-        $count = $this->app->database()->fetchOne(
-            'SELECT COUNT(*) AS total
-             FROM attachments a
-             INNER JOIN pages p ON p.id = a.page_id
-             WHERE ' . $where,
-            $params
-        );
+        $placeholders = implode(',', array_fill(0, count($state['visible_ids']), '?'));
         $rows = $this->app->database()->fetchAll(
-            'SELECT a.id, a.page_id, a.name, a.mime_type, a.size_bytes, a.current_version, a.created_at, a.updated_at,
-                    p.title AS page_title, p.slug AS page_slug, s.space_key
+            'SELECT a.id AS attachment_id, a.page_id, a.name, a.mime_type, a.size_bytes,
+                    a.current_version, a.created_at AS attachment_created_at, a.updated_at AS attachment_updated_at,
+                    p.space_id, p.parent_id, p.inherit_acl, p.status AS page_status,
+                    p.owner_id AS page_owner_id, p.author_id AS page_author_id,
+                    p.title AS page_title, p.slug AS page_slug,
+                    s.space_key, s.name AS space_name, s.visibility AS space_visibility,
+                    s.owner_id AS space_owner_id, s.status AS space_status, s.deleted_at AS space_deleted_at
              FROM attachments a
-             INNER JOIN pages p ON p.id = a.page_id
-             INNER JOIN spaces s ON s.id = p.space_id
-             WHERE ' . $where . '
-             ORDER BY a.updated_at DESC
-             LIMIT ' . $perPage . ' OFFSET ' . $offset,
-            $params
+             INNER JOIN pages p ON p.id = a.page_id AND p.deleted_at IS NULL
+             INNER JOIN spaces s ON s.id = p.space_id AND s.deleted_at IS NULL
+             WHERE a.deleted_at IS NULL
+               AND p.space_id IN (' . $placeholders . ')
+             ORDER BY a.updated_at DESC, a.id DESC',
+            $state['visible_ids']
         );
 
-        return Response::json([
-            'data' => array_map(static fn (array $row): array => [
-                'id' => (int) $row['id'],
+        $filtered = [];
+        foreach ($rows as $row) {
+            $pageRow = [
+                'id' => (int) $row['page_id'],
+                'space_id' => (int) $row['space_id'],
+                'parent_id' => $row['parent_id'] === null ? null : (int) $row['parent_id'],
+                'inherit_acl' => (int) $row['inherit_acl'],
+                'status' => $row['page_status'],
+                'owner_id' => (int) $row['page_owner_id'],
+                'author_id' => (int) $row['page_author_id'],
+                'space_key' => $row['space_key'],
+                'space_name' => $row['space_name'],
+                'space_visibility' => $row['space_visibility'],
+                'space_owner_id' => (int) $row['space_owner_id'],
+                'space_status' => $row['space_status'],
+                'space_deleted_at' => $row['space_deleted_at'],
+            ];
+
+            if (!$this->canViewPage($context, $pageRow)) {
+                continue;
+            }
+
+            $filtered[] = [
+                'id' => (int) $row['attachment_id'],
                 'page_id' => (int) $row['page_id'],
                 'name' => $row['name'],
                 'mime_type' => $row['mime_type'],
                 'size_bytes' => (int) $row['size_bytes'],
                 'current_version' => (int) $row['current_version'],
-                'page' => ['title' => $row['page_title'], 'slug' => $row['page_slug'], 'space_key' => $row['space_key']],
-                'created_at' => $row['created_at'],
-                'updated_at' => $row['updated_at'],
-            ], $rows),
-            'meta' => $this->paginationMeta($page, $perPage, (int) ($count['total'] ?? 0)),
+                'page' => [
+                    'title' => $row['page_title'],
+                    'slug' => $row['page_slug'],
+                    'space_key' => $row['space_key'],
+                ],
+                'created_at' => $row['attachment_created_at'],
+                'updated_at' => $row['attachment_updated_at'],
+            ];
+        }
+
+        $total = count($filtered);
+        return Response::json([
+            'data' => array_slice($filtered, $offset, $perPage),
+            'meta' => $this->paginationMeta($page, $perPage, $total),
         ]);
     }
 
