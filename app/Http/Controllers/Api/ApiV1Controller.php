@@ -9,6 +9,7 @@ use OpenWiki\Auth\ApiTokenService;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Http\Controller;
+use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SearchRepository;
@@ -286,9 +287,15 @@ final class ApiV1Controller extends Controller
         }
 
         $space = $this->spaceFromPage($row);
-        $access = new SpaceAccessService($this->app);
-        if (!$access->canEditFor($space, (int) $context['user']['id'], $this->isSuperAdmin($context))) {
-            return $this->error('forbidden', 'You cannot edit pages in this space.', 403);
+        if (!(new PageAclService($this->app))->canFor(
+            $row,
+            $space,
+            'page.edit',
+            (int) $context['user']['id'],
+            $this->isSuperAdmin($context),
+            true
+        )) {
+            return $this->error('forbidden', 'You cannot edit this page.', 403);
         }
 
         $baseVersion = filter_var($request->input('base_version'), FILTER_VALIDATE_INT);
@@ -368,12 +375,15 @@ final class ApiV1Controller extends Controller
         }
 
         $space = $this->spaceFromPage($row);
-        if (!(new SpaceAccessService($this->app))->canEditFor(
+        if (!(new PageAclService($this->app))->canFor(
+            $row,
             $space,
+            'page.delete',
             (int) $context['user']['id'],
-            $this->isSuperAdmin($context)
+            $this->isSuperAdmin($context),
+            true
         )) {
-            return $this->error('forbidden', 'You cannot delete pages in this space.', 403);
+            return $this->error('forbidden', 'You cannot delete this page.', 403);
         }
 
         $this->app->database()->execute(
@@ -725,19 +735,13 @@ final class ApiV1Controller extends Controller
 
     private function canViewPage(array $context, array $page): bool
     {
-        $space = $this->spaceFromPage($page);
-        $access = new SpaceAccessService($this->app);
-        if (!$access->canViewFor($space, (int) $context['user']['id'], $this->isSuperAdmin($context))) {
-            return false;
-        }
-
-        if ($page['status'] === 'published') {
-            return true;
-        }
-
-        return (int) $page['owner_id'] === (int) $context['user']['id']
-            || (int) $page['author_id'] === (int) $context['user']['id']
-            || $access->canEditFor($space, (int) $context['user']['id'], $this->isSuperAdmin($context));
+        return (new PageAclService($this->app))->canViewFor(
+            $page,
+            $this->spaceFromPage($page),
+            (int) $context['user']['id'],
+            $this->isSuperAdmin($context),
+            $this->contextHasPermission($context, 'page.view')
+        );
     }
 
     private function spaceFromPage(array $page): array
@@ -798,6 +802,12 @@ final class ApiV1Controller extends Controller
         }
 
         return ['(' . implode(' OR ', $parts) . ')', $params];
+    }
+
+    private function contextHasPermission(array $context, string $permission): bool
+    {
+        $permissions = $context['permissions'] ?? [];
+        return in_array('*', $permissions, true) || in_array($permission, $permissions, true);
     }
 
     private function isSuperAdmin(array $context): bool
