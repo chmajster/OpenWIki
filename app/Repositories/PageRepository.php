@@ -232,6 +232,40 @@ final class PageRepository
         return $this->update($current, $data)['version'];
     }
 
+    public function wouldCreateCycle(int $pageId, ?int $parentId): bool
+    {
+        if ($parentId === null) {
+            return false;
+        }
+
+        $cursor = $parentId;
+        $visited = [];
+
+        while ($cursor !== null) {
+            if ($cursor === $pageId || isset($visited[$cursor])) {
+                return true;
+            }
+
+            $visited[$cursor] = true;
+            if (count($visited) > 10000) {
+                throw new \RuntimeException('Page hierarchy exceeds the supported traversal depth.');
+            }
+
+            $row = $this->database->fetchOne(
+                'SELECT parent_id FROM pages WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+                ['id' => $cursor]
+            );
+
+            if ($row === null) {
+                return true;
+            }
+
+            $cursor = $row['parent_id'] === null ? null : (int) $row['parent_id'];
+        }
+
+        return false;
+    }
+
     public function recordView(int $pageId, int $userId): void
     {
         $this->database->execute(
