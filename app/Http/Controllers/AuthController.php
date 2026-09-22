@@ -6,6 +6,7 @@ namespace OpenWiki\Http\Controllers;
 
 use OpenWiki\Audit\AuditLogger;
 use OpenWiki\Auth\MfaService;
+use OpenWiki\Auth\UserSessionService;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
@@ -54,6 +55,11 @@ final class AuthController extends Controller
 
         $limiter->clear('login', $key);
         $user = $this->app->auth()->user();
+        (new UserSessionService($this->app->database()))->registerCurrent(
+            (int) $user['id'],
+            $request->ip(),
+            $request->userAgent()
+        );
         Session::put('mfa_verified', false);
 
         $mfa = new MfaService($this->app->database());
@@ -100,6 +106,9 @@ final class AuthController extends Controller
             );
         }
 
+        if ($user !== null) {
+            (new UserSessionService($this->app->database()))->removeCurrent((int) $user['id']);
+        }
         $this->app->auth()->logout();
         Session::flash('success', 'You have been signed out.');
         return Response::redirect('/login');
