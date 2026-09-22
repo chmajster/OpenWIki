@@ -268,7 +268,7 @@ final class WikiMetadataService
     {
         return $this->database->fetchAll(
             'SELECT p.id, p.space_id, p.title, p.slug, p.status, p.owner_id, p.author_id,
-                    p.updated_at, u.username AS author_username,
+                    p.parent_id, p.inherit_acl, p.updated_at, u.username AS author_username,
                     s.space_key, s.name AS space_name, s.visibility AS space_visibility,
                     s.owner_id AS space_owner_id, s.status AS space_status, s.deleted_at AS space_deleted_at
              FROM page_links l
