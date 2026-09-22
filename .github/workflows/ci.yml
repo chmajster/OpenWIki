@@ -38,7 +38,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.2"
-          extensions: pdo_mysql, mbstring, openssl, dom, curl, phar
+          extensions: pdo_mysql, mbstring, openssl, dom, curl, phar, ldap
           coverage: none
 
       - name: Validate Composer metadata
