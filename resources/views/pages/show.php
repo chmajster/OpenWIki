@@ -54,6 +54,12 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                 <?php if ($canEdit): ?>
                     <a class="button button--primary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit">Edit</a>
                 <?php endif; ?>
+                <?php if ($canDeletePage): ?>
+                    <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/delete" onsubmit="return confirm('Move this page to trash?')">
+                        <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                        <button class="button button--ghost" type="submit">Delete</button>
+                    </form>
+                <?php endif; ?>
             </div>
         </div>
 
