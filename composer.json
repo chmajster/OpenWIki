@@ -10,7 +10,8 @@
     "ext-mbstring": "*",
     "ext-openssl": "*",
     "ext-dom": "*",
-    "ext-phar": "*"
+    "ext-phar": "*",
+    "ext-curl": "*"
   },
   "autoload": {
     "psr-4": {
