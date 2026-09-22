@@ -37,10 +37,17 @@ final class Env
                 continue;
             }
 
-            if (
-                strlen($value) >= 2
-                && (($value[0] === '"' && substr($value, -1) === '"') || ($value[0] === "'" && substr($value, -1) === "'"))
-            ) {
+            if (strlen($value) >= 2 && $value[0] === '"' && substr($value, -1) === '"') {
+                try {
+                    $decoded = json_decode($value, true, 512, JSON_THROW_ON_ERROR);
+                } catch (\JsonException $exception) {
+                    throw new \RuntimeException('Invalid quoted environment value for ' . $key . '.', 0, $exception);
+                }
+                if (!is_string($decoded)) {
+                    throw new \RuntimeException('Environment value must decode to a string: ' . $key);
+                }
+                $value = $decoded;
+            } elseif (strlen($value) >= 2 && $value[0] === "'" && substr($value, -1) === "'") {
                 $value = substr($value, 1, -1);
             }
 
