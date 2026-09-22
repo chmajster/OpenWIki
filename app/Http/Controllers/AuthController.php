@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OpenWiki\Http\Controllers;
 
 use OpenWiki\Audit\AuditLogger;
+use OpenWiki\Auth\MfaService;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
@@ -53,6 +54,17 @@ final class AuthController extends Controller
 
         $limiter->clear('login', $key);
         $user = $this->app->auth()->user();
+        Session::put('mfa_verified', false);
+
+        $mfa = new MfaService($this->app->database());
+        if ($mfa->enabled((int) $user['id'])) {
+            return Response::redirect('/mfa/challenge');
+        }
+        if ($mfa->required((int) $user['id'])) {
+            return Response::redirect('/account/mfa/setup');
+        }
+
+        Session::put('mfa_verified', true);
         (new AuditLogger($this->app->database()))->log(
             'LOGIN_SUCCEEDED',
             'user',
