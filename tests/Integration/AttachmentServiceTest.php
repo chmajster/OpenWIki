@@ -58,9 +58,14 @@ final class AttachmentServiceTest extends TestCase
             'INSERT INTO pages
              (space_id, title, slug, content_html, content_text, content_format, author_id, owner_id,
               order_index, status, version, published_at, created_at, updated_at)
-             VALUES (:space_id, "Files", :slug, "<p>Body</p>", "Body", "visual", :user_id, :user_id,
+             VALUES (:space_id, "Files", :slug, "<p>Body</p>", "Body", "visual", :author_id, :owner_id,
                      0, "published", 1, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())',
-            ['space_id' => $spaceId, 'slug' => 'files-' . bin2hex(random_bytes(3)), 'user_id' => $userId]
+            [
+                'space_id' => $spaceId,
+                'slug' => 'files-' . bin2hex(random_bytes(3)),
+                'author_id' => $userId,
+                'owner_id' => $userId,
+            ]
         );
 
         $sourceOne = $this->basePath . '/source-one.txt';
