@@ -157,6 +157,13 @@ final class PageController extends Controller
             'comments' => (new CommentService($this->app->database()))->listForPage((int) $page['id']),
             'canComment' => $user !== null && $this->app->auth()->can('comment.create'),
             'canDeleteComment' => $user !== null && $this->app->auth()->can('comment.delete'),
+            'attachments' => (new AttachmentService($this->app->database(), $this->app->basePath()))->listForPage((int) $page['id']),
+            'canUploadAttachment' => $user !== null
+                && $access->canEdit($space)
+                && $this->app->auth()->can('attachment.upload'),
+            'canDeleteAttachment' => $user !== null
+                && $access->canEdit($space)
+                && $this->app->auth()->can('attachment.delete'),
         ]);
     }
 
