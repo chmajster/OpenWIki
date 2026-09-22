@@ -7,6 +7,7 @@ namespace OpenWiki\Http\Controllers;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Http\Controller;
+use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
@@ -110,17 +111,17 @@ final class PageDraftController extends Controller
             ], 404);
         }
 
-        if (!(new SpaceAccessService($this->app))->canEdit($space)) {
-            return Response::json([
-                'error' => ['code' => 'forbidden', 'message' => 'Permission denied.'],
-            ], 403);
-        }
-
         $page = (new PageRepository($this->app->database()))->findBySlug((int) $space['id'], $slug);
         if ($page === null) {
             return Response::json([
                 'error' => ['code' => 'page_not_found', 'message' => 'Page not found.'],
             ], 404);
+        }
+
+        if (!(new PageAclService($this->app))->canEdit($page, $space)) {
+            return Response::json([
+                'error' => ['code' => 'forbidden', 'message' => 'Permission denied.'],
+            ], 403);
         }
 
         return ['space' => $space, 'page' => $page];
