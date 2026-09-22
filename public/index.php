@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use OpenWiki\Auth\MfaService;
+use OpenWiki\Auth\UserSessionService;
 use OpenWiki\Core\Application;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
@@ -25,7 +26,22 @@ try {
     if ($app->installed()) {
         $user = $app->auth()->user();
 
-        if ($user !== null && !str_starts_with($request->path(), '/api/')) {
+        if (
+            $user !== null
+            && !str_starts_with($request->path(), '/api/')
+            && $request->path() !== '/health'
+        ) {
+            $sessionRegistry = new UserSessionService($app->database());
+            if (!$sessionRegistry->validateAndTouchCurrent(
+                (int) $user['id'],
+                $request->ip(),
+                $request->userAgent()
+            )) {
+                $app->auth()->logout();
+                Session::flash('error', 'Your session expired or was revoked.');
+                Response::redirect('/login')->send();
+            }
+
             $mfa = new MfaService($app->database());
             $mfaVerified = Session::get('mfa_verified') === true;
             if ($mfaVerified && $mfa->required((int) $user['id']) && !$mfa->enabled((int) $user['id'])) {
