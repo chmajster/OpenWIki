@@ -42,7 +42,7 @@ final class SpaceAccessService
     public function canEdit(array $space): bool
     {
         $user = $this->app->auth()->user();
-        if ($user === null || !$this->app->auth()->can('space.edit')) {
+        if ($user === null) {
             return false;
         }
 
