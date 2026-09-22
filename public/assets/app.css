@@ -379,3 +379,32 @@ textarea { resize: vertical; }
     .comment--reply { margin-left: .75rem; }
     .compact-form { min-width: 0; width: 100%; }
 }
+
+
+.attachments-section { margin-top: 1.5rem; }
+.attachment-upload { margin-bottom: 1rem; }
+.attachment-list { display: grid; gap: .75rem; }
+.attachment-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem;
+}
+.attachment-row__main { display: grid; gap: .25rem; min-width: 0; }
+.attachment-row__main span,
+.attachment-row__main small { overflow-wrap: anywhere; }
+.attachment-row__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: .5rem;
+}
+.attachment-row__actions details { position: relative; }
+.attachment-row__actions summary { list-style: none; cursor: pointer; }
+.attachment-row__actions summary::-webkit-details-marker { display: none; }
+@media (max-width: 800px) {
+    .attachment-row { flex-direction: column; }
+    .attachment-row__actions { justify-content: flex-start; width: 100%; }
+}
