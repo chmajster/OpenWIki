@@ -33,6 +33,9 @@ $notificationCount = $currentUser === null
                         Notifications<?php if ($notificationCount > 0): ?><span class="notification-badge"><?= (int) $notificationCount ?></span><?php endif; ?>
                     </a>
                     <a class="button button--ghost" href="/account/api-tokens">API tokens</a>
+                    <?php if ($app->auth()->can('page.delete')): ?>
+                        <a class="button button--ghost" href="/trash">Trash</a>
+                    <?php endif; ?>
                     <?php if ($app->auth()->can('settings.manage')): ?>
                         <a class="button button--ghost" href="/admin/broken-links">Broken links</a>
                     <?php endif; ?>
