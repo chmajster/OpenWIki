@@ -8,6 +8,8 @@
 !/storage/temp/.gitkeep
 /storage/attachments/*
 !/storage/attachments/.gitkeep
+/storage/backups/*
+!/storage/backups/.gitkeep
 /.phpunit.cache/
 .phpunit.result.cache
 /storage/installed.lock
