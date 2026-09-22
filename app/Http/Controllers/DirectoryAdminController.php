@@ -11,6 +11,7 @@ use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
 use OpenWiki\Http\Controller;
+use OpenWiki\Webhooks\WebhookService;
 
 final class DirectoryAdminController extends Controller
 {
@@ -80,6 +81,15 @@ final class DirectoryAdminController extends Controller
                 'username' => (string) $request->input('username', ''),
                 'email' => (string) $request->input('email', ''),
             ]);
+            try {
+                (new WebhookService($this->app->database()))->queue('user.created', [
+                    'id' => $id,
+                    'username' => (string) $request->input('username', ''),
+                    'email' => (string) $request->input('email', ''),
+                ]);
+            } catch (\Throwable $webhookError) {
+                error_log('[OpenWiki webhook queue] ' . $webhookError->getMessage());
+            }
             Session::flash('success', 'User created.');
             return Response::redirect('/admin/users/' . $id . '/edit');
         } catch (\Throwable $exception) {
