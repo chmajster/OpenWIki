@@ -140,6 +140,32 @@ final class WikiMetadataService
         return ['html' => $result, 'references' => array_values($references)];
     }
 
+    public function referencesFromHtml(string $html): array
+    {
+        $references = [];
+
+        if (preg_match_all('#/wiki/([^"\'?#]+)#u', $html, $matches)) {
+            foreach ($matches[1] as $encoded) {
+                $reference = trim(rawurldecode((string) $encoded));
+                if ($reference !== '') {
+                    $references[mb_strtolower($reference)] = $reference;
+                }
+            }
+        }
+
+        $plain = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if (preg_match_all('/\[\[([^\]\r\n]{1,255})\]\]/u', $plain, $matches)) {
+            foreach ($matches[1] as $raw) {
+                $reference = trim((string) $raw);
+                if ($reference !== '') {
+                    $references[mb_strtolower($reference)] = $reference;
+                }
+            }
+        }
+
+        return array_values($references);
+    }
+
     public function syncLinks(int $pageId, int $spaceId, array $references): void
     {
         $unique = [];
