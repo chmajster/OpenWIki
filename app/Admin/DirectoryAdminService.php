@@ -152,6 +152,24 @@ final class DirectoryAdminService
         });
     }
 
+    public function disableUser(int $id): bool
+    {
+        if ($this->user($id) === null) {
+            return false;
+        }
+
+        return $this->database->transaction(function (Database $db) use ($id): bool {
+            $db->execute('DELETE FROM user_sessions WHERE user_id = :user_id', ['user_id' => $id]);
+
+            return $db->execute(
+                'UPDATE users
+                 SET status = "disabled", updated_at = UTC_TIMESTAMP()
+                 WHERE id = :id AND deleted_at IS NULL AND status <> "disabled"',
+                ['id' => $id]
+            ) <= 1;
+        });
+    }
+
     public function softDeleteUser(int $id): bool
     {
         return $this->database->transaction(function (Database $db) use ($id): bool {
