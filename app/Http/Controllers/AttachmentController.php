@@ -10,6 +10,7 @@ use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
 use OpenWiki\Http\Controller;
+use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
@@ -276,14 +277,13 @@ final class AttachmentController extends Controller
             return [null, null, $this->render('errors/404', ['title' => 'Space not found'], 404)];
         }
 
-        $access = new SpaceAccessService($this->app);
-        if (!$access->canEdit($space)) {
-            return [null, null, $this->render('errors/403', ['title' => 'Permission denied'], 403)];
-        }
-
         $page = (new PageRepository($this->app->database()))->findBySlug((int) $space['id'], $slug);
         if ($page === null) {
             return [null, null, $this->render('errors/404', ['title' => 'Page not found'], 404)];
+        }
+
+        if (!(new PageAclService($this->app))->canEdit($page, $space)) {
+            return [null, null, $this->render('errors/403', ['title' => 'Permission denied'], 403)];
         }
 
         return [$space, $page, null];
@@ -308,20 +308,18 @@ final class AttachmentController extends Controller
             'status' => $attachment['space_status'],
             'deleted_at' => $attachment['space_deleted_at'],
         ];
-        $access = new SpaceAccessService($this->app);
-        if (!$access->canView($space)) {
-            return $this->render('errors/404', ['title' => 'Attachment not found'], 404);
-        }
+        $page = [
+            'id' => (int) $attachment['page_id'],
+            'space_id' => (int) $attachment['space_id'],
+            'parent_id' => $attachment['page_parent_id'] === null ? null : (int) $attachment['page_parent_id'],
+            'inherit_acl' => (int) $attachment['page_inherit_acl'],
+            'status' => $attachment['page_status'],
+            'owner_id' => (int) $attachment['page_owner_id'],
+            'author_id' => (int) $attachment['page_author_id'],
+        ];
 
-        if ($attachment['page_status'] !== 'published') {
-            $user = $this->app->auth()->user();
-            $owns = $user !== null && (
-                (int) $attachment['page_owner_id'] === (int) $user['id']
-                || (int) $attachment['page_author_id'] === (int) $user['id']
-            );
-            if (!$owns && !$access->canEdit($space)) {
-                return $this->render('errors/404', ['title' => 'Attachment not found'], 404);
-            }
+        if (!(new PageAclService($this->app))->canView($page, $space)) {
+            return $this->render('errors/404', ['title' => 'Attachment not found'], 404);
         }
 
         return $attachment;
