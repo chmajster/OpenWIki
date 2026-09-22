@@ -14,6 +14,7 @@ use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Wiki\WikiMetadataService;
+use OpenWiki\Webhooks\WebhookService;
 
 final class TrashController extends Controller
 {
@@ -93,6 +94,18 @@ final class TrashController extends Controller
             ['title' => $page['title'], 'slug' => $page['slug'], 'status' => $page['status']],
             ['deleted' => true]
         );
+
+        try {
+            (new WebhookService($this->app->database()))->queue('page.deleted', [
+                'id' => (int) $page['id'],
+                'space_id' => (int) $space['id'],
+                'title' => (string) $page['title'],
+                'slug' => (string) $page['slug'],
+                'deleted_by' => (int) $user['id'],
+            ]);
+        } catch (\Throwable $webhookError) {
+            error_log('[OpenWiki webhook queue] ' . $webhookError->getMessage());
+        }
 
         Session::flash('success', 'Page moved to trash.');
         return Response::redirect('/spaces/' . rawurlencode((string) $space['space_key']));
