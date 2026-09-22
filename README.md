@@ -6,7 +6,7 @@ OpenWiki is a self-hosted knowledge base and enterprise wiki written for PHP 8.2
 
 - PHP 8.2+
 - MySQL 8 or compatible MariaDB
-- PHP extensions: PDO, pdo_mysql, mbstring, OpenSSL, DOM
+- PHP extensions: PDO, pdo_mysql, mbstring, OpenSSL, DOM, Phar, cURL, LDAP, ZIP
 - a web server whose document root points to `public/`
 - writable `storage/` directories
 
@@ -234,3 +234,44 @@ php bin/console search:index
 Administrators can inspect `/admin/system` for application/PHP/database versions, database size, attachment and backup storage usage, filesystem capacity, required PHP extensions, writable directories, migration status and scheduler state.
 
 A successful `php bin/console cron:run` stores its last-run timestamp. The administration UI marks the scheduler stale when no successful run has been recorded for more than 10 minutes.
+
+
+## Macros and table of contents
+
+Page content can contain render-time macros. Generated macro output is not written back into page revisions.
+
+Supported macros include:
+
+- `{{toc}}`
+- `{{child-pages}}`
+- `{{page-properties}}`
+- `{{attachments}}`
+- `{{recent-updates}}`
+- `{{user-profile:username}}`
+- `{{status:In progress}}`
+- `{{info:Information}}`
+- `{{warning:Warning}}`
+- `{{note:Note}}`
+- `{{code:echo "hello";}}`
+
+Headings receive stable anchors while rendering. Pages with at least two headings show a sticky Table of Contents on wide screens and a normal TOC block on smaller screens.
+
+## Page templates
+
+Administrators with `template.manage` can manage custom page templates under `/admin/templates`. System templates are read-only and cannot be deleted. Template HTML and Markdown pass through the same content normalization and HTML sanitization used by Wiki pages.
+
+## Import and export
+
+A page can be exported as HTML, Markdown or PDF. A Space can be exported as a ZIP archive containing:
+
+- a manifest with page hierarchy,
+- standalone HTML files,
+- Markdown files,
+- accessible page attachments,
+- an index page.
+
+Spaces can import Markdown, HTML or ZIP documentation. Imported pages are created as drafts.
+
+ZIP import is processed entry-by-entry without filesystem extraction. OpenWiki rejects absolute paths, path traversal and Unix symlink entries, limits archive entry count and uncompressed sizes, and ignores unsupported file types instead of executing or extracting them.
+
+Normal Space ZIP downloads remove their temporary archive after sending. `cron:run` also removes stale files from `storage/temp` after 24 hours.
