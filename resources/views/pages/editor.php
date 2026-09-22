@@ -1,6 +1,7 @@
 <?php
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $old = $old ?? [];
+$serverDraft = $serverDraft ?? null;
 $isEdit = $page !== null;
 $field = static function (string $key, mixed $fallback = '') use ($old): mixed {
     return array_key_exists($key, $old) ? $old[$key] : $fallback;
@@ -46,7 +47,16 @@ $walk = function (int $parentId, int $depth) use (&$walk, &$options, $children, 
 };
 $walk(0, 0);
 ?>
-<section class="editor-shell" data-wiki-editor>
+<section
+    class="editor-shell"
+    data-wiki-editor
+    data-is-edit="<?= $isEdit ? '1' : '0' ?>"
+    <?php if ($isEdit): ?>
+        data-lock-url="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit-lock"
+        data-unlock-url="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit-unlock"
+        data-autosave-url="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/autosave"
+    <?php endif; ?>
+>
     <div class="editor-heading">
         <div>
             <div class="breadcrumbs">
@@ -65,6 +75,21 @@ $walk(0, 0);
 
     <?php if (!empty($formError)): ?>
         <div class="alert alert--error" role="alert"><?= $e($formError) ?></div>
+    <?php endif; ?>
+
+    <div class="alert alert--warning" data-edit-lock-warning role="alert" hidden></div>
+    <div class="alert alert--warning editor-recovery" data-recovery-banner hidden>
+        <span data-recovery-text>Recovered content is available.</span>
+        <div class="recovery-actions">
+            <button class="button button--secondary" type="button" data-restore-recovery>Restore recovered content</button>
+            <button class="button button--ghost" type="button" data-hide-recovery>Ignore</button>
+        </div>
+    </div>
+    <?php if ($serverDraft !== null): ?>
+        <div hidden data-server-draft data-format="<?= $e($serverDraft['content_format']) ?>" data-saved-at="<?= $e($serverDraft['updated_at']) ?>" data-base-version="<?= (int) $serverDraft['base_version'] ?>">
+            <textarea data-server-draft-html><?= $e($serverDraft['content_html']) ?></textarea>
+            <textarea data-server-draft-markdown><?= $e($serverDraft['content_markdown'] ?? '') ?></textarea>
+        </div>
     <?php endif; ?>
 
     <form method="post" action="<?= $e($formAction) ?>" class="editor-form" data-editor-form>
@@ -164,7 +189,8 @@ $walk(0, 0);
             <?php else: ?>
                 <p class="field-help">The initial save creates revision 1.</p>
             <?php endif; ?>
-            <button class="button button--primary button--block" type="submit"><?= $isEdit ? 'Save page' : 'Create page' ?></button>
+            <div class="editor-save-state" data-save-state>Recovery copy enabled.</div>
+            <button class="button button--primary button--block" type="submit" data-save-button><?= $isEdit ? 'Save page' : 'Create page' ?></button>
         </aside>
     </form>
 </section>
