@@ -2,13 +2,20 @@
 
 declare(strict_types=1);
 
+use OpenWiki\Http\Controllers\AccountPasswordController;
+use OpenWiki\Http\Controllers\Api\ApiV1Controller;
+use OpenWiki\Http\Controllers\ApiTokenController;
+use OpenWiki\Http\Controllers\AttachmentController;
 use OpenWiki\Http\Controllers\AuthController;
+use OpenWiki\Http\Controllers\CommentController;
 use OpenWiki\Http\Controllers\DashboardController;
 use OpenWiki\Http\Controllers\DirectoryAdminController;
 use OpenWiki\Http\Controllers\HealthController;
 use OpenWiki\Http\Controllers\InstallerController;
+use OpenWiki\Http\Controllers\NotificationController;
 use OpenWiki\Http\Controllers\PageController;
 use OpenWiki\Http\Controllers\PageDraftController;
+use OpenWiki\Http\Controllers\PageEngagementController;
 use OpenWiki\Http\Controllers\SearchController;
 use OpenWiki\Http\Controllers\SpaceController;
 use OpenWiki\Http\Controllers\TrashController;
