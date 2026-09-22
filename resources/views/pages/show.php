@@ -54,6 +54,71 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             <?= $page['content_html'] ?>
         </div>
 
+        <section class="attachments-section" id="attachments">
+            <div class="panel__header">
+                <h2>Attachments</h2>
+                <span class="count"><?= count($attachments) ?></span>
+            </div>
+
+            <?php if ($canUploadAttachment): ?>
+                <form class="card form-card attachment-upload" method="post" enctype="multipart/form-data" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/attachments">
+                    <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                    <label>Upload attachment
+                        <input type="file" name="attachment" required>
+                    </label>
+                    <button class="button button--secondary" type="submit">Upload</button>
+                </form>
+            <?php endif; ?>
+
+            <?php if ($attachments === []): ?>
+                <div class="card empty-state">No attachments.</div>
+            <?php else: ?>
+                <div class="attachment-list">
+                    <?php foreach ($attachments as $attachment): ?>
+                        <article class="card attachment-row" id="attachment-<?= (int) $attachment['id'] ?>">
+                            <div class="attachment-row__main">
+                                <strong><?= $e($attachment['name']) ?></strong>
+                                <span><?= $e($attachment['mime_type']) ?> · <?= number_format((int) $attachment['size_bytes'] / 1024, 1) ?> KiB · v<?= (int) $attachment['current_version'] ?></span>
+                                <small>SHA-256 <?= $e($attachment['sha256']) ?> · uploaded by <?= $e($attachment['uploader_username']) ?></small>
+                            </div>
+                            <div class="attachment-row__actions">
+                                <?php if (in_array($attachment['mime_type'], ['image/png','image/jpeg','image/gif','image/webp','application/pdf','text/plain'], true)): ?>
+                                    <a class="button button--ghost" href="/attachments/<?= (int) $attachment['id'] ?>/preview" target="_blank" rel="noopener">Preview</a>
+                                <?php endif; ?>
+                                <a class="button button--ghost" href="/attachments/<?= (int) $attachment['id'] ?>/download">Download</a>
+
+                                <?php if ($canUploadAttachment): ?>
+                                    <details>
+                                        <summary class="button button--ghost">New version</summary>
+                                        <form class="form-stack compact-form" method="post" enctype="multipart/form-data" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/attachments/<?= (int) $attachment['id'] ?>/version">
+                                            <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                                            <input type="file" name="attachment" required>
+                                            <button class="button button--secondary" type="submit">Upload version</button>
+                                        </form>
+                                    </details>
+                                    <details>
+                                        <summary class="button button--ghost">Rename</summary>
+                                        <form class="form-stack compact-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/attachments/<?= (int) $attachment['id'] ?>/rename">
+                                            <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                                            <input name="name" maxlength="255" value="<?= $e($attachment['name']) ?>" required>
+                                            <button class="button button--secondary" type="submit">Rename</button>
+                                        </form>
+                                    </details>
+                                <?php endif; ?>
+
+                                <?php if ($canDeleteAttachment): ?>
+                                    <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/attachments/<?= (int) $attachment['id'] ?>/delete" onsubmit="return confirm('Delete this attachment?')">
+                                        <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                                        <button class="button button--ghost" type="submit">Delete</button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </section>
+
         <section class="comments-section" id="comments">
             <div class="panel__header">
                 <h2>Comments</h2>
