@@ -17,6 +17,7 @@ use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Wiki\CommentService;
 use OpenWiki\Wiki\ContentService;
 use OpenWiki\Wiki\EditSessionService;
+use OpenWiki\Wiki\MacroService;
 use OpenWiki\Wiki\PageEngagementService;
 use OpenWiki\Wiki\Slugger;
 use OpenWiki\Wiki\WikiMetadataService;
@@ -206,6 +207,8 @@ final class PageController extends Controller
             }
         ));
 
+        $rendered = (new MacroService($this->app))->renderPage($page, $space);
+
         return $this->render('pages/show', [
             'title' => $page['title'],
             'space' => $space,
@@ -231,6 +234,8 @@ final class PageController extends Controller
                 && $this->app->auth()->can('attachment.delete'),
             'tags' => $metadata->tagsForPage((int) $page['id']),
             'backlinks' => $backlinks,
+            'renderedContent' => $rendered['html'],
+            'tableOfContents' => $rendered['toc'],
         ]);
     }
 
