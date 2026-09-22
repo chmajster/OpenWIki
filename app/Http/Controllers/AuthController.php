@@ -61,6 +61,10 @@ final class AuthController extends Controller
             $request
         );
 
+        if ((bool) ($user['force_password_change'] ?? false)) {
+            return Response::redirect('/account/change-password');
+        }
+
         return Response::redirect('/');
     }
 
