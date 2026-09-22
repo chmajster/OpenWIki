@@ -156,3 +156,21 @@ Administrators can configure MFA policy under `/admin/mfa`:
 - reset a user's MFA from user administration.
 
 Password authentication alone does not complete a browser login when MFA is enabled or required. The session remains restricted until TOTP or an unused recovery code is verified.
+
+
+## LDAP / Active Directory
+
+Administrators can configure directory authentication under `/admin/ldap`.
+
+Configuration includes host, port, LDAP/LDAPS, Base DN, Bind DN and password, User DN, Group DN, username/email/name/group attributes and group-to-role mappings. The form includes a connection test that verifies connection, service bind and Base DN search.
+
+The Bind Password is encrypted at rest using the application key and is never returned to the UI. User directory passwords are used only for the LDAP bind and are never stored.
+
+After the first successful LDAP sign-in OpenWiki creates a local profile with `auth_source=ldap`. Existing local accounts cannot be claimed by an LDAP identity with the same username or email. LDAP-managed role assignments are tracked separately so synchronization removes only roles previously granted through LDAP and leaves manually assigned roles intact.
+
+Group mapping syntax:
+
+```text
+CN=Wiki Editors,OU=Groups,DC=example,DC=com => editor
+Wiki Viewers => viewer
+```
