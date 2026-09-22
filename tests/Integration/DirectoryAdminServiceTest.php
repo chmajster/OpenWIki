@@ -114,4 +114,47 @@ final class DirectoryAdminServiceTest extends TestCase
         self::assertTrue($service->deleteGroup($groupId));
         self::assertTrue($service->deleteRole($roleId));
     }
+
+    public function testDisableUserKeepsAccountAndRevokesSessions(): void
+    {
+        $service = new DirectoryAdminService($this->database);
+        $suffix = bin2hex(random_bytes(4));
+
+        $userId = $service->createUser([
+            'username' => 'disable-test-' . $suffix,
+            'email' => 'disable-test-' . $suffix . '@example.test',
+            'first_name' => 'Disable',
+            'last_name' => 'Test',
+            'status' => 'active',
+            'force_password_change' => 0,
+            'password' => 'CorrectHorseBatteryStaple!42',
+            'role_ids' => [],
+            'group_ids' => [],
+        ]);
+
+        $this->database->execute(
+            'INSERT INTO user_sessions
+             (session_id, user_id, ip_address, user_agent, last_activity_at, expires_at)
+             VALUES
+             (:session_id, :user_id, "127.0.0.1", "phpunit", UTC_TIMESTAMP(), DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 HOUR))',
+            ['session_id' => 'test-session-' . $suffix, 'user_id' => $userId]
+        );
+
+        self::assertTrue($service->disableUser($userId));
+
+        $row = $this->database->fetchOne(
+            'SELECT status, deleted_at FROM users WHERE id = :id',
+            ['id' => $userId]
+        );
+        self::assertSame('disabled', $row['status']);
+        self::assertNull($row['deleted_at']);
+
+        $session = $this->database->fetchOne(
+            'SELECT session_id FROM user_sessions WHERE user_id = :user_id',
+            ['user_id' => $userId]
+        );
+        self::assertNull($session);
+        self::assertNotNull($service->user($userId));
+    }
+
 }
