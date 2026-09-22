@@ -42,7 +42,10 @@ final class PageEngagementService
         $limit = max(1, min($limit, 50));
 
         return $this->database->fetchAll(
-            'SELECT p.id, p.title, p.slug, p.status, p.updated_at, s.space_key, s.name AS space_name
+            'SELECT p.id, p.space_id, p.parent_id, p.inherit_acl, p.owner_id, p.author_id,
+                    p.title, p.slug, p.status, p.updated_at,
+                    s.space_key, s.name AS space_name, s.visibility, s.owner_id AS space_owner_id,
+                    s.status AS space_status, s.deleted_at AS space_deleted_at
              FROM favorites f
              INNER JOIN pages p ON p.id = f.page_id AND p.deleted_at IS NULL
              INNER JOIN spaces s ON s.id = p.space_id AND s.deleted_at IS NULL
