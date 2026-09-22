@@ -154,6 +154,9 @@ final class PageController extends Controller
             'canEdit' => $access->canEdit($space) && $this->app->auth()->can('page.edit'),
             'isFavorite' => $user !== null && $engagement->isFavorite((int) $user['id'], (int) $page['id']),
             'isWatching' => $user !== null && $engagement->isWatching((int) $user['id'], 'page', (int) $page['id']),
+            'comments' => (new CommentService($this->app->database()))->listForPage((int) $page['id']),
+            'canComment' => $user !== null && $this->app->auth()->can('comment.create'),
+            'canDeleteComment' => $user !== null && $this->app->auth()->can('comment.delete'),
         ]);
     }
 
