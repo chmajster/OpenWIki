@@ -20,6 +20,24 @@ try {
         Response::redirect('/install')->send();
     }
 
+    if ($app->installed()) {
+        $user = $app->auth()->user();
+        $forcePasswordChange = $user !== null && (bool) ($user['force_password_change'] ?? false);
+        $allowedDuringPasswordChange = in_array(
+            $request->path(),
+            ['/account/change-password', '/logout', '/health'],
+            true
+        );
+
+        if (
+            $forcePasswordChange
+            && !$allowedDuringPasswordChange
+            && !str_starts_with($request->path(), '/api/')
+        ) {
+            Response::redirect('/account/change-password')->send();
+        }
+    }
+
     require $basePath . '/routes/web.php';
     $app->router()->dispatch($request, $app)->send();
 } catch (Throwable $exception) {
