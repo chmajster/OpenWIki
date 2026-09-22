@@ -64,3 +64,7 @@ $router->get('/api/v1/users', [ApiV1Controller::class, 'users']);
 $router->get('/api/v1/groups', [ApiV1Controller::class, 'groups']);
 $router->get('/api/v1/tags', [ApiV1Controller::class, 'tags']);
 $router->get('/api/v1/attachments', [ApiV1Controller::class, 'attachments']);
+
+$router->post('/spaces/{spaceKey}/pages/{slug}/comments', [CommentController::class, 'create']);
+$router->post('/spaces/{spaceKey}/pages/{slug}/comments/{id}/edit', [CommentController::class, 'update']);
+$router->post('/spaces/{spaceKey}/pages/{slug}/comments/{id}/delete', [CommentController::class, 'delete']);
