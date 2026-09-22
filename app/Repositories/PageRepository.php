@@ -280,7 +280,10 @@ final class PageRepository
     {
         $limit = max(1, min($limit, 50));
         return $this->database->fetchAll(
-            'SELECT p.id, p.title, p.slug, p.status, p.updated_at, s.space_key, s.name AS space_name, rv.viewed_at
+            'SELECT p.id, p.space_id, p.parent_id, p.inherit_acl, p.owner_id, p.author_id,
+                    p.title, p.slug, p.status, p.updated_at,
+                    s.space_key, s.name AS space_name, s.visibility, s.owner_id AS space_owner_id,
+                    s.status AS space_status, s.deleted_at AS space_deleted_at, rv.viewed_at
              FROM recent_views rv
              INNER JOIN pages p ON p.id = rv.page_id AND p.deleted_at IS NULL
              INNER JOIN spaces s ON s.id = p.space_id AND s.deleted_at IS NULL
@@ -295,7 +298,7 @@ final class PageRepository
     {
         $limit = max(1, min($limit, 50));
         return $this->database->fetchAll(
-            'SELECT p.id, p.title, p.slug, p.status, p.updated_at, p.owner_id, p.author_id,
+            'SELECT p.id, p.parent_id, p.inherit_acl, p.title, p.slug, p.status, p.updated_at, p.owner_id, p.author_id,
                     s.id AS space_id, s.space_key, s.name AS space_name, s.visibility, s.owner_id AS space_owner_id,
                     s.status AS space_status, s.deleted_at AS space_deleted_at
              FROM pages p
@@ -310,7 +313,10 @@ final class PageRepository
     {
         $limit = max(1, min($limit, 50));
         return $this->database->fetchAll(
-            'SELECT p.id, p.title, p.slug, p.updated_at, s.space_key, s.name AS space_name
+            'SELECT p.id, p.space_id, p.parent_id, p.inherit_acl, p.owner_id, p.author_id, p.status,
+                    p.title, p.slug, p.updated_at,
+                    s.space_key, s.name AS space_name, s.visibility, s.owner_id AS space_owner_id,
+                    s.status AS space_status, s.deleted_at AS space_deleted_at
              FROM pages p
              INNER JOIN spaces s ON s.id = p.space_id
              WHERE p.deleted_at IS NULL AND p.status = "draft" AND (p.owner_id = ? OR p.author_id = ?)
