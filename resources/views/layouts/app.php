@@ -32,6 +32,7 @@ $notificationCount = $currentUser === null
                     <a class="button button--ghost notification-link" href="/notifications">
                         Notifications<?php if ($notificationCount > 0): ?><span class="notification-badge"><?= (int) $notificationCount ?></span><?php endif; ?>
                     </a>
+                    <a class="button button--ghost" href="/account/api-tokens">API tokens</a>
                     <span class="user-chip"><?= $e($currentUser['username']) ?></span>
                     <form method="post" action="/logout">
                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">

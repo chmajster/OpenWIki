@@ -315,3 +315,30 @@ textarea { resize: vertical; }
 .notification-item:last-child { border-bottom: 0; }
 .notification-item.is-unread strong { font-weight: 800; }
 .notification-item p { margin: .35rem 0; }
+
+
+.token-once code {
+    display: block;
+    padding: .9rem 1rem;
+    overflow-wrap: anywhere;
+    user-select: all;
+}
+.scope-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: .5rem;
+}
+.check-row {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+}
+.table-scroll { overflow-x: auto; }
+.table-scroll table { width: 100%; border-collapse: collapse; }
+.table-scroll th,
+.table-scroll td {
+    padding: .7rem .8rem;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border, #dfe3e8);
+}

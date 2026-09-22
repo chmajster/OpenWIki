@@ -46,3 +46,7 @@ $router->post('/spaces/{spaceKey}/pages/{slug}/watch', [PageEngagementController
 $router->get('/notifications', [NotificationController::class, 'index']);
 $router->post('/notifications/read-all', [NotificationController::class, 'readAll']);
 $router->post('/notifications/{id}/read', [NotificationController::class, 'read']);
+
+$router->get('/account/api-tokens', [ApiTokenController::class, 'index']);
+$router->post('/account/api-tokens', [ApiTokenController::class, 'create']);
+$router->post('/account/api-tokens/{id}/revoke', [ApiTokenController::class, 'revoke']);
