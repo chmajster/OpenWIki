@@ -240,6 +240,17 @@ TEXT);
             . PHP_EOL
         );
 
+        $database->execute(
+            'INSERT INTO settings
+             (setting_key, setting_value, is_secret, updated_by, updated_at)
+             VALUES ("system.cron_last_run", :last_run, 0, NULL, UTC_TIMESTAMP())
+             ON DUPLICATE KEY UPDATE
+                setting_value = VALUES(setting_value),
+                updated_by = NULL,
+                updated_at = UTC_TIMESTAMP()',
+            ['last_run' => gmdate(DATE_ATOM)]
+        );
+
         fwrite(STDOUT, '[ OK ] Housekeeping completed.' . PHP_EOL);
         return 0;
     }
