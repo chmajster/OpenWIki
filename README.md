@@ -41,6 +41,10 @@ php bin/console migrate
 php bin/console db:status
 php bin/console cache:clear
 php bin/console system:check
+php bin/console user:create
+php bin/console user:disable <id|username|email>
+php bin/console admin:reset-password <id|username|email>
+php bin/console backup:create
 php bin/console cron:run
 ```
 
@@ -109,3 +113,14 @@ find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php 
 ```
 
 Pull requests are validated by `.github/workflows/ci.yml`.
+
+
+## Backups
+
+Administrators can create and download backups from `/admin/backups`, or create one from CLI:
+
+```bash
+php bin/console backup:create
+```
+
+Backups are stored outside the public document root in `storage/backups/` as TAR archives. Each archive contains a MySQL schema/data dump, protected attachments, a manifest and non-secret application configuration. `APP_KEY`, `DB_USERNAME` and `DB_PASSWORD` are intentionally excluded.
