@@ -134,6 +134,15 @@ final class AuthService
 
     public function logout(): void
     {
+        $sessionUserId = Session::get('user_id');
+        if ((is_int($sessionUserId) || ctype_digit((string) $sessionUserId)) && $this->app->installed()) {
+            try {
+                (new UserSessionService($this->app->database()))->removeCurrent((int) $sessionUserId);
+            } catch (\Throwable $exception) {
+                error_log('[OpenWiki session revoke] ' . $exception->getMessage());
+            }
+        }
+
         Session::forget('user_id');
         Session::forget('mfa_verified');
         Session::forget('mfa_pending_login');
