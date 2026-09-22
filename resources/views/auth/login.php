@@ -5,7 +5,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
     <div class="card auth-card">
         <div class="eyebrow">OpenWiki</div>
         <h1>Sign in</h1>
-        <p class="muted">Use your local OpenWiki account.</p>
+        <p class="muted">Use your OpenWiki account or a configured LDAP / Active Directory account.</p>
 
         <?php if (!empty($loginError)): ?>
             <div class="alert alert--error" role="alert"><?= $e($loginError) ?></div>
