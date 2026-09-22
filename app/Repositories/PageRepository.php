@@ -47,7 +47,7 @@ final class PageRepository
     public function tree(int $spaceId): array
     {
         return $this->database->fetchAll(
-            'SELECT id, parent_id, title, slug, status, order_index, updated_at
+            'SELECT id, parent_id, title, slug, status, order_index, owner_id, author_id, inherit_acl, updated_at
              FROM pages
              WHERE space_id = :space_id AND deleted_at IS NULL
              ORDER BY order_index ASC, title ASC',
