@@ -14,6 +14,7 @@ use OpenWiki\Http\Controllers\DashboardController;
 use OpenWiki\Http\Controllers\DirectoryAdminController;
 use OpenWiki\Http\Controllers\HealthController;
 use OpenWiki\Http\Controllers\InstallerController;
+use OpenWiki\Http\Controllers\ImportExportController;
 use OpenWiki\Http\Controllers\LdapAdminController;
 use OpenWiki\Http\Controllers\MfaAdminController;
 use OpenWiki\Http\Controllers\MfaController;
@@ -59,6 +60,10 @@ $router->get('/spaces/{spaceKey}/pages/{slug}/edit', [PageController::class, 'ed
 $router->post('/spaces/{spaceKey}/pages/{slug}', [PageController::class, 'update']);
 $router->get('/spaces/{spaceKey}/pages/{slug}/history', [PageController::class, 'history']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/restore', [PageController::class, 'restore']);
+$router->get('/spaces/{spaceKey}/pages/{slug}/export/{format}', [ImportExportController::class, 'exportPage']);
+$router->get('/spaces/{spaceKey}/export', [ImportExportController::class, 'exportSpace']);
+$router->get('/spaces/{spaceKey}/import', [ImportExportController::class, 'importForm']);
+$router->post('/spaces/{spaceKey}/import', [ImportExportController::class, 'import']);
 $router->get('/spaces/{spaceKey}/pages/{slug}/permissions', [PageAclController::class, 'index']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/permissions/inheritance', [PageAclController::class, 'inheritance']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/permissions/rules', [PageAclController::class, 'addRule']);
