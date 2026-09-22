@@ -12,6 +12,7 @@ use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Wiki\CommentService;
+use OpenWiki\Webhooks\WebhookService;
 
 final class CommentController extends Controller
 {
@@ -40,7 +41,7 @@ final class CommentController extends Controller
 
         try {
             $user = $this->app->auth()->user();
-            (new CommentService($this->app->database()))->create(
+            $commentId = (new CommentService($this->app->database()))->create(
                 (int) $page['id'],
                 (int) $space['id'],
                 (int) $user['id'],
@@ -49,6 +50,18 @@ final class CommentController extends Controller
                 (string) $page['title'],
                 $this->pageUrl($space, $page)
             );
+
+            try {
+                (new WebhookService($this->app->database()))->queue('comment.created', [
+                    'id' => $commentId,
+                    'page_id' => (int) $page['id'],
+                    'space_id' => (int) $space['id'],
+                    'author_id' => (int) $user['id'],
+                    'parent_id' => $parentId === null ? null : (int) $parentId,
+                ]);
+            } catch (\Throwable $webhookError) {
+                error_log('[OpenWiki webhook queue] ' . $webhookError->getMessage());
+            }
 
             Session::flash('success', $parentId === null ? 'Comment added.' : 'Reply added.');
         } catch (\InvalidArgumentException $exception) {
