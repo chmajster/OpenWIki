@@ -344,8 +344,11 @@ final class PageController extends Controller
             if ($parent === null || (int) $parent['space_id'] !== (int) $space['id']) {
                 throw new \InvalidArgumentException('Parent page must belong to the same space.');
             }
-            if ($current !== null && (int) $current['id'] === (int) $parentId) {
-                throw new \InvalidArgumentException('A page cannot be its own parent.');
+            if (
+                $current !== null
+                && (new PageRepository($this->app->database()))->wouldCreateCycle((int) $current['id'], (int) $parentId)
+            ) {
+                throw new \InvalidArgumentException('The selected parent would create a cycle in the page tree.');
             }
         }
 
