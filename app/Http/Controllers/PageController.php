@@ -406,7 +406,22 @@ final class PageController extends Controller
         }
 
         $user = $this->app->auth()->user();
-        $newVersion = $repository->restore($page, $revision, (int) $user['id']);
+        $metadata = new WikiMetadataService($this->app->database());
+        $decorated = $metadata->decorateWikiLinks(
+            (int) $space['id'],
+            (string) $space['space_key'],
+            (string) $revision['content_html']
+        );
+        $revision['content_html'] = $decorated['html'];
+
+        $newVersion = $this->app->database()->transaction(
+            function () use ($repository, $page, $revision, $user, $metadata, $decorated, $space): int {
+                $version = $repository->restore($page, $revision, (int) $user['id']);
+                $metadata->syncLinks((int) $page['id'], (int) $space['id'], $decorated['references']);
+                $metadata->refreshSpaceLinks((int) $space['id']);
+                return $version;
+            }
+        );
 
         (new AuditLogger($this->app->database()))->log(
             'PAGE_REVISION_RESTORED',
