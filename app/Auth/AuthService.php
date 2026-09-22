@@ -102,6 +102,7 @@ final class AuthService
     {
         Session::forget('user_id');
         Session::forget('mfa_verified');
+        Session::forget('mfa_pending_login');
         Session::regenerate();
         Csrf::rotate();
         $this->resolved = true;
