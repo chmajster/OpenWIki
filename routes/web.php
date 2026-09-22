@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use OpenWiki\Http\Controllers\AccountPasswordController;
+use OpenWiki\Http\Controllers\AccountSessionController;
 use OpenWiki\Http\Controllers\Api\ApiV1Controller;
 use OpenWiki\Http\Controllers\ApiTokenController;
 use OpenWiki\Http\Controllers\AttachmentController;
@@ -113,6 +114,9 @@ $router->post('/trash/{id}/delete', [TrashController::class, 'destroy']);
 
 $router->get('/account/change-password', [AccountPasswordController::class, 'edit']);
 $router->post('/account/change-password', [AccountPasswordController::class, 'update']);
+$router->get('/account/sessions', [AccountSessionController::class, 'index']);
+$router->post('/account/sessions/logout-all', [AccountSessionController::class, 'revokeAll']);
+$router->post('/account/sessions/{fingerprint}/revoke', [AccountSessionController::class, 'revoke']);
 
 $router->get('/admin', [DirectoryAdminController::class, 'dashboard']);
 $router->get('/admin/backups', [BackupController::class, 'index']);
