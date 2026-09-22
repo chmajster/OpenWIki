@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OpenWiki\Console;
 
 use OpenWiki\Admin\DirectoryAdminService;
+use OpenWiki\Backup\BackupService;
 use OpenWiki\Core\Application;
 use OpenWiki\Core\Database;
 use OpenWiki\Database\MigrationRunner;
@@ -33,6 +34,7 @@ final class ConsoleApplication
                 'user:create' => $this->userCreate(),
                 'user:disable' => $this->userDisable($argv[2] ?? null),
                 'admin:reset-password' => $this->adminResetPassword($argv[2] ?? null),
+                'backup:create' => $this->backupCreate(),
                 default => $this->unknown($command),
             };
         } catch (\Throwable $exception) {
@@ -60,6 +62,7 @@ Commands:
   user:disable <user>   Disable a user by ID, username or email
   admin:reset-password <user>
                         Generate a temporary password and force change on next login
+  backup:create         Create a database, attachments and configuration backup
   help                  Show this help
 
 TEXT);
@@ -264,6 +267,26 @@ TEXT);
         }
 
         return $failed ? 1 : 0;
+    }
+
+    private function backupCreate(): int
+    {
+        $app = Application::boot($this->basePath);
+        if (!$app->installed()) {
+            throw new \RuntimeException('OpenWiki is not installed.');
+        }
+
+        fwrite(STDOUT, '[1/2] Creating backup archive' . PHP_EOL);
+        $backup = (new BackupService($app->database(), $this->basePath))->create();
+
+        fwrite(STDOUT, '[2/2] Verifying backup archive' . PHP_EOL);
+        if (!is_file($backup['path']) || (int) $backup['size_bytes'] < 1) {
+            throw new \RuntimeException('Backup verification failed.');
+        }
+
+        fwrite(STDOUT, '[ OK ] Backup: ' . $backup['path'] . PHP_EOL);
+        fwrite(STDOUT, '[INFO] Size: ' . $backup['size_bytes'] . ' bytes' . PHP_EOL);
+        return 0;
     }
 
     private function userCreate(): int
