@@ -7,6 +7,7 @@ namespace OpenWiki\Http\Controllers;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Http\Controller;
+use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Wiki\WikiMetadataService;
@@ -34,13 +35,13 @@ final class WikiMetadataController extends Controller
         }
 
         $page = $this->app->database()->fetchOne(
-            'SELECT id, status, owner_id, author_id
+            'SELECT id, space_id, parent_id, inherit_acl, status, owner_id, author_id
              FROM pages
              WHERE id = :id AND deleted_at IS NULL
              LIMIT 1',
             ['id' => (int) $target['id']]
         );
-        if ($page === null || !$this->canViewPage($page, $space, $access)) {
+        if ($page === null || !(new PageAclService($this->app))->canView($page, $space)) {
             return $this->render('errors/404', ['title' => 'Page not found'], 404);
         }
 
@@ -70,7 +71,7 @@ final class WikiMetadataController extends Controller
                 'deleted_at' => $page['space_deleted_at'],
             ];
 
-            if ($access->canView($space) && $this->canViewPage($page, $space, $access)) {
+            if ((new PageAclService($this->app))->canView($page, $space)) {
                 $pages[] = $page;
             }
         }
@@ -102,19 +103,5 @@ final class WikiMetadataController extends Controller
         ]);
     }
 
-    private function canViewPage(array $page, array $space, SpaceAccessService $access): bool
-    {
-        if (($page['status'] ?? null) === 'published') {
-            return true;
-        }
 
-        $user = $this->app->auth()->user();
-        if ($user === null) {
-            return false;
-        }
-
-        return (int) $page['owner_id'] === (int) $user['id']
-            || (int) $page['author_id'] === (int) $user['id']
-            || $access->canEdit($space);
-    }
 }
