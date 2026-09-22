@@ -21,6 +21,7 @@ use OpenWiki\Http\Controllers\SearchController;
 use OpenWiki\Http\Controllers\SpaceController;
 use OpenWiki\Http\Controllers\TrashController;
 use OpenWiki\Http\Controllers\WikiMetadataController;
+use OpenWiki\Http\Controllers\WebhookAdminController;
 
 $router = $app->router();
 
@@ -127,3 +128,8 @@ $router->post('/admin/roles', [DirectoryAdminController::class, 'saveRole']);
 $router->get('/admin/roles/{id}/edit', [DirectoryAdminController::class, 'roleForm']);
 $router->post('/admin/roles/{id}', [DirectoryAdminController::class, 'saveRole']);
 $router->post('/admin/roles/{id}/delete', [DirectoryAdminController::class, 'deleteRole']);
+
+$router->get('/admin/webhooks', [WebhookAdminController::class, 'index']);
+$router->post('/admin/webhooks', [WebhookAdminController::class, 'create']);
+$router->post('/admin/webhooks/{id}/status', [WebhookAdminController::class, 'status']);
+$router->post('/admin/webhooks/{id}/delete', [WebhookAdminController::class, 'delete']);
