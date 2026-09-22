@@ -342,3 +342,40 @@ textarea { resize: vertical; }
     vertical-align: top;
     border-bottom: 1px solid var(--border, #dfe3e8);
 }
+
+
+.comments-section { margin-top: 1.5rem; }
+.comment-form { margin-bottom: 1rem; }
+.comment-list { display: grid; gap: .75rem; }
+.comment { padding: 1rem; }
+.comment--reply { margin-left: 2rem; border-left-width: 3px; }
+.comment__header {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin-bottom: .6rem;
+    font-size: .85rem;
+}
+.comment__header span { opacity: .7; }
+.comment__body { line-height: 1.55; }
+.comment__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: .5rem;
+    margin-top: .75rem;
+}
+.comment__actions details { position: relative; }
+.comment__actions summary { list-style: none; cursor: pointer; }
+.comment__actions summary::-webkit-details-marker { display: none; }
+.compact-form {
+    min-width: min(32rem, 75vw);
+    margin-top: .5rem;
+    padding: .75rem;
+    border: 1px solid var(--border, #dfe3e8);
+    border-radius: .5rem;
+}
+@media (max-width: 720px) {
+    .comment--reply { margin-left: .75rem; }
+    .compact-form { min-width: 0; width: 100%; }
+}
