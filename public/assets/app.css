@@ -431,3 +431,26 @@ textarea { resize: vertical; }
     opacity: .75;
 }
 .backlinks-section { margin-top: 1.5rem; }
+
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+}
+.stat-card {
+    display: grid;
+    gap: .5rem;
+    padding: 1.2rem;
+    text-decoration: none;
+}
+.stat-card strong { font-size: 1.8rem; }
+.directory-selection,
+.permission-grid {
+    max-height: 24rem;
+    overflow: auto;
+    padding: .75rem;
+    border: 1px solid var(--border, #dfe3e8);
+    border-radius: .5rem;
+}
+.danger-zone { margin-top: 1.25rem; }
