@@ -87,3 +87,6 @@ $router->get('/trash', [TrashController::class, 'index']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/delete', [TrashController::class, 'delete']);
 $router->post('/trash/{id}/restore', [TrashController::class, 'restore']);
 $router->post('/trash/{id}/delete', [TrashController::class, 'destroy']);
+
+$router->get('/account/change-password', [AccountPasswordController::class, 'edit']);
+$router->post('/account/change-password', [AccountPasswordController::class, 'update']);
