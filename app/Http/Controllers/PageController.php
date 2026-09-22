@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OpenWiki\Http\Controllers;
 
+use OpenWiki\Attachments\AttachmentService;
 use OpenWiki\Audit\AuditLogger;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
@@ -12,9 +13,12 @@ use OpenWiki\Http\Controller;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
+use OpenWiki\Wiki\CommentService;
 use OpenWiki\Wiki\ContentService;
 use OpenWiki\Wiki\EditSessionService;
+use OpenWiki\Wiki\PageEngagementService;
 use OpenWiki\Wiki\Slugger;
+use OpenWiki\Wiki\WikiMetadataService;
 
 final class PageController extends Controller
 {
