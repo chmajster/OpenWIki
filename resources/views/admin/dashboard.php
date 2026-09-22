@@ -7,6 +7,7 @@ $sections = [
     ['Spaces', '/', $counts['spaces']],
     ['Pages', '/', $counts['pages']],
     ['Broken links', '/admin/broken-links', $counts['broken_links']],
+    ['Backups', '/admin/backups', $counts['backups']],
 ];
 ?>
 <section class="content-container">
@@ -14,7 +15,7 @@ $sections = [
         <div>
             <div class="eyebrow">System</div>
             <h1>Administration</h1>
-            <p class="muted">Identity, access and Wiki integrity management.</p>
+            <p class="muted">Identity, access, Wiki integrity and system backup management.</p>
         </div>
     </div>
     <div class="stat-grid">
