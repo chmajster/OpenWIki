@@ -191,3 +191,17 @@ Page permissions can be managed from the page action **Permissions**. Rules supp
 A matching `deny` takes precedence over `allow`. If an ACL scope contains one or more `allow` rules for a permission, it acts as an allowlist for that scope. Direct page rules are evaluated before inherited rules. Setting `inherit_acl` off stops inheritance from ancestors.
 
 Page ACL is enforced consistently for page rendering, editor/autosave/locks, history/restore, delete/trash, comments, favorites/watches, attachment access, search, tags/wiki links, dashboard page lists and REST API resources.
+
+
+## Active sessions
+
+Authenticated browser sessions are tracked server-side in `user_sessions`. Every non-API browser request validates that the current PHP session still exists in the server-side registry and has not expired or been revoked.
+
+Users can manage sessions under `/account/sessions`:
+
+- review active sessions, IP addresses, user agents, activity and expiry,
+- revoke an individual session,
+- revoke the current session,
+- sign out all sessions immediately.
+
+Raw PHP session IDs are never displayed in the UI. Session actions use SHA-256 fingerprints. The session ID is rotated after successful MFA verification and the registry entry is atomically replaced.
