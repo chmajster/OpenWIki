@@ -6,6 +6,7 @@ namespace OpenWiki\Http\Controllers;
 
 use OpenWiki\Audit\AuditLogger;
 use OpenWiki\Auth\MfaService;
+use OpenWiki\Auth\UserSessionService;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
@@ -58,6 +59,14 @@ final class MfaController extends Controller
             $codes = $service->confirmEnrollment(
                 (int) $user['id'],
                 (string) $request->input('code', '')
+            );
+            $oldSessionId = session_id();
+            Session::regenerate();
+            (new UserSessionService($this->app->database()))->replaceAfterRegeneration(
+                $oldSessionId,
+                (int) $user['id'],
+                $request->ip(),
+                $request->userAgent()
             );
             Session::put('mfa_verified', true);
             Session::flash('mfa_recovery_codes', $codes);
@@ -154,6 +163,14 @@ final class MfaController extends Controller
         }
 
         $limiter->clear('mfa', $key);
+        $oldSessionId = session_id();
+        Session::regenerate();
+        (new UserSessionService($this->app->database()))->replaceAfterRegeneration(
+            $oldSessionId,
+            (int) $user['id'],
+            $request->ip(),
+            $request->userAgent()
+        );
         Session::put('mfa_verified', true);
 
         (new AuditLogger($this->app->database()))->log(
