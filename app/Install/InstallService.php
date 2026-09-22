@@ -16,7 +16,7 @@ final class InstallService
 
     public function requirements(): array
     {
-        $requiredExtensions = ['pdo', 'pdo_mysql', 'mbstring', 'openssl', 'dom'];
+        $requiredExtensions = ['pdo', 'pdo_mysql', 'mbstring', 'openssl', 'dom', 'phar'];
         $extensions = [];
         foreach ($requiredExtensions as $extension) {
             $extensions[$extension] = extension_loaded($extension);
@@ -26,6 +26,7 @@ final class InstallService
             $this->basePath,
             $this->basePath . '/storage',
             $this->basePath . '/storage/attachments',
+            $this->basePath . '/storage/backups',
             $this->basePath . '/storage/cache',
             $this->basePath . '/storage/logs',
             $this->basePath . '/storage/temp',
