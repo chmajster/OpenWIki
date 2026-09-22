@@ -81,13 +81,30 @@ final class AttachmentService
 
     public function addVersion(int $attachmentId, int $uploaderId, array $file): int
     {
+        $source = $this->uploadedSource($file);
+
+        return $this->addVersionFromSource(
+            $attachmentId,
+            $uploaderId,
+            $source['path'],
+            $source['name'],
+            true
+        );
+    }
+
+    public function addVersionFromSource(
+        int $attachmentId,
+        int $uploaderId,
+        string $sourcePath,
+        string $originalName,
+        bool $uploaded = false
+    ): int {
         $attachment = $this->find($attachmentId);
         if ($attachment === null) {
             throw new \InvalidArgumentException('Attachment not found.');
         }
 
-        $source = $this->uploadedSource($file);
-        $stored = $this->persist($source['path'], $source['name'], true);
+        $stored = $this->persist($sourcePath, $originalName, $uploaded);
 
         try {
             $version = (int) $attachment['current_version'] + 1;
