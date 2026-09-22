@@ -10,3 +10,4 @@
 !/storage/attachments/.gitkeep
 /.phpunit.cache/
 .phpunit.result.cache
+/storage/installed.lock
