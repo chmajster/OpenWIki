@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace OpenWiki\Permissions;
 
 use OpenWiki\Core\Application;
-use OpenWiki\Core\Database;
 
 final class PageAclService
 {
@@ -204,18 +203,16 @@ final class PageAclService
     private function decision(array $page, string $permission): ?bool
     {
         $user = $this->app->auth()->user();
-        if ($user === null) {
-            return null;
-        }
+        $userId = $user === null ? null : (int) $user['id'];
 
-        $direct = $this->matchingEffects(
+        $direct = $this->scopeDecision(
             (int) $page['id'],
-            (int) $user['id'],
+            $userId,
             $permission,
             false
         );
-        if ($direct !== []) {
-            return in_array('deny', $direct, true) ? false : true;
+        if ($direct !== null) {
+            return $direct;
         }
 
         if (!(bool) ($page['inherit_acl'] ?? true)) {
@@ -242,14 +239,14 @@ final class PageAclService
                 break;
             }
 
-            $effects = $this->matchingEffects(
+            $decision = $this->scopeDecision(
                 (int) $parent['id'],
-                (int) $user['id'],
+                $userId,
                 $permission,
                 true
             );
-            if ($effects !== []) {
-                return in_array('deny', $effects, true) ? false : true;
+            if ($decision !== null) {
+                return $decision;
             }
 
             if (!(bool) $parent['inherit_acl']) {
@@ -260,6 +257,42 @@ final class PageAclService
         }
 
         return null;
+    }
+
+    private function scopeDecision(
+        int $pageId,
+        ?int $userId,
+        string $permission,
+        bool $inheritedOnly
+    ): ?bool {
+        $where = 'page_id = :page_id AND permission = :permission';
+        $params = ['page_id' => $pageId, 'permission' => $permission];
+
+        if ($inheritedOnly) {
+            $where .= ' AND inherit_to_children = 1';
+        }
+
+        $allow = $this->app->database()->fetchOne(
+            'SELECT id FROM page_acl
+             WHERE ' . $where . ' AND effect = "allow"
+             LIMIT 1',
+            $params
+        );
+        $hasAllowList = $allow !== null;
+
+        if ($userId === null) {
+            return $hasAllowList ? false : null;
+        }
+
+        $effects = $this->matchingEffects($pageId, $userId, $permission, $inheritedOnly);
+        if (in_array('deny', $effects, true)) {
+            return false;
+        }
+        if (in_array('allow', $effects, true)) {
+            return true;
+        }
+
+        return $hasAllowList ? false : null;
     }
 
     private function matchingEffects(
