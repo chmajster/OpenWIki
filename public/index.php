@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use OpenWiki\Auth\MfaService;
 use OpenWiki\Core\Application;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
+use OpenWiki\Core\Session;
 use OpenWiki\Security\SecurityHeaders;
 
 $basePath = dirname(__DIR__);
@@ -22,19 +24,48 @@ try {
 
     if ($app->installed()) {
         $user = $app->auth()->user();
-        $forcePasswordChange = $user !== null && (bool) ($user['force_password_change'] ?? false);
-        $allowedDuringPasswordChange = in_array(
-            $request->path(),
-            ['/account/change-password', '/logout', '/health'],
-            true
-        );
 
-        if (
-            $forcePasswordChange
-            && !$allowedDuringPasswordChange
-            && !str_starts_with($request->path(), '/api/')
-        ) {
-            Response::redirect('/account/change-password')->send();
+        if ($user !== null && !str_starts_with($request->path(), '/api/')) {
+            $mfa = new MfaService($app->database());
+            $mfaVerified = Session::get('mfa_verified') === true;
+            $allowedDuringMfa = in_array(
+                $request->path(),
+                ['/mfa/challenge', '/account/mfa/setup', '/account/mfa/confirm', '/logout', '/health'],
+                true
+            );
+
+            if (!$mfaVerified) {
+                if ($mfa->enabled((int) $user['id'])) {
+                    if (!$allowedDuringMfa) {
+                        Response::redirect('/mfa/challenge')->send();
+                    }
+                } elseif ($mfa->required((int) $user['id'])) {
+                    if (!$allowedDuringMfa) {
+                        Response::redirect('/account/mfa/setup')->send();
+                    }
+                } else {
+                    Session::put('mfa_verified', true);
+                    $mfaVerified = true;
+                }
+            }
+
+            $forcePasswordChange = (bool) ($user['force_password_change'] ?? false);
+            $allowedDuringPasswordChange = in_array(
+                $request->path(),
+                [
+                    '/account/change-password',
+                    '/account/mfa/setup',
+                    '/account/mfa/confirm',
+                    '/mfa/challenge',
+                    '/logout',
+                    '/health',
+                ],
+                true
+            );
+
+            if ($mfaVerified && $forcePasswordChange && !$allowedDuringPasswordChange) {
+                Response::redirect('/account/change-password')->send();
+            }
         }
     }
 
