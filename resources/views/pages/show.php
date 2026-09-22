@@ -26,8 +26,8 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                 <div class="page-meta">
                     <span class="status-pill status-pill--<?= $e($page['status']) ?>"><?= $e($page['status']) ?></span>
                     <span>Version <?= (int) $page['version'] ?></span>
+                    <span>Created by <?= $e($page['author_username']) ?></span>
                     <span>Updated <?= $e($page['updated_at']) ?></span>
-                    <span>by <?= $e($page['author_username']) ?></span>
                 </div>
             </div>
             <div class="page-actions">
