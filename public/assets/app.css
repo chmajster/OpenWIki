@@ -454,3 +454,102 @@ textarea { resize: vertical; }
     border-radius: .5rem;
 }
 .danger-zone { margin-top: 1.25rem; }
+
+
+/* Page macros and table of contents */
+.document-layout {
+    min-width: 0;
+}
+.document-layout--with-toc {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 16px;
+    align-items: start;
+}
+.page-toc {
+    position: sticky;
+    top: 84px;
+    max-height: calc(100vh - 108px);
+    overflow: auto;
+    padding: 16px;
+}
+.page-toc-nav > strong {
+    display: block;
+    margin-bottom: 10px;
+}
+.page-toc-nav ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+}
+.page-toc-nav li { font-size: .86rem; }
+.page-toc-nav .toc-level-2 { padding-left: 10px; }
+.page-toc-nav .toc-level-3 { padding-left: 20px; }
+.page-toc-nav .toc-level-4,
+.page-toc-nav .toc-level-5,
+.page-toc-nav .toc-level-6 { padding-left: 30px; }
+.page-toc-nav a {
+    color: var(--muted);
+    text-decoration: none;
+}
+.page-toc-nav a:hover { color: var(--text); }
+.document h1[id],
+.document h2[id],
+.document h3[id],
+.document h4[id],
+.document h5[id],
+.document h6[id] { scroll-margin-top: 90px; }
+
+.macro-callout {
+    margin: 1rem 0;
+    padding: .85rem 1rem;
+    border: 1px solid var(--border);
+    border-left-width: 4px;
+    border-radius: 8px;
+    background: var(--surface-2);
+}
+.macro-callout--info { border-left-color: var(--accent); }
+.macro-callout--warning { border-left-color: var(--warning); }
+.macro-callout--note { border-left-color: var(--muted); }
+.macro-status {
+    display: inline-flex;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    font-size: .82rem;
+    font-weight: 700;
+}
+.macro-list { padding-left: 1.25rem; }
+.macro-list li { margin: .35rem 0; }
+.macro-properties { width: 100%; border-collapse: collapse; }
+.macro-properties th { width: 11rem; }
+.macro-empty { color: var(--muted); font-style: italic; }
+.macro-error { color: var(--danger, #d66); }
+.editor-macro-help {
+    display: grid;
+    gap: 5px;
+}
+.editor-macro-help summary {
+    cursor: pointer;
+    font-weight: 700;
+}
+.editor-macro-help code {
+    display: block;
+    overflow-wrap: anywhere;
+    padding: 3px 5px;
+    background: var(--surface-3);
+    border-radius: 4px;
+}
+
+@media (max-width: 1180px) {
+    .document-layout--with-toc {
+        grid-template-columns: 1fr;
+    }
+    .page-toc {
+        position: static;
+        max-height: none;
+        order: -1;
+    }
+}
