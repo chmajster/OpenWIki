@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use OpenWiki\Http\Controllers\AuthController;
 use OpenWiki\Http\Controllers\DashboardController;
+use OpenWiki\Http\Controllers\DirectoryAdminController;
 use OpenWiki\Http\Controllers\HealthController;
 use OpenWiki\Http\Controllers\InstallerController;
 use OpenWiki\Http\Controllers\PageController;
@@ -90,3 +91,27 @@ $router->post('/trash/{id}/delete', [TrashController::class, 'destroy']);
 
 $router->get('/account/change-password', [AccountPasswordController::class, 'edit']);
 $router->post('/account/change-password', [AccountPasswordController::class, 'update']);
+
+$router->get('/admin', [DirectoryAdminController::class, 'dashboard']);
+$router->get('/admin/users', [DirectoryAdminController::class, 'users']);
+$router->get('/admin/users/create', [DirectoryAdminController::class, 'createUserForm']);
+$router->post('/admin/users', [DirectoryAdminController::class, 'createUser']);
+$router->get('/admin/users/{id}/edit', [DirectoryAdminController::class, 'editUser']);
+$router->post('/admin/users/{id}', [DirectoryAdminController::class, 'updateUser']);
+$router->post('/admin/users/{id}/reset-password', [DirectoryAdminController::class, 'resetPassword']);
+$router->post('/admin/users/{id}/reset-mfa', [DirectoryAdminController::class, 'resetMfa']);
+$router->post('/admin/users/{id}/delete', [DirectoryAdminController::class, 'deleteUser']);
+
+$router->get('/admin/groups', [DirectoryAdminController::class, 'groups']);
+$router->get('/admin/groups/create', [DirectoryAdminController::class, 'groupForm']);
+$router->post('/admin/groups', [DirectoryAdminController::class, 'saveGroup']);
+$router->get('/admin/groups/{id}/edit', [DirectoryAdminController::class, 'groupForm']);
+$router->post('/admin/groups/{id}', [DirectoryAdminController::class, 'saveGroup']);
+$router->post('/admin/groups/{id}/delete', [DirectoryAdminController::class, 'deleteGroup']);
+
+$router->get('/admin/roles', [DirectoryAdminController::class, 'roles']);
+$router->get('/admin/roles/create', [DirectoryAdminController::class, 'roleForm']);
+$router->post('/admin/roles', [DirectoryAdminController::class, 'saveRole']);
+$router->get('/admin/roles/{id}/edit', [DirectoryAdminController::class, 'roleForm']);
+$router->post('/admin/roles/{id}', [DirectoryAdminController::class, 'saveRole']);
+$router->post('/admin/roles/{id}/delete', [DirectoryAdminController::class, 'deleteRole']);
