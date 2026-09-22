@@ -8,6 +8,7 @@ use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
 use OpenWiki\Http\Controller;
+use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
@@ -109,26 +110,13 @@ final class PageEngagementController extends Controller
             return [null, null, $this->render('errors/404', ['title' => 'Space not found'], 404)];
         }
 
-        $access = new SpaceAccessService($this->app);
-        if (!$access->canView($space)) {
-            return [null, null, $this->render('errors/403', ['title' => 'Permission denied'], 403)];
-        }
-
         $page = (new PageRepository($this->app->database()))->findBySlug((int) $space['id'], $slug);
         if ($page === null) {
             return [null, null, $this->render('errors/404', ['title' => 'Page not found'], 404)];
         }
 
-        if ($page['status'] !== 'published') {
-            $user = $this->app->auth()->user();
-            $owns = $user !== null && (
-                (int) $page['owner_id'] === (int) $user['id']
-                || (int) $page['author_id'] === (int) $user['id']
-            );
-
-            if (!$owns && !$access->canEdit($space)) {
-                return [null, null, $this->render('errors/403', ['title' => 'Permission denied'], 403)];
-            }
+        if (!(new PageAclService($this->app))->canView($page, $space)) {
+            return [null, null, $this->render('errors/403', ['title' => 'Permission denied'], 403)];
         }
 
         return [$space, $page, null];
