@@ -66,8 +66,15 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             </div>
         </div>
 
-        <div class="document card" data-document-content>
-            <?= $page['content_html'] ?>
+        <div class="document-layout <?= !empty($tableOfContents) ? 'document-layout--with-toc' : '' ?>">
+            <div class="document card" data-document-content>
+                <?= $renderedContent ?>
+            </div>
+            <?php if (!empty($tableOfContents)): ?>
+                <aside class="page-toc card">
+                    <?= $tableOfContents ?>
+                </aside>
+            <?php endif; ?>
         </div>
 
         <?php if ($backlinks !== []): ?>
