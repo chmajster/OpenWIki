@@ -13,6 +13,8 @@ use OpenWiki\Http\Controllers\DashboardController;
 use OpenWiki\Http\Controllers\DirectoryAdminController;
 use OpenWiki\Http\Controllers\HealthController;
 use OpenWiki\Http\Controllers\InstallerController;
+use OpenWiki\Http\Controllers\MfaAdminController;
+use OpenWiki\Http\Controllers\MfaController;
 use OpenWiki\Http\Controllers\NotificationController;
 use OpenWiki\Http\Controllers\PageController;
 use OpenWiki\Http\Controllers\PageDraftController;
@@ -32,6 +34,11 @@ $router->get('/health', [HealthController::class, 'show']);
 $router->get('/login', [AuthController::class, 'loginForm']);
 $router->post('/login', [AuthController::class, 'login']);
 $router->post('/logout', [AuthController::class, 'logout']);
+
+$router->get('/mfa/challenge', [MfaController::class, 'challenge']);
+$router->post('/mfa/challenge', [MfaController::class, 'verify']);
+$router->get('/account/mfa/setup', [MfaController::class, 'setup']);
+$router->post('/account/mfa/confirm', [MfaController::class, 'confirm']);
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/search', [SearchController::class, 'index']);
@@ -133,3 +140,6 @@ $router->get('/admin/webhooks', [WebhookAdminController::class, 'index']);
 $router->post('/admin/webhooks', [WebhookAdminController::class, 'create']);
 $router->post('/admin/webhooks/{id}/status', [WebhookAdminController::class, 'status']);
 $router->post('/admin/webhooks/{id}/delete', [WebhookAdminController::class, 'delete']);
+
+$router->get('/admin/mfa', [MfaAdminController::class, 'index']);
+$router->post('/admin/mfa', [MfaAdminController::class, 'update']);
