@@ -214,6 +214,7 @@ final class ApiV1ControllerTest extends TestCase
                 'content_format' => 'visual',
                 'content_html' => '<h2>API</h2><p>Content</p>',
                 'status' => 'published',
+                'tags' => ['api-tag-' . $suffix],
             ]
         ));
         self::assertSame(201, $response->status());
@@ -326,6 +327,48 @@ final class ApiV1ControllerTest extends TestCase
         } finally {
             @unlink($source);
         }
+
+        $tagRow = $this->app->database()->fetchOne(
+            'SELECT t.id, t.name
+             FROM tags t
+             INNER JOIN page_tags pt ON pt.tag_id = t.id
+             WHERE pt.page_id = :page_id
+             LIMIT 1',
+            ['page_id' => $pageId]
+        );
+        self::assertNotNull($tagRow);
+
+        $tagResponse = $controller->tag(
+            $this->request(
+                'GET',
+                '/api/v1/tags/' . (int) $tagRow['id']
+            ),
+            (string) $tagRow['id']
+        );
+        self::assertSame(200, $tagResponse->status());
+        self::assertSame(
+            1,
+            $this->data($tagResponse)['page_count']
+        );
+
+        $searchResponse = $controller->search($this->request(
+            'GET',
+            '/api/v1/search',
+            [
+                'q' => 'API',
+                'type' => 'all',
+            ]
+        ));
+        self::assertSame(200, $searchResponse->status());
+        $searchPayload = $this->payload($searchResponse);
+        self::assertGreaterThan(0, $searchPayload['meta']['total']);
+        $searchTypes = array_values(array_unique(array_column(
+            $searchPayload['data'],
+            'type'
+        )));
+        self::assertContains('page', $searchTypes);
+        self::assertContains('space', $searchTypes);
+        self::assertContains('comment', $searchTypes);
 
         $response = $controller->deleteComment(
             $this->request(
