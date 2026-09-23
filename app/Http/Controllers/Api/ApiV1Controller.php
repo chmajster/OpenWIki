@@ -9,6 +9,7 @@ use OpenWiki\Auth\ApiTokenService;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Http\Controller;
+use OpenWiki\Images\InlineImageService;
 use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
@@ -244,15 +245,75 @@ final class ApiV1Controller extends Controller
             );
             $data['content_html'] = $decorated['html'];
 
-            $id = $this->app->database()->transaction(
-                function () use ($data, $metadata, $tagInput, $decorated, $space): int {
-                    $pageId = (new PageRepository($this->app->database()))->create($data);
-                    $metadata->syncTags($pageId, $tagInput);
-                    $metadata->syncLinks($pageId, (int) $space['id'], $decorated['references']);
-                    $metadata->refreshSpaceLinks((int) $space['id']);
-                    return $pageId;
+            $tokenService = new ApiTokenService($this->app->database());
+            if (str_contains((string) $data['content_html'], 'data:image/')) {
+                if (
+                    !$tokenService->hasScope($context, 'attachments:write')
+                    || !$tokenService->hasPermission($context, 'attachment.upload')
+                ) {
+                    throw new \InvalidArgumentException(
+                        'Inline images require attachments:write scope and attachment.upload permission.'
+                    );
                 }
+            }
+
+            $inlineImages = new InlineImageService(
+                $this->app->database(),
+                $this->app->basePath()
             );
+
+            try {
+                $id = $this->app->database()->transaction(
+                    function () use (
+                        $data,
+                        $metadata,
+                        $tagInput,
+                        $decorated,
+                        $space,
+                        $context,
+                        $inlineImages
+                    ): int {
+                        $pageId = (new PageRepository($this->app->database()))->create($data);
+
+                        $materialized = $inlineImages->materializeDataImages(
+                            (string) $data['content_html'],
+                            $pageId,
+                            (int) $context['user']['id']
+                        );
+                        if ($materialized['attachment_ids'] !== []) {
+                            $this->app->database()->execute(
+                                'UPDATE pages
+                                 SET content_html = :content_html, content_text = :content_text
+                                 WHERE id = :id',
+                                [
+                                    'content_html' => $materialized['html'],
+                                    'content_text' => $materialized['text'],
+                                    'id' => $pageId,
+                                ]
+                            );
+                            $this->app->database()->execute(
+                                'UPDATE page_revisions
+                                 SET content_html = :content_html, content_text = :content_text
+                                 WHERE page_id = :page_id AND revision_number = 1',
+                                [
+                                    'content_html' => $materialized['html'],
+                                    'content_text' => $materialized['text'],
+                                    'page_id' => $pageId,
+                                ]
+                            );
+                        }
+
+                        $metadata->syncTags($pageId, $tagInput);
+                        $metadata->syncLinks($pageId, (int) $space['id'], $decorated['references']);
+                        $metadata->refreshSpaceLinks((int) $space['id']);
+                        return $pageId;
+                    }
+                );
+                $inlineImages->clearTracking();
+            } catch (\Throwable $inlineImageError) {
+                $inlineImages->cleanupCreatedFiles();
+                throw $inlineImageError;
+            }
             $row = $this->pageRow($id);
 
             (new AuditLogger($this->app->database()))->log(
@@ -325,16 +386,79 @@ final class ApiV1Controller extends Controller
             );
             $data['content_html'] = $decorated['html'];
 
-            $before = ['title' => $row['title'], 'slug' => $row['slug'], 'status' => $row['status'], 'version' => (int) $row['version']];
-            $result = $this->app->database()->transaction(
-                function () use ($row, $data, $metadata, $tagInput, $decorated, $space, $pageId): array {
-                    $updatedResult = (new PageRepository($this->app->database()))->update($row, $data);
-                    $metadata->syncTags($pageId, $tagInput);
-                    $metadata->syncLinks($pageId, (int) $space['id'], $decorated['references']);
-                    $metadata->refreshSpaceLinks((int) $space['id']);
-                    return $updatedResult;
+            $tokenService = new ApiTokenService($this->app->database());
+            if (str_contains((string) $data['content_html'], 'data:image/')) {
+                if (
+                    !$tokenService->hasScope($context, 'attachments:write')
+                    || !$tokenService->hasPermission($context, 'attachment.upload')
+                ) {
+                    throw new \InvalidArgumentException(
+                        'Inline images require attachments:write scope and attachment.upload permission.'
+                    );
                 }
+            }
+
+            $before = ['title' => $row['title'], 'slug' => $row['slug'], 'status' => $row['status'], 'version' => (int) $row['version']];
+            $inlineImages = new InlineImageService(
+                $this->app->database(),
+                $this->app->basePath()
             );
+
+            try {
+                $result = $this->app->database()->transaction(
+                    function () use (
+                        $row,
+                        $data,
+                        $metadata,
+                        $tagInput,
+                        $decorated,
+                        $space,
+                        $pageId,
+                        $context,
+                        $inlineImages
+                    ): array {
+                        $updatedResult = (new PageRepository($this->app->database()))->update($row, $data);
+
+                        $materialized = $inlineImages->materializeDataImages(
+                            (string) $data['content_html'],
+                            $pageId,
+                            (int) $context['user']['id']
+                        );
+                        if ($materialized['attachment_ids'] !== []) {
+                            $this->app->database()->execute(
+                                'UPDATE pages
+                                 SET content_html = :content_html, content_text = :content_text
+                                 WHERE id = :id',
+                                [
+                                    'content_html' => $materialized['html'],
+                                    'content_text' => $materialized['text'],
+                                    'id' => $pageId,
+                                ]
+                            );
+                            $this->app->database()->execute(
+                                'UPDATE page_revisions
+                                 SET content_html = :content_html, content_text = :content_text
+                                 WHERE page_id = :page_id AND revision_number = :revision_number',
+                                [
+                                    'content_html' => $materialized['html'],
+                                    'content_text' => $materialized['text'],
+                                    'page_id' => $pageId,
+                                    'revision_number' => (int) $updatedResult['version'],
+                                ]
+                            );
+                        }
+
+                        $metadata->syncTags($pageId, $tagInput);
+                        $metadata->syncLinks($pageId, (int) $space['id'], $decorated['references']);
+                        $metadata->refreshSpaceLinks((int) $space['id']);
+                        return $updatedResult;
+                    }
+                );
+                $inlineImages->clearTracking();
+            } catch (\Throwable $inlineImageError) {
+                $inlineImages->cleanupCreatedFiles();
+                throw $inlineImageError;
+            }
             $updated = $this->pageRow($pageId);
 
             (new AuditLogger($this->app->database()))->log(
