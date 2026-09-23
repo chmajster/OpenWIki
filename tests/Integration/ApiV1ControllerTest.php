@@ -10,6 +10,7 @@ use OpenWiki\Core\Application;
 use OpenWiki\Core\Request;
 use OpenWiki\Database\MigrationRunner;
 use OpenWiki\Http\Controllers\Api\ApiV1Controller;
+use OpenWiki\Security\SecretCipher;
 use PHPUnit\Framework\TestCase;
 
 final class ApiV1ControllerTest extends TestCase
@@ -125,6 +126,10 @@ final class ApiV1ControllerTest extends TestCase
                 'roles:write',
                 'tags:read',
                 'search:read',
+                'templates:read',
+                'templates:write',
+                'webhooks:read',
+                'webhooks:write',
             ],
             null
         );
@@ -536,6 +541,114 @@ final class ApiV1ControllerTest extends TestCase
             $controller->deleteRole(
                 $this->request('DELETE', '/api/v1/roles/' . $roleId),
                 (string) $roleId
+            )->status()
+        );
+    }
+
+    public function testTemplateAndWebhookAdministrationApiFlow(): void
+    {
+        $controller = new ApiV1Controller($this->app);
+        $suffix = bin2hex(random_bytes(3));
+
+        $createdTemplate = $controller->createTemplate($this->request(
+            'POST',
+            '/api/v1/templates',
+            [],
+            [
+                'name' => 'API Template ' . $suffix,
+                'description' => 'Created by API test',
+                'content_format' => 'visual',
+                'content_html' => '<h2>Template</h2><script>alert(1)</script><p>Body</p>',
+                'content_markdown' => '',
+            ]
+        ));
+        self::assertSame(201, $createdTemplate->status());
+        $template = $this->data($createdTemplate);
+        $templateId = (int) $template['id'];
+        self::assertStringNotContainsString('<script', (string) $template['content_html']);
+
+        $listedTemplates = $controller->templates($this->request('GET', '/api/v1/templates'));
+        self::assertSame(200, $listedTemplates->status());
+        self::assertNotEmpty($this->payload($listedTemplates)['data']);
+
+        $updatedTemplate = $controller->updateTemplate(
+            $this->request(
+                'PATCH',
+                '/api/v1/templates/' . $templateId,
+                [],
+                [
+                    'name' => 'API Template Updated ' . $suffix,
+                    'description' => 'Updated',
+                    'content_format' => 'markdown',
+                    'content_markdown' => '# Updated',
+                ]
+            ),
+            (string) $templateId
+        );
+        self::assertSame(200, $updatedTemplate->status());
+        self::assertSame('API Template Updated ' . $suffix, $this->data($updatedTemplate)['name']);
+
+        $cipher = new SecretCipher(str_repeat('6', 64));
+        $webhookId = $this->app->database()->insert(
+            'INSERT INTO webhooks
+             (name, target_url, secret_ciphertext, events_json, status, created_by, created_at, updated_at)
+             VALUES
+             (:name, :target_url, :secret_ciphertext, :events_json, "active", :created_by, UTC_TIMESTAMP(), UTC_TIMESTAMP())',
+            [
+                'name' => 'API Webhook ' . $suffix,
+                'target_url' => 'https://example.com/openwiki',
+                'secret_ciphertext' => $cipher->encrypt('0123456789abcdef'),
+                'events_json' => json_encode(['page.created'], JSON_THROW_ON_ERROR),
+                'created_by' => $this->userId,
+            ]
+        );
+
+        $webhooks = $controller->webhooks($this->request('GET', '/api/v1/webhooks'));
+        self::assertSame(200, $webhooks->status());
+        $webhookRows = $this->payload($webhooks)['data'];
+        self::assertNotEmpty($webhookRows);
+        self::assertArrayNotHasKey('secret_ciphertext', $webhookRows[0]);
+        self::assertArrayNotHasKey('signing_secret', $webhookRows[0]);
+
+        $webhook = $controller->webhook(
+            $this->request('GET', '/api/v1/webhooks/' . $webhookId),
+            (string) $webhookId
+        );
+        self::assertSame(200, $webhook->status());
+        self::assertSame($webhookId, (int) $this->data($webhook)['id']);
+
+        $disabled = $controller->updateWebhook(
+            $this->request(
+                'PATCH',
+                '/api/v1/webhooks/' . $webhookId,
+                [],
+                ['status' => 'disabled']
+            ),
+            (string) $webhookId
+        );
+        self::assertSame(200, $disabled->status());
+        self::assertSame('disabled', $this->data($disabled)['status']);
+
+        $deliveries = $controller->webhookDeliveries(
+            $this->request('GET', '/api/v1/webhooks/' . $webhookId . '/deliveries'),
+            (string) $webhookId
+        );
+        self::assertSame(200, $deliveries->status());
+        self::assertSame([], $this->payload($deliveries)['data']);
+
+        self::assertSame(
+            204,
+            $controller->deleteWebhook(
+                $this->request('DELETE', '/api/v1/webhooks/' . $webhookId),
+                (string) $webhookId
+            )->status()
+        );
+
+        self::assertSame(
+            204,
+            $controller->deleteTemplate(
+                $this->request('DELETE', '/api/v1/templates/' . $templateId),
+                (string) $templateId
             )->status()
         );
     }
