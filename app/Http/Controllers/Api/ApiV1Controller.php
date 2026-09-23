@@ -996,11 +996,7 @@ final class ApiV1Controller extends Controller
                 $repository->searchPages($query, $filters, 200)
                 as $row
             ) {
-                $pageRow = $this->pageRow((int) $row['id']);
-                if (
-                    $pageRow === null
-                    || !$this->canViewPage($context, $pageRow)
-                ) {
+                if (!$this->canViewSearchRow($context, $row)) {
                     continue;
                 }
 
@@ -1086,11 +1082,7 @@ final class ApiV1Controller extends Controller
                 $repository->searchComments($query, $filters, 150)
                 as $row
             ) {
-                $pageRow = $this->pageRow((int) $row['id']);
-                if (
-                    $pageRow === null
-                    || !$this->canViewPage($context, $pageRow)
-                ) {
+                if (!$this->canViewSearchRow($context, $row)) {
                     continue;
                 }
 
@@ -1125,11 +1117,7 @@ final class ApiV1Controller extends Controller
                     150
                 ) as $row
             ) {
-                $pageRow = $this->pageRow((int) $row['id']);
-                if (
-                    $pageRow === null
-                    || !$this->canViewPage($context, $pageRow)
-                ) {
+                if (!$this->canViewSearchRow($context, $row)) {
                     continue;
                 }
 
@@ -2877,6 +2865,36 @@ final class ApiV1Controller extends Controller
              WHERE p.id = :id AND p.deleted_at IS NULL
              LIMIT 1',
             ['id' => $pageId]
+        );
+    }
+
+    private function canViewSearchRow(array $context, array $row): bool
+    {
+        $page = [
+            'id' => (int) $row['id'],
+            'space_id' => (int) $row['space_id'],
+            'parent_id' => $row['parent_id'] === null
+                ? null
+                : (int) $row['parent_id'],
+            'inherit_acl' => (int) $row['inherit_acl'],
+            'status' => $row['status'],
+            'owner_id' => (int) $row['owner_id'],
+            'author_id' => (int) $row['author_id'],
+        ];
+        $space = [
+            'id' => (int) $row['space_id'],
+            'owner_id' => (int) $row['space_owner_id'],
+            'visibility' => $row['visibility'],
+            'status' => $row['space_status'],
+            'deleted_at' => $row['space_deleted_at'],
+        ];
+
+        return (new PageAclService($this->app))->canViewFor(
+            $page,
+            $space,
+            (int) $context['user']['id'],
+            $this->isSuperAdmin($context),
+            $this->contextHasPermission($context, 'page.view')
         );
     }
 
