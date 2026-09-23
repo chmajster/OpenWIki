@@ -1,0 +1,41 @@
+{
+  "name": "chmajster/openwiki",
+  "description": "OpenWiki enterprise knowledge base platform",
+  "type": "project",
+  "license": "MIT",
+  "require": {
+    "php": "^8.2",
+    "ext-pdo": "*",
+    "ext-json": "*",
+    "ext-mbstring": "*",
+    "ext-openssl": "*",
+    "ext-dom": "*",
+    "ext-phar": "*",
+    "ext-curl": "*",
+    "ext-ldap": "*",
+    "ext-zip": "*",
+    "ext-gd": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "OpenWiki\\": "app/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "OpenWiki\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "lint": "php -l public/index.php"
+  },
+  "config": {
+    "sort-packages": true,
+    "optimize-autoloader": true,
+    "allow-plugins": {}
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.0"
+  }
+}

@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/**"
+      - "fix/**"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: openwiki_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: PHP 8.2
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: pdo_mysql, mbstring, openssl, dom, curl, phar, ldap, zip, gd
+          coverage: none
+
+      - name: Validate Composer metadata
+        run: composer validate --strict
+
+      - name: Install test dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: PHP syntax
+        run: find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+
+      - name: JavaScript syntax
+        run: node --check public/assets/app.js
+
+      - name: Unit and integration tests
+        env:
+          OPENWIKI_TEST_DB_HOST: 127.0.0.1
+          OPENWIKI_TEST_DB_PORT: 3306
+          OPENWIKI_TEST_DB_DATABASE: openwiki_test
+          OPENWIKI_TEST_DB_USERNAME: root
+          OPENWIKI_TEST_DB_PASSWORD: root
+        run: vendor/bin/phpunit

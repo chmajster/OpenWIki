@@ -1,0 +1,10 @@
+<?php
+
+declare(strict_types=1);
+
+use OpenWiki\Console\ConsoleApplication;
+
+$basePath = dirname(__DIR__);
+require $basePath . '/bootstrap/autoload.php';
+
+exit((new ConsoleApplication($basePath))->run($argv));

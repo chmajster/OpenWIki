@@ -1,0 +1,34 @@
+<?php
+$e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$sections = [
+    ['Users', '/admin/users', $counts['users']],
+    ['Groups', '/admin/groups', $counts['groups']],
+    ['Roles', '/admin/roles', $counts['roles']],
+    ['Spaces', '/', $counts['spaces']],
+    ['Pages', '/', $counts['pages']],
+    ['Broken links', '/admin/broken-links', $counts['broken_links']],
+    ['Backups', '/admin/backups', $counts['backups']],
+    ['Webhooks', '/admin/webhooks', $counts['webhooks']],
+    ['MFA policy', '/admin/mfa', $counts['mfa_policy']],
+    ['LDAP / AD', '/admin/ldap', $counts['ldap']],
+    ['System', '/admin/system', $counts['system']],
+    ['Templates', '/admin/templates', $counts['templates']],
+];
+?>
+<section class="content-container">
+    <div class="page-heading">
+        <div>
+            <div class="eyebrow">System</div>
+            <h1>Administration</h1>
+            <p class="muted">Identity, access, Wiki integrity and system backup management.</p>
+        </div>
+    </div>
+    <div class="stat-grid">
+        <?php foreach ($sections as [$label, $url, $count]): ?>
+            <a class="card stat-card" href="<?= $e($url) ?>">
+                <span><?= $e($label) ?></span>
+                <strong><?= (int) $count ?></strong>
+            </a>
+        <?php endforeach; ?>
+    </div>
+</section>
