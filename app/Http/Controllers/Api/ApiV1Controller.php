@@ -11,6 +11,7 @@ use OpenWiki\Auth\ApiTokenService;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Http\Controller;
+use OpenWiki\Images\ImageService;
 use OpenWiki\Images\InlineImageService;
 use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
@@ -2392,6 +2393,106 @@ final class ApiV1Controller extends Controller
         return new Response('', 204);
     }
 
+    public function previewAttachment(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'attachments:read',
+            'page.view'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $attachmentId = $this->positiveId($id);
+        $service = $this->attachmentService();
+        $attachment = $attachmentId === null ? null : $service->find($attachmentId);
+
+        if (
+            $attachment === null
+            || !$this->canViewAttachment($context, $attachment)
+        ) {
+            return $this->error('not_found', 'Attachment not found.', 404);
+        }
+
+        if (!$service->mayPreview((string) $attachment['mime_type'])) {
+            return $this->error(
+                'unsupported_media_type',
+                'Attachment cannot be previewed inline.',
+                415
+            );
+        }
+
+        try {
+            return Response::file(
+                $service->currentPath($attachment),
+                (string) $attachment['mime_type'],
+                (string) $attachment['name'],
+                true
+            );
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API attachment preview] ' . $exception->getMessage());
+            return $this->error('not_found', 'Attachment file not found.', 404);
+        }
+    }
+
+    public function thumbnailAttachment(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'attachments:read',
+            'page.view'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $attachmentId = $this->positiveId($id);
+        $service = $this->attachmentService();
+        $attachment = $attachmentId === null ? null : $service->find($attachmentId);
+
+        if (
+            $attachment === null
+            || !$this->canViewAttachment($context, $attachment)
+        ) {
+            return $this->error('not_found', 'Attachment not found.', 404);
+        }
+
+        $width = filter_var(
+            $request->query('width', 640),
+            FILTER_VALIDATE_INT
+        );
+        $width = $width === false ? 640 : (int) $width;
+
+        try {
+            $thumbnail = (new ImageService(
+                $service,
+                $this->app->basePath()
+            ))->thumbnail($attachment, $width);
+
+            return Response::file(
+                $thumbnail['path'],
+                $thumbnail['mime_type'],
+                'thumbnail-' . $attachmentId
+                    . '-' . (int) $thumbnail['width'],
+                true
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error(
+                'unsupported_media_type',
+                $exception->getMessage(),
+                415
+            );
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API attachment thumbnail] ' . $exception->getMessage());
+            return $this->error(
+                'server_error',
+                'Unable to generate thumbnail.',
+                500
+            );
+        }
+    }
+
     public function downloadAttachment(Request $request, string $id): Response
     {
         [$context, $failure] = $this->apiAuth(
@@ -2544,7 +2645,10 @@ final class ApiV1Controller extends Controller
             'updated_at' => $attachment['updated_at'],
             'urls' => [
                 'download' => '/api/v1/attachments/' . (int) $attachment['id'] . '/download',
-                'preview' => '/attachments/' . (int) $attachment['id'] . '/preview',
+                'preview' => '/api/v1/attachments/' . (int) $attachment['id'] . '/preview',
+                'thumbnail' => str_starts_with((string) $attachment['mime_type'], 'image/')
+                    ? '/api/v1/attachments/' . (int) $attachment['id'] . '/thumbnail?width=640'
+                    : null,
             ],
         ];
 
