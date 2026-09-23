@@ -123,6 +123,7 @@ final class ApiV1ControllerTest extends TestCase
                 'groups:write',
                 'roles:read',
                 'roles:write',
+                'tags:read',
                 'search:read',
             ],
             null
