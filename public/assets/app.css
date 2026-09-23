@@ -601,3 +601,63 @@ textarea { resize: vertical; }
         right: auto;
     }
 }
+
+
+/* Rich images */
+.wiki-image {
+    display: grid;
+    justify-items: center;
+    gap: .5rem;
+    margin: 1.4rem auto;
+    max-width: 100%;
+}
+.wiki-image img,
+.visual-editor figure img,
+.document img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+.wiki-image figcaption,
+.visual-editor figcaption {
+    max-width: 70ch;
+    color: var(--muted);
+    font-size: .86rem;
+    text-align: center;
+}
+.visual-editor figure {
+    display: grid;
+    justify-items: center;
+    gap: .45rem;
+    margin: 1rem auto;
+    max-width: 100%;
+}
+.visual-editor img {
+    cursor: pointer;
+    outline: 0;
+}
+.visual-editor img:hover,
+.visual-editor img:focus {
+    box-shadow: 0 0 0 2px var(--accent);
+}
+.image-inspector {
+    display: grid;
+    gap: .65rem;
+    padding: .8rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-2);
+}
+.image-inspector[hidden] {
+    display: none;
+}
+.image-inspector h3 {
+    margin: 0;
+}
+.document-image--attachment {
+    cursor: zoom-in;
+}
+.document-image--attachment:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
