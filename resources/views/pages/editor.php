@@ -17,6 +17,8 @@ $trustedVisual = !array_key_exists('content_html', $old);
 $visualValue = $field('content_html', $page['content_html'] ?? '<p></p>');
 $changeSummary = $field('change_summary', '');
 $tagValue = $field('tags', isset($tags) ? implode(', ', array_column($tags, 'name')) : '');
+$canUploadImage = (bool) ($canUploadImage ?? false);
+$imageUploadUrl = $imageUploadUrl ?? null;
 
 $children = [];
 foreach ($pages as $candidate) {
@@ -52,6 +54,10 @@ $walk(0, 0);
     class="editor-shell"
     data-wiki-editor
     data-is-edit="<?= $isEdit ? '1' : '0' ?>"
+    data-can-upload-image="<?= $canUploadImage ? '1' : '0' ?>"
+    <?php if ($imageUploadUrl !== null): ?>
+        data-image-upload-url="<?= $e($imageUploadUrl) ?>"
+    <?php endif; ?>
     <?php if ($isEdit): ?>
         data-lock-url="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit-lock"
         data-unlock-url="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit-unlock"
@@ -168,6 +174,10 @@ $walk(0, 0);
                     <button type="button" data-command="formatBlock" data-command-value="blockquote">Quote</button>
                     <button type="button" data-command="insertUnorderedList">• List</button>
                     <button type="button" data-command="insertOrderedList">1. List</button>
+                    <?php if ($canUploadImage): ?>
+                        <button type="button" data-image-picker>Image</button>
+                        <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" data-image-file hidden>
+                    <?php endif; ?>
                 </div>
                 <div class="visual-editor" contenteditable="true" data-visual-editor role="textbox" aria-multiline="true"><?php
                     if ($trustedVisual) {
@@ -195,6 +205,26 @@ $walk(0, 0);
             <?php else: ?>
                 <p class="field-help">The initial save creates revision 1.</p>
             <?php endif; ?>
+            <?php if ($canUploadImage): ?>
+                <div class="image-inspector" data-image-inspector hidden>
+                    <h3>Image</h3>
+                    <label>Alt text
+                        <input type="text" maxlength="500" data-image-alt placeholder="Describe the image">
+                    </label>
+                    <label>Caption
+                        <textarea rows="2" maxlength="1000" data-image-caption placeholder="Optional caption"></textarea>
+                    </label>
+                    <label>Display width
+                        <input type="number" min="64" max="1600" step="1" data-image-width>
+                    </label>
+                    <div class="form-actions">
+                        <button class="button button--secondary" type="button" data-image-apply>Apply</button>
+                        <button class="button button--ghost" type="button" data-image-remove>Remove</button>
+                    </div>
+                    <p class="field-help">Click an image in the visual editor to edit its alt text, caption and width.</p>
+                </div>
+            <?php endif; ?>
+
             <details class="editor-macro-help">
                 <summary>Macros</summary>
                 <p class="field-help">Macros are resolved when the page is viewed and are not written into revisions as generated HTML.</p>
