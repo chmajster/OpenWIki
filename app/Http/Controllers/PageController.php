@@ -10,6 +10,7 @@ use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
 use OpenWiki\Http\Controller;
+use OpenWiki\Images\InlineImageService;
 use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
@@ -53,6 +54,8 @@ final class PageController extends Controller
             'templates' => $templates,
             'tags' => [],
             'canPublish' => $this->app->auth()->can('page.publish'),
+            'canUploadImage' => $this->app->auth()->can('attachment.upload'),
+            'imageUploadUrl' => null,
             'formAction' => '/spaces/' . rawurlencode($space['space_key']) . '/pages',
         ]);
     }
@@ -83,6 +86,13 @@ final class PageController extends Controller
             $data['author_id'] = (int) $user['id'];
             $data['owner_id'] = (int) $user['id'];
 
+            if (
+                str_contains((string) $data['content_html'], 'data:image/')
+                && !$this->app->auth()->can('attachment.upload')
+            ) {
+                throw new \InvalidArgumentException('You do not have permission to upload pasted images.');
+            }
+
             $metadata = new WikiMetadataService($this->app->database());
             $tagInput = (string) $request->input('tags', '');
             $metadata->normalizeTags($tagInput);
@@ -93,15 +103,55 @@ final class PageController extends Controller
             );
             $data['content_html'] = $decorated['html'];
 
-            $pageId = $this->app->database()->transaction(
-                function () use ($data, $metadata, $tagInput, $decorated, $space): int {
-                    $id = (new PageRepository($this->app->database()))->create($data);
-                    $metadata->syncTags($id, $tagInput);
-                    $metadata->syncLinks($id, (int) $space['id'], $decorated['references']);
-                    $metadata->refreshSpaceLinks((int) $space['id']);
-                    return $id;
-                }
+            $inlineImages = new InlineImageService(
+                $this->app->database(),
+                $this->app->basePath()
             );
+
+            try {
+                $pageId = $this->app->database()->transaction(
+                    function () use ($data, $metadata, $tagInput, $decorated, $space, $user, $inlineImages): int {
+                        $id = (new PageRepository($this->app->database()))->create($data);
+
+                        $materialized = $inlineImages->materializeDataImages(
+                            (string) $data['content_html'],
+                            $id,
+                            (int) $user['id']
+                        );
+                        if ($materialized['attachment_ids'] !== []) {
+                            $this->app->database()->execute(
+                                'UPDATE pages
+                                 SET content_html = :content_html, content_text = :content_text
+                                 WHERE id = :id',
+                                [
+                                    'content_html' => $materialized['html'],
+                                    'content_text' => $materialized['text'],
+                                    'id' => $id,
+                                ]
+                            );
+                            $this->app->database()->execute(
+                                'UPDATE page_revisions
+                                 SET content_html = :content_html, content_text = :content_text
+                                 WHERE page_id = :page_id AND revision_number = 1',
+                                [
+                                    'content_html' => $materialized['html'],
+                                    'content_text' => $materialized['text'],
+                                    'page_id' => $id,
+                                ]
+                            );
+                        }
+
+                        $metadata->syncTags($id, $tagInput);
+                        $metadata->syncLinks($id, (int) $space['id'], $decorated['references']);
+                        $metadata->refreshSpaceLinks((int) $space['id']);
+                        return $id;
+                    }
+                );
+                $inlineImages->clearTracking();
+            } catch (\Throwable $imageTransactionError) {
+                $inlineImages->cleanupCreatedFiles();
+                throw $imageTransactionError;
+            }
 
             (new AuditLogger($this->app->database()))->log(
                 'PAGE_CREATED',
@@ -279,6 +329,9 @@ final class PageController extends Controller
             'templates' => [],
             'tags' => (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
             'canPublish' => $this->app->auth()->can('page.publish'),
+            'canUploadImage' => $this->app->auth()->can('attachment.upload'),
+            'imageUploadUrl' => '/spaces/' . rawurlencode($space['space_key'])
+                . '/pages/' . rawurlencode($page['slug']) . '/images',
             'formAction' => '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($page['slug']),
         ]);
     }
@@ -322,6 +375,13 @@ final class PageController extends Controller
             }
             $data['base_version'] = (int) $baseVersion;
 
+            if (
+                str_contains((string) $data['content_html'], 'data:image/')
+                && !$this->app->auth()->can('attachment.upload')
+            ) {
+                throw new \InvalidArgumentException('You do not have permission to upload pasted images.');
+            }
+
             $metadata = new WikiMetadataService($this->app->database());
             $tagInput = (string) $request->input('tags', '');
             $metadata->normalizeTags($tagInput);
@@ -333,15 +393,66 @@ final class PageController extends Controller
             $data['content_html'] = $decorated['html'];
 
             $before = ['title' => $current['title'], 'slug' => $current['slug'], 'status' => $current['status'], 'version' => $current['version']];
-            $result = $this->app->database()->transaction(
-                function () use ($repository, $current, $data, $metadata, $tagInput, $decorated, $space): array {
-                    $updated = $repository->update($current, $data);
-                    $metadata->syncTags((int) $current['id'], $tagInput);
-                    $metadata->syncLinks((int) $current['id'], (int) $space['id'], $decorated['references']);
-                    $metadata->refreshSpaceLinks((int) $space['id']);
-                    return $updated;
-                }
+            $inlineImages = new InlineImageService(
+                $this->app->database(),
+                $this->app->basePath()
             );
+
+            try {
+                $result = $this->app->database()->transaction(
+                    function () use (
+                        $repository,
+                        $current,
+                        $data,
+                        $metadata,
+                        $tagInput,
+                        $decorated,
+                        $space,
+                        $user,
+                        $inlineImages
+                    ): array {
+                        $updated = $repository->update($current, $data);
+
+                        $materialized = $inlineImages->materializeDataImages(
+                            (string) $data['content_html'],
+                            (int) $current['id'],
+                            (int) $user['id']
+                        );
+                        if ($materialized['attachment_ids'] !== []) {
+                            $this->app->database()->execute(
+                                'UPDATE pages
+                                 SET content_html = :content_html, content_text = :content_text
+                                 WHERE id = :id',
+                                [
+                                    'content_html' => $materialized['html'],
+                                    'content_text' => $materialized['text'],
+                                    'id' => (int) $current['id'],
+                                ]
+                            );
+                            $this->app->database()->execute(
+                                'UPDATE page_revisions
+                                 SET content_html = :content_html, content_text = :content_text
+                                 WHERE page_id = :page_id AND revision_number = :revision_number',
+                                [
+                                    'content_html' => $materialized['html'],
+                                    'content_text' => $materialized['text'],
+                                    'page_id' => (int) $current['id'],
+                                    'revision_number' => (int) $updated['version'],
+                                ]
+                            );
+                        }
+
+                        $metadata->syncTags((int) $current['id'], $tagInput);
+                        $metadata->syncLinks((int) $current['id'], (int) $space['id'], $decorated['references']);
+                        $metadata->refreshSpaceLinks((int) $space['id']);
+                        return $updated;
+                    }
+                );
+                $inlineImages->clearTracking();
+            } catch (\Throwable $imageTransactionError) {
+                $inlineImages->cleanupCreatedFiles();
+                throw $imageTransactionError;
+            }
 
             (new AuditLogger($this->app->database()))->log(
                 'PAGE_UPDATED',
@@ -662,6 +773,11 @@ final class PageController extends Controller
                 ? []
                 : (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
             'canPublish' => $this->app->auth()->can('page.publish'),
+            'canUploadImage' => $this->app->auth()->can('attachment.upload'),
+            'imageUploadUrl' => $page === null
+                ? null
+                : '/spaces/' . rawurlencode($space['space_key'])
+                    . '/pages/' . rawurlencode($page['slug']) . '/images',
             'formAction' => $page === null
                 ? '/spaces/' . rawurlencode($space['space_key']) . '/pages'
                 : '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($page['slug']),
