@@ -122,6 +122,7 @@ $router->put('/api/v1/groups/{id}', [ApiV1Controller::class, 'updateGroup']);
 $router->patch('/api/v1/groups/{id}', [ApiV1Controller::class, 'updateGroup']);
 $router->delete('/api/v1/groups/{id}', [ApiV1Controller::class, 'deleteGroup']);
 $router->get('/api/v1/tags', [ApiV1Controller::class, 'tags']);
+$router->get('/api/v1/tags/{id}', [ApiV1Controller::class, 'tag']);
 $router->get('/api/v1/attachments', [ApiV1Controller::class, 'attachments']);
 $router->get('/api/v1/attachments/{id}', [ApiV1Controller::class, 'attachment']);
 $router->patch('/api/v1/attachments/{id}', [ApiV1Controller::class, 'renameAttachment']);
