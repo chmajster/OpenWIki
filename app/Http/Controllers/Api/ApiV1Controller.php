@@ -1200,6 +1200,434 @@ final class ApiV1Controller extends Controller
         ]);
     }
 
+    public function attachment(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'attachments:read',
+            'page.view'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $attachmentId = $this->positiveId($id);
+        $service = $this->attachmentService();
+        $attachment = $attachmentId === null ? null : $service->find($attachmentId);
+
+        if (
+            $attachment === null
+            || !$this->canViewAttachment($context, $attachment)
+        ) {
+            return $this->error('not_found', 'Attachment not found.', 404);
+        }
+
+        return Response::json([
+            'data' => $this->attachmentResource(
+                $attachment,
+                $service->versions($attachmentId)
+            ),
+        ]);
+    }
+
+    public function uploadAttachment(Request $request): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'attachments:write',
+            'attachment.upload'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $pageId = $this->positiveId((string) $request->input('page_id', ''));
+        if ($pageId === null) {
+            return $this->error('validation_error', 'page_id is required.', 422);
+        }
+
+        $page = $this->pageRow($pageId);
+        if ($page === null) {
+            return $this->error('not_found', 'Page not found.', 404);
+        }
+        if (!$this->canEditPageForContext($context, $page)) {
+            return $this->error('forbidden', 'You cannot upload attachments to this page.', 403);
+        }
+
+        try {
+            $service = $this->attachmentService();
+            $attachmentId = $service->upload(
+                $pageId,
+                (int) $context['user']['id'],
+                $request->file('attachment') ?? []
+            );
+            $attachment = $service->find($attachmentId);
+            if ($attachment === null) {
+                throw new \RuntimeException('Uploaded attachment cannot be resolved.');
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'ATTACHMENT_UPLOADED',
+                'attachment',
+                $attachmentId,
+                (int) $context['user']['id'],
+                $request,
+                null,
+                [
+                    'page_id' => $pageId,
+                    'source' => 'api',
+                ]
+            );
+
+            return Response::json([
+                'data' => $this->attachmentResource(
+                    $attachment,
+                    $service->versions($attachmentId)
+                ),
+            ], 201);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error('validation_error', $exception->getMessage(), 422);
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API attachment upload] ' . $exception->getMessage());
+            return $this->error('server_error', 'Unable to upload attachment.', 500);
+        }
+    }
+
+    public function uploadAttachmentVersion(
+        Request $request,
+        string $id
+    ): Response {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'attachments:write',
+            'attachment.upload'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $attachmentId = $this->positiveId($id);
+        $service = $this->attachmentService();
+        $attachment = $attachmentId === null ? null : $service->find($attachmentId);
+        if ($attachment === null) {
+            return $this->error('not_found', 'Attachment not found.', 404);
+        }
+        if (!$this->canEditAttachmentPage($context, $attachment)) {
+            return $this->error('forbidden', 'You cannot modify this attachment.', 403);
+        }
+
+        try {
+            $newVersion = $service->addVersion(
+                $attachmentId,
+                (int) $context['user']['id'],
+                $request->file('attachment') ?? []
+            );
+            $updated = $service->find($attachmentId);
+            if ($updated === null) {
+                throw new \RuntimeException('Updated attachment cannot be resolved.');
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'ATTACHMENT_VERSION_UPLOADED',
+                'attachment',
+                $attachmentId,
+                (int) $context['user']['id'],
+                $request,
+                ['version' => (int) $attachment['current_version']],
+                ['version' => $newVersion, 'source' => 'api']
+            );
+
+            return Response::json([
+                'data' => $this->attachmentResource(
+                    $updated,
+                    $service->versions($attachmentId)
+                ),
+            ], 201);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error('validation_error', $exception->getMessage(), 422);
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API attachment version] ' . $exception->getMessage());
+            return $this->error('server_error', 'Unable to upload attachment version.', 500);
+        }
+    }
+
+    public function renameAttachment(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'attachments:write',
+            'attachment.upload'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $attachmentId = $this->positiveId($id);
+        $service = $this->attachmentService();
+        $attachment = $attachmentId === null ? null : $service->find($attachmentId);
+        if ($attachment === null) {
+            return $this->error('not_found', 'Attachment not found.', 404);
+        }
+        if (!$this->canEditAttachmentPage($context, $attachment)) {
+            return $this->error('forbidden', 'You cannot modify this attachment.', 403);
+        }
+
+        try {
+            if (!$service->rename(
+                $attachmentId,
+                (string) $request->input('name', '')
+            )) {
+                return $this->error('not_found', 'Attachment not found.', 404);
+            }
+
+            $updated = $service->find($attachmentId);
+            if ($updated === null) {
+                throw new \RuntimeException('Renamed attachment cannot be resolved.');
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'ATTACHMENT_RENAMED',
+                'attachment',
+                $attachmentId,
+                (int) $context['user']['id'],
+                $request,
+                ['name' => $attachment['name']],
+                ['name' => $updated['name'], 'source' => 'api']
+            );
+
+            return Response::json([
+                'data' => $this->attachmentResource(
+                    $updated,
+                    $service->versions($attachmentId)
+                ),
+            ]);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error('validation_error', $exception->getMessage(), 422);
+        }
+    }
+
+    public function deleteAttachment(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'attachments:write',
+            'attachment.delete'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $attachmentId = $this->positiveId($id);
+        $service = $this->attachmentService();
+        $attachment = $attachmentId === null ? null : $service->find($attachmentId);
+        if ($attachment === null) {
+            return $this->error('not_found', 'Attachment not found.', 404);
+        }
+        if (!$this->canEditAttachmentPage($context, $attachment)) {
+            return $this->error('forbidden', 'You cannot delete this attachment.', 403);
+        }
+
+        if (!$service->delete($attachmentId)) {
+            return $this->error('not_found', 'Attachment not found.', 404);
+        }
+
+        (new AuditLogger($this->app->database()))->log(
+            'ATTACHMENT_DELETED',
+            'attachment',
+            $attachmentId,
+            (int) $context['user']['id'],
+            $request,
+            [
+                'name' => $attachment['name'],
+                'version' => (int) $attachment['current_version'],
+            ],
+            ['deleted' => true, 'source' => 'api']
+        );
+
+        return new Response('', 204);
+    }
+
+    public function downloadAttachment(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'attachments:read',
+            'page.view'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $attachmentId = $this->positiveId($id);
+        $service = $this->attachmentService();
+        $attachment = $attachmentId === null ? null : $service->find($attachmentId);
+        if (
+            $attachment === null
+            || !$this->canViewAttachment($context, $attachment)
+        ) {
+            return $this->error('not_found', 'Attachment not found.', 404);
+        }
+
+        try {
+            return Response::file(
+                $service->currentPath($attachment),
+                (string) $attachment['mime_type'],
+                (string) $attachment['name'],
+                false
+            );
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API attachment download] ' . $exception->getMessage());
+            return $this->error('not_found', 'Attachment file not found.', 404);
+        }
+    }
+
+    public function downloadAttachmentVersion(
+        Request $request,
+        string $id,
+        string $version
+    ): Response {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'attachments:read',
+            'page.view'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $attachmentId = $this->positiveId($id);
+        $versionNumber = $this->positiveId($version);
+        $service = $this->attachmentService();
+        $attachment = $attachmentId === null ? null : $service->find($attachmentId);
+
+        if (
+            $attachment === null
+            || $versionNumber === null
+            || !$this->canViewAttachment($context, $attachment)
+        ) {
+            return $this->error('not_found', 'Attachment version not found.', 404);
+        }
+
+        try {
+            $file = $service->versionPath($attachmentId, $versionNumber);
+            if ($file === null) {
+                return $this->error('not_found', 'Attachment version not found.', 404);
+            }
+
+            return Response::file(
+                (string) $file['path'],
+                (string) $file['mime_type'],
+                (string) $file['name'],
+                false
+            );
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API attachment version download] ' . $exception->getMessage());
+            return $this->error('not_found', 'Attachment version not found.', 404);
+        }
+    }
+
+    private function attachmentService(): AttachmentService
+    {
+        return new AttachmentService(
+            $this->app->database(),
+            $this->app->basePath()
+        );
+    }
+
+    private function attachmentPage(array $attachment): array
+    {
+        return [
+            'id' => (int) $attachment['page_id'],
+            'space_id' => (int) $attachment['space_id'],
+            'parent_id' => $attachment['page_parent_id'] === null
+                ? null
+                : (int) $attachment['page_parent_id'],
+            'inherit_acl' => (int) $attachment['page_inherit_acl'],
+            'status' => $attachment['page_status'],
+            'owner_id' => (int) $attachment['page_owner_id'],
+            'author_id' => (int) $attachment['page_author_id'],
+            'space_key' => $attachment['space_key'],
+            'space_name' => $attachment['space_name'],
+            'space_visibility' => $attachment['space_visibility'],
+            'space_owner_id' => (int) $attachment['space_owner_id'],
+            'space_status' => $attachment['space_status'],
+            'space_deleted_at' => $attachment['space_deleted_at'],
+        ];
+    }
+
+    private function canViewAttachment(array $context, array $attachment): bool
+    {
+        return $this->canViewPage(
+            $context,
+            $this->attachmentPage($attachment)
+        );
+    }
+
+    private function canEditAttachmentPage(array $context, array $attachment): bool
+    {
+        return $this->canEditPageForContext(
+            $context,
+            $this->attachmentPage($attachment)
+        );
+    }
+
+    private function canEditPageForContext(array $context, array $page): bool
+    {
+        return (new PageAclService($this->app))->canFor(
+            $page,
+            $this->spaceFromPage($page),
+            'page.edit',
+            (int) $context['user']['id'],
+            $this->isSuperAdmin($context),
+            $this->contextHasPermission($context, 'page.edit')
+        );
+    }
+
+    private function attachmentResource(
+        array $attachment,
+        array $versions = []
+    ): array {
+        $resource = [
+            'id' => (int) $attachment['id'],
+            'page_id' => (int) $attachment['page_id'],
+            'name' => $attachment['name'],
+            'mime_type' => $attachment['mime_type'],
+            'size_bytes' => (int) $attachment['size_bytes'],
+            'sha256' => $attachment['sha256'] ?? null,
+            'current_version' => (int) $attachment['current_version'],
+            'created_at' => $attachment['created_at'],
+            'updated_at' => $attachment['updated_at'],
+            'urls' => [
+                'download' => '/api/v1/attachments/' . (int) $attachment['id'] . '/download',
+                'preview' => '/attachments/' . (int) $attachment['id'] . '/preview',
+            ],
+        ];
+
+        if ($versions !== []) {
+            $resource['versions'] = array_map(
+                static fn (array $version): array => [
+                    'id' => (int) $version['id'],
+                    'version_number' => (int) $version['version_number'],
+                    'mime_type' => $version['mime_type'],
+                    'size_bytes' => (int) $version['size_bytes'],
+                    'sha256' => $version['sha256'],
+                    'uploader' => [
+                        'id' => (int) $version['uploader_id'],
+                        'username' => $version['uploader_username'],
+                    ],
+                    'created_at' => $version['created_at'],
+                    'download_url' => '/api/v1/attachments/'
+                        . (int) $attachment['id']
+                        . '/versions/' . (int) $version['version_number']
+                        . '/download',
+                ],
+                $versions
+            );
+        }
+
+        return $resource;
+    }
+
     private function apiAuth(Request $request, string $scope, ?string $permission = null): array
     {
         $tokenService = new ApiTokenService($this->app->database());
