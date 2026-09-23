@@ -13,6 +13,8 @@ final class ApiTokenService
         'spaces:write',
         'pages:read',
         'pages:write',
+        'comments:read',
+        'comments:write',
         'search:read',
         'users:read',
         'groups:read',
