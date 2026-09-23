@@ -21,6 +21,7 @@ use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Security\RateLimiter;
 use OpenWiki\Wiki\CommentService;
 use OpenWiki\Wiki\ContentService;
+use OpenWiki\Wiki\PageTemplateService;
 use OpenWiki\Wiki\Slugger;
 use OpenWiki\Wiki\WikiMetadataService;
 use OpenWiki\Webhooks\WebhookService;
@@ -2734,6 +2735,369 @@ final class ApiV1Controller extends Controller
         }
 
         return $resource;
+    }
+
+    public function templates(Request $request): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'templates:read', 'template.manage');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        [$page, $perPage, $offset] = $this->pagination($request);
+        $rows = (new PageTemplateService($this->app->database()))->all();
+        $total = count($rows);
+
+        return Response::json([
+            'data' => array_map([$this, 'templateResource'], array_slice($rows, $offset, $perPage)),
+            'meta' => $this->paginationMeta($page, $perPage, $total),
+        ]);
+    }
+
+    public function template(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'templates:read', 'template.manage');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $templateId = $this->positiveId($id);
+        $row = $templateId === null
+            ? null
+            : (new PageTemplateService($this->app->database()))->find($templateId);
+
+        if ($row === null) {
+            return $this->error('not_found', 'Template not found.', 404);
+        }
+
+        return Response::json(['data' => $this->templateResource($row, true)]);
+    }
+
+    public function createTemplate(Request $request): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'templates:write', 'template.manage');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        try {
+            $service = new PageTemplateService($this->app->database());
+            $id = $service->save(null, (array) $request->input(), (int) $context['user']['id']);
+            $row = $service->find($id);
+
+            (new AuditLogger($this->app->database()))->log(
+                'TEMPLATE_CREATED',
+                'page_template',
+                $id,
+                (int) $context['user']['id'],
+                $request,
+                null,
+                ['name' => $row['name'] ?? null]
+            );
+
+            return Response::json(['data' => $this->templateResource($row, true)], 201);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error('validation_error', $exception->getMessage(), 422);
+        }
+    }
+
+    public function updateTemplate(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'templates:write', 'template.manage');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $templateId = $this->positiveId($id);
+        if ($templateId === null) {
+            return $this->error('not_found', 'Template not found.', 404);
+        }
+
+        $service = new PageTemplateService($this->app->database());
+        $before = $service->find($templateId);
+        if ($before === null) {
+            return $this->error('not_found', 'Template not found.', 404);
+        }
+
+        try {
+            $service->save($templateId, (array) $request->input(), (int) $context['user']['id']);
+            $after = $service->find($templateId);
+
+            (new AuditLogger($this->app->database()))->log(
+                'TEMPLATE_UPDATED',
+                'page_template',
+                $templateId,
+                (int) $context['user']['id'],
+                $request,
+                ['name' => $before['name'], 'is_system' => (bool) $before['is_system']],
+                ['name' => $after['name'] ?? null, 'is_system' => (bool) ($after['is_system'] ?? false)]
+            );
+
+            return Response::json(['data' => $this->templateResource($after, true)]);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error('validation_error', $exception->getMessage(), 422);
+        }
+    }
+
+    public function deleteTemplate(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'templates:write', 'template.manage');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $templateId = $this->positiveId($id);
+        if ($templateId === null) {
+            return $this->error('not_found', 'Template not found.', 404);
+        }
+
+        $service = new PageTemplateService($this->app->database());
+        $before = $service->find($templateId);
+        if ($before === null) {
+            return $this->error('not_found', 'Template not found.', 404);
+        }
+
+        try {
+            if (!$service->delete($templateId)) {
+                return $this->error('not_found', 'Template not found.', 404);
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'TEMPLATE_DELETED',
+                'page_template',
+                $templateId,
+                (int) $context['user']['id'],
+                $request,
+                ['name' => $before['name'], 'is_system' => (bool) $before['is_system']],
+                ['deleted' => true]
+            );
+
+            return new Response('', 204);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error('validation_error', $exception->getMessage(), 422);
+        }
+    }
+
+    public function webhooks(Request $request): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'webhooks:read', 'webhook.manage');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        [$page, $perPage, $offset] = $this->pagination($request);
+        $service = new WebhookService($this->app->database());
+        $rows = $service->webhooks();
+        $total = count($rows);
+
+        return Response::json([
+            'data' => array_map([$this, 'webhookResource'], array_slice($rows, $offset, $perPage)),
+            'meta' => $this->paginationMeta($page, $perPage, $total),
+        ]);
+    }
+
+    public function webhook(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'webhooks:read', 'webhook.manage');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $webhookId = $this->positiveId($id);
+        if ($webhookId === null) {
+            return $this->error('not_found', 'Webhook not found.', 404);
+        }
+
+        foreach ((new WebhookService($this->app->database()))->webhooks() as $row) {
+            if ((int) $row['id'] === $webhookId) {
+                return Response::json(['data' => $this->webhookResource($row)]);
+            }
+        }
+
+        return $this->error('not_found', 'Webhook not found.', 404);
+    }
+
+    public function createWebhook(Request $request): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'webhooks:write', 'webhook.manage');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        try {
+            $service = new WebhookService($this->app->database());
+            $created = $service->create((array) $request->input(), (int) $context['user']['id']);
+            $row = null;
+            foreach ($service->webhooks() as $candidate) {
+                if ((int) $candidate['id'] === (int) $created['id']) {
+                    $row = $candidate;
+                    break;
+                }
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'WEBHOOK_CREATED',
+                'webhook',
+                (int) $created['id'],
+                (int) $context['user']['id'],
+                $request,
+                null,
+                ['name' => $row['name'] ?? null]
+            );
+
+            return Response::json([
+                'data' => $this->webhookResource($row) + [
+                    'signing_secret' => $created['secret'],
+                ],
+            ], 201);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error('validation_error', $exception->getMessage(), 422);
+        }
+    }
+
+    public function updateWebhook(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'webhooks:write', 'webhook.manage');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $webhookId = $this->positiveId($id);
+        if ($webhookId === null) {
+            return $this->error('not_found', 'Webhook not found.', 404);
+        }
+
+        $status = trim((string) $request->input('status', ''));
+        if ($status === '') {
+            return $this->error('validation_error', 'status is required.', 422);
+        }
+
+        try {
+            $service = new WebhookService($this->app->database());
+            if (!$service->setStatus($webhookId, $status)) {
+                return $this->error('not_found', 'Webhook not found.', 404);
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'WEBHOOK_STATUS_CHANGED',
+                'webhook',
+                $webhookId,
+                (int) $context['user']['id'],
+                $request,
+                null,
+                ['status' => $status]
+            );
+
+            return $this->webhook($request, $id);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error('validation_error', $exception->getMessage(), 422);
+        }
+    }
+
+    public function deleteWebhook(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'webhooks:write', 'webhook.manage');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $webhookId = $this->positiveId($id);
+        if ($webhookId === null) {
+            return $this->error('not_found', 'Webhook not found.', 404);
+        }
+
+        if (!(new WebhookService($this->app->database()))->delete($webhookId)) {
+            return $this->error('not_found', 'Webhook not found.', 404);
+        }
+
+        (new AuditLogger($this->app->database()))->log(
+            'WEBHOOK_DELETED',
+            'webhook',
+            $webhookId,
+            (int) $context['user']['id'],
+            $request
+        );
+
+        return new Response('', 204);
+    }
+
+    public function webhookDeliveries(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'webhooks:read', 'webhook.manage');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $webhookId = $this->positiveId($id);
+        if ($webhookId === null) {
+            return $this->error('not_found', 'Webhook not found.', 404);
+        }
+
+        [$page, $perPage, $offset] = $this->pagination($request);
+        $rows = array_values(array_filter(
+            (new WebhookService($this->app->database()))->deliveries(500),
+            static fn (array $row): bool => (int) $row['webhook_id'] === $webhookId
+        ));
+
+        if ($rows === []) {
+            $exists = $this->app->database()->fetchOne(
+                'SELECT id FROM webhooks WHERE id = :id LIMIT 1',
+                ['id' => $webhookId]
+            );
+            if ($exists === null) {
+                return $this->error('not_found', 'Webhook not found.', 404);
+            }
+        }
+
+        $total = count($rows);
+        return Response::json([
+            'data' => array_slice($rows, $offset, $perPage),
+            'meta' => $this->paginationMeta($page, $perPage, $total),
+        ]);
+    }
+
+    private function templateResource(?array $row, bool $includeContent = false): array
+    {
+        if ($row === null) {
+            return [];
+        }
+
+        $resource = [
+            'id' => (int) $row['id'],
+            'name' => $row['name'],
+            'description' => $row['description'],
+            'is_system' => (bool) $row['is_system'],
+            'created_by' => $row['created_by'] === null ? null : (int) $row['created_by'],
+            'creator_username' => $row['creator_username'] ?? null,
+            'created_at' => $row['created_at'],
+            'updated_at' => $row['updated_at'],
+        ];
+
+        if ($includeContent) {
+            $resource['content_html'] = $row['content_html'];
+            $resource['content_markdown'] = $row['content_markdown'];
+        }
+
+        return $resource;
+    }
+
+    private function webhookResource(?array $row): array
+    {
+        if ($row === null) {
+            return [];
+        }
+
+        $events = json_decode((string) $row['events_json'], true);
+        return [
+            'id' => (int) $row['id'],
+            'name' => $row['name'],
+            'target_url' => $row['target_url'],
+            'events' => is_array($events) ? array_values($events) : [],
+            'status' => $row['status'],
+            'created_by' => $row['created_by'] === null ? null : (int) $row['created_by'],
+            'created_at' => $row['created_at'],
+            'updated_at' => $row['updated_at'],
+        ];
     }
 
     private function apiAuth(Request $request, string $scope, ?string $permission = null): array
