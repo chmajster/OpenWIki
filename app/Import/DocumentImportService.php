@@ -6,6 +6,7 @@ namespace OpenWiki\Import;
 
 use OpenWiki\Core\Database;
 use OpenWiki\Core\Env;
+use OpenWiki\Images\InlineImageService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Wiki\ContentService;
 use OpenWiki\Wiki\Slugger;
@@ -14,8 +15,16 @@ use ZipArchive;
 
 final class DocumentImportService
 {
-    public function __construct(private readonly Database $database)
-    {
+    private readonly ?InlineImageService $inlineImages;
+
+    public function __construct(
+        private readonly Database $database,
+        ?string $basePath = null,
+        private readonly bool $allowInlineImages = false
+    ) {
+        $this->inlineImages = $basePath === null
+            ? null
+            : new InlineImageService($database, $basePath);
     }
 
     public function importUploaded(
@@ -102,24 +111,30 @@ final class DocumentImportService
         string $content,
         string $format
     ): array {
-        $pageId = $this->database->transaction(function () use (
-            $space,
-            $userId,
-            $parentId,
-            $sourceName,
-            $content,
-            $format
-        ): int {
-            return $this->createDocument(
+        try {
+            $pageId = $this->database->transaction(function () use (
                 $space,
                 $userId,
                 $parentId,
-                $this->titleFromPath($sourceName),
+                $sourceName,
                 $content,
-                $format,
-                $sourceName
-            );
-        });
+                $format
+            ): int {
+                return $this->createDocument(
+                    $space,
+                    $userId,
+                    $parentId,
+                    $this->titleFromPath($sourceName),
+                    $content,
+                    $format,
+                    $sourceName
+                );
+            });
+            $this->inlineImages?->clearTracking();
+        } catch (\Throwable $exception) {
+            $this->inlineImages?->cleanupCreatedFiles();
+            throw $exception;
+        }
 
         (new WikiMetadataService($this->database))->refreshSpaceLinks((int) $space['id']);
 
@@ -203,14 +218,15 @@ final class DocumentImportService
                 return $depth !== 0 ? $depth : strcmp($left['path'], $right['path']);
             });
 
-            $result = $this->database->transaction(function () use (
-                $zip,
-                $documents,
-                $space,
-                $userId,
-                $parentId,
-                $skipped
-            ): array {
+            try {
+                $result = $this->database->transaction(function () use (
+                    $zip,
+                    $documents,
+                    $space,
+                    $userId,
+                    $parentId,
+                    $skipped
+                ): array {
                 $folderPages = [];
                 $pageIds = [];
                 $sectionCount = 0;
@@ -259,13 +275,18 @@ final class DocumentImportService
                     );
                 }
 
-                return [
-                    'imported_pages' => count($documents),
-                    'section_pages' => $sectionCount,
-                    'skipped_files' => $skipped,
-                    'page_ids' => $pageIds,
-                ];
-            });
+                    return [
+                        'imported_pages' => count($documents),
+                        'section_pages' => $sectionCount,
+                        'skipped_files' => $skipped,
+                        'page_ids' => $pageIds,
+                    ];
+                });
+                $this->inlineImages?->clearTracking();
+            } catch (\Throwable $exception) {
+                $this->inlineImages?->cleanupCreatedFiles();
+                throw $exception;
+            }
 
             (new WikiMetadataService($this->database))->refreshSpaceLinks((int) $space['id']);
             return $result;
@@ -296,6 +317,15 @@ final class DocumentImportService
             (string) $content['html']
         );
 
+        if (
+            str_contains((string) $decorated['html'], 'data:image/')
+            && !$this->allowInlineImages
+        ) {
+            throw new \InvalidArgumentException(
+                'Imported inline images require attachment.upload permission.'
+            );
+        }
+
         $pageId = (new PageRepository($this->database))->create([
             'space_id' => (int) $space['id'],
             'parent_id' => $parentId,
@@ -310,6 +340,40 @@ final class DocumentImportService
             'status' => 'draft',
             'change_summary' => mb_substr('Imported from ' . $sourceName, 0, 500),
         ]);
+
+        if (str_contains((string) $decorated['html'], 'data:image/')) {
+            if ($this->inlineImages === null) {
+                throw new \RuntimeException('Inline image storage is unavailable for imports.');
+            }
+
+            $materialized = $this->inlineImages->materializeDataImages(
+                (string) $decorated['html'],
+                $pageId,
+                $userId
+            );
+            if ($materialized['attachment_ids'] !== []) {
+                $this->database->execute(
+                    'UPDATE pages
+                     SET content_html = :content_html, content_text = :content_text
+                     WHERE id = :id',
+                    [
+                        'content_html' => $materialized['html'],
+                        'content_text' => $materialized['text'],
+                        'id' => $pageId,
+                    ]
+                );
+                $this->database->execute(
+                    'UPDATE page_revisions
+                     SET content_html = :content_html, content_text = :content_text
+                     WHERE page_id = :page_id AND revision_number = 1',
+                    [
+                        'content_html' => $materialized['html'],
+                        'content_text' => $materialized['text'],
+                        'page_id' => $pageId,
+                    ]
+                );
+            }
+        }
 
         $metadata->syncLinks(
             $pageId,
