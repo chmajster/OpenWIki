@@ -191,14 +191,21 @@ TEXT);
         }
 
         $deleted = 0;
-        $iterator = new \FilesystemIterator($path, \FilesystemIterator::SKIP_DOTS);
-        foreach ($iterator as $file) {
-            if (!$file->isFile() || $file->getFilename() === '.gitkeep') {
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iterator as $entry) {
+            if ($entry->isDir()) {
+                @rmdir($entry->getPathname());
+                continue;
+            }
+            if ($entry->getFilename() === '.gitkeep') {
                 continue;
             }
 
-            if (!@unlink($file->getPathname())) {
-                throw new \RuntimeException('Unable to remove cache file: ' . $file->getFilename());
+            if (!@unlink($entry->getPathname())) {
+                throw new \RuntimeException('Unable to remove cache file: ' . $entry->getFilename());
             }
             $deleted++;
         }
