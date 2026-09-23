@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OpenWiki\Http\Controllers\Api;
 
+use OpenWiki\Attachments\AttachmentService;
 use OpenWiki\Audit\AuditLogger;
 use OpenWiki\Auth\ApiTokenService;
 use OpenWiki\Core\Request;
@@ -16,9 +17,11 @@ use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SearchRepository;
 use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Security\RateLimiter;
+use OpenWiki\Wiki\CommentService;
 use OpenWiki\Wiki\ContentService;
 use OpenWiki\Wiki\Slugger;
 use OpenWiki\Wiki\WikiMetadataService;
+use OpenWiki\Webhooks\WebhookService;
 
 final class ApiV1Controller extends Controller
 {
