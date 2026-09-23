@@ -309,6 +309,8 @@ groups:read       groups:write
 roles:read        roles:write
 tags:read
 attachments:read attachments:write
+templates:read   templates:write
+webhooks:read    webhooks:write
 ```
 
 A scope never bypasses backend RBAC or Space/Page ACL. Both the token scope and the token owner's current permissions must allow the operation.
@@ -339,12 +341,21 @@ GET                       /api/v1/permissions
 GET                       /api/v1/tags
 GET                       /api/v1/tags/{id}
 
+GET,POST                  /api/v1/templates
+GET,PUT,PATCH,DELETE      /api/v1/templates/{id}
+
+GET,POST                  /api/v1/webhooks
+GET,PATCH,DELETE          /api/v1/webhooks/{id}
+GET                       /api/v1/webhooks/{id}/deliveries
+
 GET,POST                  /api/v1/attachments
 GET,PATCH,DELETE          /api/v1/attachments/{id}
 POST                      /api/v1/attachments/{id}/version
 GET                       /api/v1/attachments/{id}/download
 GET                       /api/v1/attachments/{id}/versions/{version}/download
 ```
+
+Webhook signing secrets are returned only once, in the `201` response from `POST /api/v1/webhooks`. Listing or reading webhook resources never returns encrypted or plaintext secret material.
 
 `GET /api/v1/search` remains backward-compatible with page search by default. Use `type=all|space|user|comment|attachment|tag` to enable multi-type search. The endpoint also accepts Space, author, tag and created/updated date filters.
 
