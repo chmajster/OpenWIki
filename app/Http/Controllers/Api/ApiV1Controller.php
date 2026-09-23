@@ -722,31 +722,65 @@ final class ApiV1Controller extends Controller
 
     public function comments(Request $request): Response
     {
-        [$context, $failure] = $this->apiAuth($request, 'comments:read', 'page.view');
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'comments:read',
+            'page.view'
+        );
         if ($failure !== null) {
             return $failure;
         }
 
-        $pageId = $this->positiveId((string) $request->query('page_id', ''));
+        $pageId = $this->positiveId(
+            (string) $request->query('page_id', '')
+        );
         if ($pageId === null) {
-            return $this->error('validation_error', 'page_id is required.', 422);
+            return $this->error(
+                'validation_error',
+                'page_id is required.',
+                422
+            );
         }
 
         $pageRow = $this->pageRow($pageId);
-        if ($pageRow === null || !$this->canViewPage($context, $pageRow)) {
+        if (
+            $pageRow === null
+            || !$this->canViewPage($context, $pageRow)
+        ) {
             return $this->error('not_found', 'Page not found.', 404);
         }
 
         [$page, $perPage, $offset] = $this->pagination($request);
-        $rows = (new CommentService($this->app->database()))->listForPage($pageId);
-        $total = count($rows);
+        $count = $this->app->database()->fetchOne(
+            'SELECT COUNT(*) AS total
+             FROM comments
+             WHERE page_id = :page_id
+               AND deleted_at IS NULL',
+            ['page_id' => $pageId]
+        );
+        $rows = $this->app->database()->fetchAll(
+            'SELECT c.id, c.page_id, c.parent_id, c.author_id,
+                    c.body_html, c.created_at, c.updated_at,
+                    u.username, u.first_name, u.last_name
+             FROM comments c
+             INNER JOIN users u ON u.id = c.author_id
+             WHERE c.page_id = :page_id
+               AND c.deleted_at IS NULL
+             ORDER BY c.created_at ASC, c.id ASC
+             LIMIT ' . $perPage . ' OFFSET ' . $offset,
+            ['page_id' => $pageId]
+        );
 
         return Response::json([
             'data' => array_map(
                 [$this, 'commentResource'],
-                array_slice($rows, $offset, $perPage)
+                $rows
             ),
-            'meta' => $this->paginationMeta($page, $perPage, $total),
+            'meta' => $this->paginationMeta(
+                $page,
+                $perPage,
+                (int) ($count['total'] ?? 0)
+            ),
         ]);
     }
 
