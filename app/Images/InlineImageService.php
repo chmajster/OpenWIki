@@ -27,7 +27,11 @@ final class InlineImageService
     public function materializeDataImages(string $html, int $pageId, int $userId): array
     {
         if (!str_contains($html, 'data:image/')) {
-            return ['html' => $html, 'attachment_ids' => []];
+            return [
+                'html' => $html,
+                'text' => $this->plainText($html),
+                'attachment_ids' => [],
+            ];
         }
 
         $document = new DOMDocument('1.0', 'UTF-8');
@@ -139,7 +143,18 @@ final class InlineImageService
             $result .= $document->saveHTML($child);
         }
 
-        return ['html' => $result, 'attachment_ids' => $attachmentIds];
+        return [
+            'html' => $result,
+            'text' => $this->plainText($result),
+            'attachment_ids' => $attachmentIds,
+        ];
+    }
+
+    private function plainText(string $html): string
+    {
+        $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
+        return trim($text);
     }
 
     public function cleanupCreatedFiles(): void
