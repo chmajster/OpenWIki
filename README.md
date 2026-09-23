@@ -275,3 +275,77 @@ Spaces can import Markdown, HTML or ZIP documentation. Imported pages are create
 ZIP import is processed entry-by-entry without filesystem extraction. OpenWiki rejects absolute paths, path traversal and Unix symlink entries, limits archive entry count and uncompressed sizes, and ignores unsupported file types instead of executing or extracting them.
 
 Normal Space ZIP downloads remove their temporary archive after sending. `cron:run` also removes stale files from `storage/temp` after 24 hours.
+
+
+## Rich images
+
+The Visual editor supports PNG, JPEG, GIF and WebP images through file selection and clipboard paste.
+
+- Existing pages upload images immediately as protected attachments.
+- New pages keep pasted images only in the local editor state until the first page save, then materialize them as attachments in the same database transaction.
+- Inline base64 image data is not kept in page content after a successful save.
+- Images support alt text, optional captions and a controlled display width without inline CSS.
+- Thumbnails are generated with GD, cached under `storage/cache/images`, never upscale the source image and are protected by the same Page ACL as the original attachment.
+- Server-side image inspection enforces raster formats, file limits and a configurable pixel limit before thumbnail decoding.
+- REST page writes containing inline images additionally require `attachments:write` and backend `attachment.upload` permission.
+- HTML/ZIP imports apply the same inline-image materialization rule.
+
+SVG is intentionally not accepted as an uploaded image format because it may contain active content.
+
+
+## REST API v1
+
+API clients authenticate with a Bearer token created under `/account/api-tokens`. Tokens are stored only as SHA-256 hashes and are shown in plaintext once.
+
+Available scopes:
+
+```text
+spaces:read       spaces:write
+pages:read        pages:write
+comments:read     comments:write
+search:read
+users:read        users:write
+groups:read       groups:write
+roles:read        roles:write
+tags:read
+attachments:read attachments:write
+```
+
+A scope never bypasses backend RBAC or Space/Page ACL. Both the token scope and the token owner's current permissions must allow the operation.
+
+Main resources:
+
+```text
+GET,POST                 /api/v1/spaces
+GET,PUT,PATCH,DELETE     /api/v1/spaces/{id}
+
+GET,POST                 /api/v1/pages
+GET,PUT,PATCH,DELETE     /api/v1/pages/{id}
+
+GET,POST                 /api/v1/comments
+PUT,PATCH,DELETE          /api/v1/comments/{id}
+
+GET                       /api/v1/search
+GET,POST                  /api/v1/users
+GET,PUT,PATCH,DELETE      /api/v1/users/{id}
+
+GET,POST                  /api/v1/groups
+GET,PUT,PATCH,DELETE      /api/v1/groups/{id}
+
+GET,POST                  /api/v1/roles
+GET,PUT,PATCH,DELETE      /api/v1/roles/{id}
+GET                       /api/v1/permissions
+
+GET                       /api/v1/tags
+GET                       /api/v1/tags/{id}
+
+GET,POST                  /api/v1/attachments
+GET,PATCH,DELETE          /api/v1/attachments/{id}
+POST                      /api/v1/attachments/{id}/version
+GET                       /api/v1/attachments/{id}/download
+GET                       /api/v1/attachments/{id}/versions/{version}/download
+```
+
+`GET /api/v1/search` remains backward-compatible with page search by default. Use `type=all|space|user|comment|attachment|tag` to enable multi-type search. The endpoint also accepts Space, author, tag and created/updated date filters.
+
+API responses are rate-limited by token and source IP. Attachment binary responses are authorized before the protected file is streamed.
