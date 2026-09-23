@@ -67,14 +67,17 @@ final class ImageServiceTest extends TestCase
     public function testImageThumbnailAndInlineMaterialization(): void
     {
         [$userId, $pageId] = $this->fixture();
-        $png = base64_decode(
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlYsAAAAASUVORK5CYII=',
-            true
-        );
-        self::assertIsString($png);
-
         $source = $this->basePath . '/pixel.png';
-        file_put_contents($source, $png);
+        $generated = imagecreatetruecolor(8, 4);
+        self::assertNotFalse($generated);
+        $background = imagecolorallocate($generated, 240, 240, 240);
+        self::assertNotFalse($background);
+        imagefill($generated, 0, 0, $background);
+        self::assertTrue(imagepng($generated, $source));
+        imagedestroy($generated);
+
+        $png = file_get_contents($source);
+        self::assertIsString($png);
 
         $attachments = new AttachmentService($this->database, $this->basePath);
         $attachmentId = $attachments->createFromSource($pageId, $userId, $source, 'pixel.png');
@@ -83,14 +86,14 @@ final class ImageServiceTest extends TestCase
 
         $images = new ImageService($attachments, $this->basePath);
         $info = $images->inspectAttachment($attachment);
-        self::assertSame(1, $info['width']);
-        self::assertSame(1, $info['height']);
+        self::assertSame(8, $info['width']);
+        self::assertSame(4, $info['height']);
         self::assertSame('image/png', $info['mime_type']);
 
         $thumbnail = $images->thumbnail($attachment, 320);
         self::assertFileExists($thumbnail['path']);
-        self::assertSame(1, $thumbnail['width']);
-        self::assertSame(1, $thumbnail['height']);
+        self::assertSame(8, $thumbnail['width']);
+        self::assertSame(4, $thumbnail['height']);
 
         $inline = new InlineImageService($this->database, $this->basePath);
         $result = $inline->materializeDataImages(
