@@ -133,6 +133,7 @@ $router->delete('/api/v1/templates/{id}', [ApiV1Controller::class, 'deleteTempla
 $router->get('/api/v1/webhooks', [ApiV1Controller::class, 'webhooks']);
 $router->post('/api/v1/webhooks', [ApiV1Controller::class, 'createWebhook']);
 $router->get('/api/v1/webhooks/{id}', [ApiV1Controller::class, 'webhook']);
+$router->put('/api/v1/webhooks/{id}', [ApiV1Controller::class, 'updateWebhook']);
 $router->patch('/api/v1/webhooks/{id}', [ApiV1Controller::class, 'updateWebhook']);
 $router->delete('/api/v1/webhooks/{id}', [ApiV1Controller::class, 'deleteWebhook']);
 $router->get('/api/v1/webhooks/{id}/deliveries', [ApiV1Controller::class, 'webhookDeliveries']);
