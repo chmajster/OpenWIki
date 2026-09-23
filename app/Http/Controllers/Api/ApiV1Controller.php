@@ -1216,17 +1216,44 @@ final class ApiV1Controller extends Controller
 
         [$page, $perPage, $offset] = $this->pagination($request);
         $query = trim((string) $request->query('q', ''));
-        $rows = (new DirectoryAdminService(
-            $this->app->database()
-        ))->users($query);
+        $where = 'deleted_at IS NULL';
+        $params = [];
 
-        $total = count($rows);
+        if ($query !== '') {
+            $where .= ' AND (
+                username LIKE ?
+                OR email LIKE ?
+                OR first_name LIKE ?
+                OR last_name LIKE ?
+            )';
+            $like = '%' . $query . '%';
+            $params = [$like, $like, $like, $like];
+        }
+
+        $count = $this->app->database()->fetchOne(
+            'SELECT COUNT(*) AS total
+             FROM users
+             WHERE ' . $where,
+            $params
+        );
+        $rows = $this->app->database()->fetchAll(
+            'SELECT id, username, email, first_name, last_name,
+                    status, auth_source, force_password_change,
+                    last_login_at, created_at, updated_at
+             FROM users
+             WHERE ' . $where . '
+             ORDER BY username ASC
+             LIMIT ' . $perPage . ' OFFSET ' . $offset,
+            $params
+        );
+
         return Response::json([
-            'data' => array_map(
-                [$this, 'userResource'],
-                array_slice($rows, $offset, $perPage)
+            'data' => array_map([$this, 'userResource'], $rows),
+            'meta' => $this->paginationMeta(
+                $page,
+                $perPage,
+                (int) ($count['total'] ?? 0)
             ),
-            'meta' => $this->paginationMeta($page, $perPage, $total),
         ]);
     }
 
@@ -1468,17 +1495,27 @@ final class ApiV1Controller extends Controller
         }
 
         [$page, $perPage, $offset] = $this->pagination($request);
-        $rows = (new DirectoryAdminService(
-            $this->app->database()
-        ))->groups();
+        $count = $this->app->database()->fetchOne(
+            'SELECT COUNT(*) AS total FROM user_groups'
+        );
+        $rows = $this->app->database()->fetchAll(
+            'SELECT g.id, g.name, g.slug, g.description,
+                    g.source, g.external_id, g.created_at, g.updated_at,
+                    COUNT(gu.user_id) AS member_count
+             FROM user_groups g
+             LEFT JOIN group_users gu ON gu.group_id = g.id
+             GROUP BY g.id
+             ORDER BY g.name ASC
+             LIMIT ' . $perPage . ' OFFSET ' . $offset
+        );
 
-        $total = count($rows);
         return Response::json([
-            'data' => array_map(
-                [$this, 'groupResource'],
-                array_slice($rows, $offset, $perPage)
+            'data' => array_map([$this, 'groupResource'], $rows),
+            'meta' => $this->paginationMeta(
+                $page,
+                $perPage,
+                (int) ($count['total'] ?? 0)
             ),
-            'meta' => $this->paginationMeta($page, $perPage, $total),
         ]);
     }
 
