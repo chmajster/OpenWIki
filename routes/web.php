@@ -86,17 +86,30 @@ $router->post('/account/api-tokens/{id}/revoke', [ApiTokenController::class, 're
 
 $router->get('/api/v1/spaces', [ApiV1Controller::class, 'spaces']);
 $router->post('/api/v1/spaces', [ApiV1Controller::class, 'createSpace']);
+$router->get('/api/v1/spaces/{id}', [ApiV1Controller::class, 'space']);
+$router->put('/api/v1/spaces/{id}', [ApiV1Controller::class, 'updateSpace']);
+$router->patch('/api/v1/spaces/{id}', [ApiV1Controller::class, 'updateSpace']);
+$router->delete('/api/v1/spaces/{id}', [ApiV1Controller::class, 'deleteSpace']);
 $router->get('/api/v1/pages', [ApiV1Controller::class, 'pages']);
 $router->post('/api/v1/pages', [ApiV1Controller::class, 'createPage']);
 $router->get('/api/v1/pages/{id}', [ApiV1Controller::class, 'page']);
 $router->put('/api/v1/pages/{id}', [ApiV1Controller::class, 'updatePage']);
 $router->patch('/api/v1/pages/{id}', [ApiV1Controller::class, 'updatePage']);
 $router->delete('/api/v1/pages/{id}', [ApiV1Controller::class, 'deletePage']);
+$router->get('/api/v1/comments', [ApiV1Controller::class, 'comments']);
+$router->post('/api/v1/comments', [ApiV1Controller::class, 'createComment']);
+$router->put('/api/v1/comments/{id}', [ApiV1Controller::class, 'updateComment']);
+$router->patch('/api/v1/comments/{id}', [ApiV1Controller::class, 'updateComment']);
+$router->delete('/api/v1/comments/{id}', [ApiV1Controller::class, 'deleteComment']);
 $router->get('/api/v1/search', [ApiV1Controller::class, 'search']);
 $router->get('/api/v1/users', [ApiV1Controller::class, 'users']);
 $router->get('/api/v1/groups', [ApiV1Controller::class, 'groups']);
 $router->get('/api/v1/tags', [ApiV1Controller::class, 'tags']);
 $router->get('/api/v1/attachments', [ApiV1Controller::class, 'attachments']);
+$router->get('/api/v1/attachments/{id}', [ApiV1Controller::class, 'attachment']);
+$router->post('/api/v1/attachments', [ApiV1Controller::class, 'uploadAttachment']);
+$router->post('/api/v1/attachments/{id}/version', [ApiV1Controller::class, 'uploadAttachmentVersion']);
+$router->delete('/api/v1/attachments/{id}', [ApiV1Controller::class, 'deleteAttachment']);
 
 $router->post('/spaces/{spaceKey}/pages/{slug}/comments', [CommentController::class, 'create']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/comments/{id}/edit', [CommentController::class, 'update']);
