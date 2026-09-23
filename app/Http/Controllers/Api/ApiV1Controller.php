@@ -124,6 +124,188 @@ final class ApiV1Controller extends Controller
         }
     }
 
+    public function space(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'spaces:read', 'space.view');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $spaceId = $this->positiveId($id);
+        if ($spaceId === null) {
+            return $this->error('not_found', 'Space not found.', 404);
+        }
+
+        $space = $this->app->database()->fetchOne(
+            'SELECT * FROM spaces WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+            ['id' => $spaceId]
+        );
+        if ($space === null || !(new SpaceAccessService($this->app))->canViewFor(
+            $space,
+            (int) $context['user']['id'],
+            $this->isSuperAdmin($context)
+        )) {
+            return $this->error('not_found', 'Space not found.', 404);
+        }
+
+        return Response::json(['data' => $this->spaceResource($space)]);
+    }
+
+    public function updateSpace(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'spaces:write', 'space.edit');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $spaceId = $this->positiveId($id);
+        if ($spaceId === null) {
+            return $this->error('not_found', 'Space not found.', 404);
+        }
+
+        $space = $this->app->database()->fetchOne(
+            'SELECT * FROM spaces WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+            ['id' => $spaceId]
+        );
+        if ($space === null) {
+            return $this->error('not_found', 'Space not found.', 404);
+        }
+
+        if (!(new SpaceAccessService($this->app))->canEditFor(
+            $space,
+            (int) $context['user']['id'],
+            $this->isSuperAdmin($context)
+        )) {
+            return $this->error('forbidden', 'You cannot edit this Space.', 403);
+        }
+
+        try {
+            $name = trim((string) $request->input('name', $space['name']));
+            if ($name === '' || mb_strlen($name) > 191) {
+                throw new \InvalidArgumentException(
+                    'Space name is required and may contain at most 191 characters.'
+                );
+            }
+
+            $description = trim((string) $request->input(
+                'description',
+                (string) ($space['description'] ?? '')
+            ));
+            if (mb_strlen($description) > 5000) {
+                throw new \InvalidArgumentException(
+                    'Space description may contain at most 5000 characters.'
+                );
+            }
+
+            $visibility = (string) $request->input('visibility', $space['visibility']);
+            if (!in_array($visibility, ['public', 'private', 'restricted'], true)) {
+                throw new \InvalidArgumentException('Invalid Space visibility.');
+            }
+
+            $before = [
+                'name' => $space['name'],
+                'description' => $space['description'],
+                'visibility' => $space['visibility'],
+            ];
+
+            $this->app->database()->execute(
+                'UPDATE spaces
+                 SET name = :name,
+                     description = :description,
+                     visibility = :visibility,
+                     updated_at = UTC_TIMESTAMP()
+                 WHERE id = :id AND deleted_at IS NULL',
+                [
+                    'name' => $name,
+                    'description' => $description === '' ? null : $description,
+                    'visibility' => $visibility,
+                    'id' => $spaceId,
+                ]
+            );
+
+            $updated = $this->app->database()->fetchOne(
+                'SELECT * FROM spaces WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+                ['id' => $spaceId]
+            );
+            if ($updated === null) {
+                throw new \RuntimeException('Updated Space cannot be resolved.');
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'SPACE_UPDATED',
+                'space',
+                $spaceId,
+                (int) $context['user']['id'],
+                $request,
+                $before,
+                [
+                    'name' => $updated['name'],
+                    'description' => $updated['description'],
+                    'visibility' => $updated['visibility'],
+                ]
+            );
+
+            return Response::json(['data' => $this->spaceResource($updated)]);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error('validation_error', $exception->getMessage(), 422);
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API space update] ' . $exception->getMessage());
+            return $this->error('server_error', 'Unable to update Space.', 500);
+        }
+    }
+
+    public function deleteSpace(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'spaces:write', 'space.delete');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $spaceId = $this->positiveId($id);
+        if ($spaceId === null) {
+            return $this->error('not_found', 'Space not found.', 404);
+        }
+
+        $space = $this->app->database()->fetchOne(
+            'SELECT * FROM spaces WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+            ['id' => $spaceId]
+        );
+        if ($space === null) {
+            return $this->error('not_found', 'Space not found.', 404);
+        }
+
+        if (!(new SpaceAccessService($this->app))->canEditFor(
+            $space,
+            (int) $context['user']['id'],
+            $this->isSuperAdmin($context)
+        )) {
+            return $this->error('forbidden', 'You cannot delete this Space.', 403);
+        }
+
+        $this->app->database()->execute(
+            'UPDATE spaces
+             SET deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
+             WHERE id = :id AND deleted_at IS NULL',
+            ['id' => $spaceId]
+        );
+
+        (new AuditLogger($this->app->database()))->log(
+            'SPACE_DELETED',
+            'space',
+            $spaceId,
+            (int) $context['user']['id'],
+            $request,
+            [
+                'name' => $space['name'],
+                'space_key' => $space['space_key'],
+                'visibility' => $space['visibility'],
+            ],
+            ['deleted' => true]
+        );
+
+        return new Response('', 204);
+    }
+
     public function pages(Request $request): Response
     {
         [$context, $failure] = $this->apiAuth($request, 'pages:read', 'page.view');
