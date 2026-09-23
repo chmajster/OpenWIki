@@ -981,73 +981,481 @@ final class ApiV1Controller extends Controller
 
     public function users(Request $request): Response
     {
-        [$context, $failure] = $this->apiAuth($request, 'users:read', 'user.manage');
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'users:read',
+            'user.manage'
+        );
         if ($failure !== null) {
             return $failure;
         }
 
         [$page, $perPage, $offset] = $this->pagination($request);
         $query = trim((string) $request->query('q', ''));
-        $where = 'deleted_at IS NULL';
-        $params = [];
-        if ($query !== '') {
-            $where .= ' AND (username LIKE ? OR email LIKE ? OR first_name LIKE ? OR last_name LIKE ?)';
-            $like = '%' . $query . '%';
-            $params = [$like, $like, $like, $like];
+        $rows = (new DirectoryAdminService(
+            $this->app->database()
+        ))->users($query);
+
+        $total = count($rows);
+        return Response::json([
+            'data' => array_map(
+                [$this, 'userResource'],
+                array_slice($rows, $offset, $perPage)
+            ),
+            'meta' => $this->paginationMeta($page, $perPage, $total),
+        ]);
+    }
+
+    public function user(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'users:read',
+            'user.manage'
+        );
+        if ($failure !== null) {
+            return $failure;
         }
 
-        $count = $this->app->database()->fetchOne('SELECT COUNT(*) AS total FROM users WHERE ' . $where, $params);
-        $rows = $this->app->database()->fetchAll(
-            'SELECT id, username, email, first_name, last_name, status, auth_source, last_login_at, created_at, updated_at
-             FROM users WHERE ' . $where . '
-             ORDER BY username ASC LIMIT ' . $perPage . ' OFFSET ' . $offset,
-            $params
-        );
+        $userId = $this->positiveId($id);
+        $user = $userId === null
+            ? null
+            : (new DirectoryAdminService(
+                $this->app->database()
+            ))->user($userId);
+
+        if ($user === null) {
+            return $this->error('not_found', 'User not found.', 404);
+        }
 
         return Response::json([
-            'data' => array_map(static fn (array $row): array => [
-                'id' => (int) $row['id'],
-                'username' => $row['username'],
-                'email' => $row['email'],
-                'first_name' => $row['first_name'],
-                'last_name' => $row['last_name'],
-                'status' => $row['status'],
-                'auth_source' => $row['auth_source'],
-                'last_login_at' => $row['last_login_at'],
-                'created_at' => $row['created_at'],
-                'updated_at' => $row['updated_at'],
-            ], $rows),
-            'meta' => $this->paginationMeta($page, $perPage, (int) ($count['total'] ?? 0)),
+            'data' => $this->userResource($user),
         ]);
+    }
+
+    public function createUser(Request $request): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'users:write',
+            'user.manage'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        try {
+            $service = new DirectoryAdminService($this->app->database());
+            $userId = $service->createUser((array) $request->input());
+            $user = $service->user($userId);
+            if ($user === null) {
+                throw new \RuntimeException('Created user cannot be resolved.');
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'USER_CREATED',
+                'user',
+                $userId,
+                (int) $context['user']['id'],
+                $request,
+                null,
+                [
+                    'username' => $user['username'],
+                    'email' => $user['email'],
+                    'source' => 'api',
+                ]
+            );
+
+            return Response::json([
+                'data' => $this->userResource($user),
+            ], 201);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error(
+                'validation_error',
+                $exception->getMessage(),
+                422
+            );
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API user create] ' . $exception->getMessage());
+            return $this->error(
+                'server_error',
+                'Unable to create user.',
+                500
+            );
+        }
+    }
+
+    public function updateUser(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'users:write',
+            'user.manage'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $userId = $this->positiveId($id);
+        $service = new DirectoryAdminService($this->app->database());
+        $existing = $userId === null ? null : $service->user($userId);
+        if ($existing === null) {
+            return $this->error('not_found', 'User not found.', 404);
+        }
+
+        $input = (array) $request->input();
+        $merged = [
+            'username' => $input['username'] ?? $existing['username'],
+            'email' => $input['email'] ?? $existing['email'],
+            'first_name' => $input['first_name'] ?? $existing['first_name'],
+            'last_name' => $input['last_name'] ?? $existing['last_name'],
+            'status' => $input['status'] ?? $existing['status'],
+            'force_password_change' => array_key_exists(
+                'force_password_change',
+                $input
+            )
+                ? $input['force_password_change']
+                : (int) $existing['force_password_change'],
+            'role_ids' => $input['role_ids'] ?? $existing['role_ids'],
+            'group_ids' => $input['group_ids'] ?? $existing['group_ids'],
+        ];
+
+        if ($existing['auth_source'] === 'ldap') {
+            $merged['username'] = $existing['username'];
+            $merged['email'] = $existing['email'];
+            $merged['first_name'] = $existing['first_name'];
+            $merged['last_name'] = $existing['last_name'];
+        }
+
+        if (
+            $userId === (int) $context['user']['id']
+            && ($merged['status'] ?? 'active') !== 'active'
+        ) {
+            return $this->error(
+                'validation_error',
+                'The current API account cannot disable or lock itself.',
+                422
+            );
+        }
+
+        try {
+            $service->updateUser($userId, $merged);
+            $updated = $service->user($userId);
+            if ($updated === null) {
+                throw new \RuntimeException('Updated user cannot be resolved.');
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'USER_UPDATED',
+                'user',
+                $userId,
+                (int) $context['user']['id'],
+                $request,
+                [
+                    'username' => $existing['username'],
+                    'email' => $existing['email'],
+                    'status' => $existing['status'],
+                ],
+                [
+                    'username' => $updated['username'],
+                    'email' => $updated['email'],
+                    'status' => $updated['status'],
+                    'source' => 'api',
+                ]
+            );
+
+            return Response::json([
+                'data' => $this->userResource($updated),
+            ]);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error(
+                'validation_error',
+                $exception->getMessage(),
+                422
+            );
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API user update] ' . $exception->getMessage());
+            return $this->error(
+                'server_error',
+                'Unable to update user.',
+                500
+            );
+        }
+    }
+
+    public function deleteUser(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'users:write',
+            'user.manage'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $userId = $this->positiveId($id);
+        if ($userId === null) {
+            return $this->error('not_found', 'User not found.', 404);
+        }
+        if ($userId === (int) $context['user']['id']) {
+            return $this->error(
+                'validation_error',
+                'The current API account cannot delete itself.',
+                422
+            );
+        }
+
+        $service = new DirectoryAdminService($this->app->database());
+        $existing = $service->user($userId);
+        if ($existing === null) {
+            return $this->error('not_found', 'User not found.', 404);
+        }
+
+        if (!$service->softDeleteUser($userId)) {
+            return $this->error('not_found', 'User not found.', 404);
+        }
+
+        (new AuditLogger($this->app->database()))->log(
+            'USER_DELETED',
+            'user',
+            $userId,
+            (int) $context['user']['id'],
+            $request,
+            [
+                'username' => $existing['username'],
+                'email' => $existing['email'],
+            ],
+            ['deleted' => true, 'source' => 'api']
+        );
+
+        return new Response('', 204);
     }
 
     public function groups(Request $request): Response
     {
-        [$context, $failure] = $this->apiAuth($request, 'groups:read', 'group.manage');
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'groups:read',
+            'group.manage'
+        );
         if ($failure !== null) {
             return $failure;
         }
 
         [$page, $perPage, $offset] = $this->pagination($request);
-        $count = $this->app->database()->fetchOne('SELECT COUNT(*) AS total FROM user_groups');
-        $rows = $this->app->database()->fetchAll(
-            'SELECT g.id, g.name, g.slug, g.description, g.source, g.external_id, g.created_at, g.updated_at,
-                    COUNT(gu.user_id) AS member_count
-             FROM user_groups g
-             LEFT JOIN group_users gu ON gu.group_id = g.id
-             GROUP BY g.id
-             ORDER BY g.name ASC
-             LIMIT ' . $perPage . ' OFFSET ' . $offset
+        $rows = (new DirectoryAdminService(
+            $this->app->database()
+        ))->groups();
+
+        $total = count($rows);
+        return Response::json([
+            'data' => array_map(
+                [$this, 'groupResource'],
+                array_slice($rows, $offset, $perPage)
+            ),
+            'meta' => $this->paginationMeta($page, $perPage, $total),
+        ]);
+    }
+
+    public function group(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'groups:read',
+            'group.manage'
         );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $groupId = $this->positiveId($id);
+        $group = $groupId === null
+            ? null
+            : (new DirectoryAdminService(
+                $this->app->database()
+            ))->group($groupId);
+
+        if ($group === null) {
+            return $this->error('not_found', 'Group not found.', 404);
+        }
 
         return Response::json([
-            'data' => array_map(static function (array $row): array {
-                $row['id'] = (int) $row['id'];
-                $row['member_count'] = (int) $row['member_count'];
-                return $row;
-            }, $rows),
-            'meta' => $this->paginationMeta($page, $perPage, (int) ($count['total'] ?? 0)),
+            'data' => $this->groupResource($group),
         ]);
+    }
+
+    public function createGroup(Request $request): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'groups:write',
+            'group.manage'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        try {
+            $service = new DirectoryAdminService($this->app->database());
+            $groupId = $service->saveGroup(
+                null,
+                (array) $request->input()
+            );
+            $group = $service->group($groupId);
+            if ($group === null) {
+                throw new \RuntimeException('Created group cannot be resolved.');
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'GROUP_CREATED',
+                'group',
+                $groupId,
+                (int) $context['user']['id'],
+                $request,
+                null,
+                [
+                    'name' => $group['name'],
+                    'slug' => $group['slug'],
+                    'source' => 'api',
+                ]
+            );
+
+            return Response::json([
+                'data' => $this->groupResource($group),
+            ], 201);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error(
+                'validation_error',
+                $exception->getMessage(),
+                422
+            );
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API group create] ' . $exception->getMessage());
+            return $this->error(
+                'server_error',
+                'Unable to create group.',
+                500
+            );
+        }
+    }
+
+    public function updateGroup(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'groups:write',
+            'group.manage'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $groupId = $this->positiveId($id);
+        $service = new DirectoryAdminService($this->app->database());
+        $existing = $groupId === null ? null : $service->group($groupId);
+        if ($existing === null) {
+            return $this->error('not_found', 'Group not found.', 404);
+        }
+
+        $input = (array) $request->input();
+        $merged = [
+            'name' => $input['name'] ?? $existing['name'],
+            'slug' => $input['slug'] ?? $existing['slug'],
+            'description' => $input['description'] ?? $existing['description'],
+            'user_ids' => $input['user_ids'] ?? $existing['user_ids'],
+        ];
+
+        try {
+            $service->saveGroup($groupId, $merged);
+            $updated = $service->group($groupId);
+            if ($updated === null) {
+                throw new \RuntimeException('Updated group cannot be resolved.');
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'GROUP_UPDATED',
+                'group',
+                $groupId,
+                (int) $context['user']['id'],
+                $request,
+                [
+                    'name' => $existing['name'],
+                    'slug' => $existing['slug'],
+                    'source' => $existing['source'],
+                ],
+                [
+                    'name' => $updated['name'],
+                    'slug' => $updated['slug'],
+                    'source' => $updated['source'],
+                    'api' => true,
+                ]
+            );
+
+            return Response::json([
+                'data' => $this->groupResource($updated),
+            ]);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error(
+                'validation_error',
+                $exception->getMessage(),
+                422
+            );
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API group update] ' . $exception->getMessage());
+            return $this->error(
+                'server_error',
+                'Unable to update group.',
+                500
+            );
+        }
+    }
+
+    public function deleteGroup(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'groups:write',
+            'group.manage'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $groupId = $this->positiveId($id);
+        $service = new DirectoryAdminService($this->app->database());
+        $existing = $groupId === null ? null : $service->group($groupId);
+        if ($existing === null) {
+            return $this->error('not_found', 'Group not found.', 404);
+        }
+
+        try {
+            if (!$service->deleteGroup($groupId)) {
+                return $this->error('not_found', 'Group not found.', 404);
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'GROUP_DELETED',
+                'group',
+                $groupId,
+                (int) $context['user']['id'],
+                $request,
+                [
+                    'name' => $existing['name'],
+                    'slug' => $existing['slug'],
+                    'source' => $existing['source'],
+                ],
+                ['deleted' => true, 'api' => true]
+            );
+
+            return new Response('', 204);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error(
+                'validation_error',
+                $exception->getMessage(),
+                422
+            );
+        }
     }
 
     public function tags(Request $request): Response
@@ -1934,6 +2342,56 @@ final class ApiV1Controller extends Controller
             'status' => $space['status'],
             'created_at' => $space['created_at'] ?? null,
             'updated_at' => $space['updated_at'] ?? null,
+        ];
+    }
+
+    private function userResource(array $user): array
+    {
+        return [
+            'id' => (int) $user['id'],
+            'username' => $user['username'],
+            'email' => $user['email'],
+            'first_name' => $user['first_name'],
+            'last_name' => $user['last_name'],
+            'status' => $user['status'],
+            'auth_source' => $user['auth_source'],
+            'force_password_change' => (bool) (
+                $user['force_password_change'] ?? false
+            ),
+            'role_ids' => array_values(array_map(
+                'intval',
+                $user['role_ids'] ?? []
+            )),
+            'group_ids' => array_values(array_map(
+                'intval',
+                $user['group_ids'] ?? []
+            )),
+            'roles' => $user['role_names'] ?? null,
+            'groups' => $user['group_names'] ?? null,
+            'last_login_at' => $user['last_login_at'],
+            'created_at' => $user['created_at'],
+            'updated_at' => $user['updated_at'],
+        ];
+    }
+
+    private function groupResource(array $group): array
+    {
+        return [
+            'id' => (int) $group['id'],
+            'name' => $group['name'],
+            'slug' => $group['slug'],
+            'description' => $group['description'],
+            'source' => $group['source'],
+            'external_id' => $group['external_id'],
+            'user_ids' => array_values(array_map(
+                'intval',
+                $group['user_ids'] ?? []
+            )),
+            'member_count' => isset($group['member_count'])
+                ? (int) $group['member_count']
+                : count($group['user_ids'] ?? []),
+            'created_at' => $group['created_at'],
+            'updated_at' => $group['updated_at'],
         ];
     }
 
