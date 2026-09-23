@@ -2988,7 +2988,13 @@ final class ApiV1Controller extends Controller
                 ['status' => $status]
             );
 
-            return $this->webhook($request, $id);
+            foreach ($service->webhooks() as $row) {
+                if ((int) $row['id'] === $webhookId) {
+                    return Response::json(['data' => $this->webhookResource($row)]);
+                }
+            }
+
+            return $this->error('not_found', 'Webhook not found.', 404);
         } catch (\InvalidArgumentException $exception) {
             return $this->error('validation_error', $exception->getMessage(), 422);
         }
