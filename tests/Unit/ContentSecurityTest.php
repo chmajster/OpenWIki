@@ -21,6 +21,23 @@ final class ContentSecurityTest extends TestCase
         self::assertStringContainsString('Safe', $output);
     }
 
+    public function testImageFigureKeepsSafeMetadataAndDropsActiveAttributes(): void
+    {
+        $input = '<figure><img src="/attachments/1/thumbnail?width=640" alt="Diagram" width="640" '
+            . 'data-attachment-id="1" data-original-width="1200" data-original-height="800" '
+            . 'style="width:9999px" onerror="alert(1)"><figcaption>Topology</figcaption></figure>';
+
+        $output = (new HtmlSanitizer())->sanitize($input);
+
+        self::assertStringContainsString('<figure>', $output);
+        self::assertStringContainsString('<figcaption>Topology</figcaption>', $output);
+        self::assertStringContainsString('data-attachment-id="1"', $output);
+        self::assertStringContainsString('data-original-width="1200"', $output);
+        self::assertStringContainsString('width="640"', $output);
+        self::assertStringNotContainsString('style=', $output);
+        self::assertStringNotContainsString('onerror=', $output);
+    }
+
     public function testMarkdownEscapesRawHtml(): void
     {
         $output = (new MarkdownRenderer())->render('# Title' . "\n\n" . '<script>alert(1)</script>');
