@@ -25,6 +25,10 @@ final class ApiTokenService
         'tags:read',
         'attachments:read',
         'attachments:write',
+        'templates:read',
+        'templates:write',
+        'webhooks:read',
+        'webhooks:write',
     ];
 
     public function __construct(private readonly Database $database)
