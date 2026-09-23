@@ -937,7 +937,11 @@ final class ApiV1Controller extends Controller
 
     public function search(Request $request): Response
     {
-        [$context, $failure] = $this->apiAuth($request, 'search:read', 'page.view');
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'search:read',
+            'page.view'
+        );
         if ($failure !== null) {
             return $failure;
         }
@@ -947,35 +951,266 @@ final class ApiV1Controller extends Controller
             return $this->error('validation_error', 'q is required.', 422);
         }
         if (mb_strlen($query) > 200) {
-            return $this->error('validation_error', 'q may contain at most 200 characters.', 422);
+            return $this->error(
+                'validation_error',
+                'q may contain at most 200 characters.',
+                422
+            );
+        }
+
+        $type = strtolower(trim((string) $request->query('type', 'page')));
+        $types = [
+            'page',
+            'all',
+            'space',
+            'user',
+            'comment',
+            'attachment',
+            'tag',
+        ];
+        if (!in_array($type, $types, true)) {
+            return $this->error(
+                'validation_error',
+                'Invalid search type.',
+                422
+            );
+        }
+
+        try {
+            $filters = $this->apiSearchFilters($request);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error(
+                'validation_error',
+                $exception->getMessage(),
+                422
+            );
         }
 
         [$page, $perPage, $offset] = $this->pagination($request);
-        $raw = (new SearchRepository($this->app->database()))->searchPages($query, 100);
-        $filtered = [];
+        $repository = new SearchRepository($this->app->database());
+        $results = [];
 
-        foreach ($raw as $row) {
-            $pageRow = $this->pageRow((int) $row['id']);
-            if ($pageRow === null || !$this->canViewPage($context, $pageRow)) {
-                continue;
+        if ($type === 'page' || $type === 'all') {
+            foreach (
+                $repository->searchPages($query, $filters, 200)
+                as $row
+            ) {
+                $pageRow = $this->pageRow((int) $row['id']);
+                if (
+                    $pageRow === null
+                    || !$this->canViewPage($context, $pageRow)
+                ) {
+                    continue;
+                }
+
+                $results[] = [
+                    'type' => 'page',
+                    'id' => (int) $row['id'],
+                    'title' => $row['title'],
+                    'slug' => $row['slug'],
+                    'space' => [
+                        'id' => (int) $row['space_id'],
+                        'key' => $row['space_key'],
+                        'name' => $row['space_name'],
+                    ],
+                    'status' => $row['status'],
+                    'updated_at' => $row['updated_at'],
+                    'relevance' => (int) $row['relevance'],
+                    'snippet' => mb_substr(
+                        trim((string) $row['content_text']),
+                        0,
+                        240
+                    ),
+                ];
             }
-
-            $filtered[] = [
-                'id' => (int) $row['id'],
-                'title' => $row['title'],
-                'slug' => $row['slug'],
-                'space' => ['id' => (int) $row['space_id'], 'key' => $row['space_key'], 'name' => $row['space_name']],
-                'status' => $row['status'],
-                'updated_at' => $row['updated_at'],
-                'relevance' => (int) $row['relevance'],
-                'snippet' => mb_substr(trim((string) $row['content_text']), 0, 240),
-            ];
         }
 
-        $total = count($filtered);
+        if (
+            ($type === 'space' || $type === 'all')
+            && $filters['author'] === ''
+            && $filters['tag'] === ''
+        ) {
+            $spaceAccess = new SpaceAccessService($this->app);
+            foreach (
+                $repository->searchSpaces($query, $filters, 100)
+                as $row
+            ) {
+                if (!$spaceAccess->canViewFor(
+                    $row,
+                    (int) $context['user']['id'],
+                    $this->isSuperAdmin($context)
+                )) {
+                    continue;
+                }
+
+                $results[] = [
+                    'type' => 'space',
+                    'id' => (int) $row['id'],
+                    'name' => $row['name'],
+                    'key' => $row['space_key'],
+                    'description' => $row['description'],
+                    'visibility' => $row['visibility'],
+                    'status' => $row['status'],
+                    'updated_at' => $row['updated_at'],
+                    'relevance' => (int) $row['relevance'],
+                ];
+            }
+        }
+
+        if (
+            ($type === 'user' || $type === 'all')
+            && $filters['space'] === ''
+            && $filters['tag'] === ''
+        ) {
+            foreach (
+                $repository->searchUsers($query, $filters, 100)
+                as $row
+            ) {
+                $results[] = [
+                    'type' => 'user',
+                    'id' => (int) $row['id'],
+                    'username' => $row['username'],
+                    'first_name' => $row['first_name'],
+                    'last_name' => $row['last_name'],
+                    'status' => $row['status'],
+                    'auth_source' => $row['auth_source'],
+                    'updated_at' => $row['updated_at'],
+                    'relevance' => (int) $row['relevance'],
+                ];
+            }
+        }
+
+        if ($type === 'comment' || $type === 'all') {
+            foreach (
+                $repository->searchComments($query, $filters, 150)
+                as $row
+            ) {
+                $pageRow = $this->pageRow((int) $row['id']);
+                if (
+                    $pageRow === null
+                    || !$this->canViewPage($context, $pageRow)
+                ) {
+                    continue;
+                }
+
+                $plain = html_entity_decode(
+                    strip_tags((string) $row['body_html']),
+                    ENT_QUOTES | ENT_HTML5,
+                    'UTF-8'
+                );
+
+                $results[] = [
+                    'type' => 'comment',
+                    'id' => (int) $row['comment_id'],
+                    'page_id' => (int) $row['id'],
+                    'page_title' => $row['title'],
+                    'space' => [
+                        'key' => $row['space_key'],
+                        'name' => $row['space_name'],
+                    ],
+                    'author' => $row['comment_author_username'],
+                    'snippet' => mb_substr(trim($plain), 0, 240),
+                    'updated_at' => $row['updated_at'],
+                    'relevance' => (int) $row['relevance'],
+                ];
+            }
+        }
+
+        if ($type === 'attachment' || $type === 'all') {
+            foreach (
+                $repository->searchAttachments(
+                    $query,
+                    $filters,
+                    150
+                ) as $row
+            ) {
+                $pageRow = $this->pageRow((int) $row['id']);
+                if (
+                    $pageRow === null
+                    || !$this->canViewPage($context, $pageRow)
+                ) {
+                    continue;
+                }
+
+                $results[] = [
+                    'type' => 'attachment',
+                    'id' => (int) $row['attachment_id'],
+                    'name' => $row['attachment_name'],
+                    'mime_type' => $row['mime_type'],
+                    'size_bytes' => (int) $row['size_bytes'],
+                    'page_id' => (int) $row['id'],
+                    'page_title' => $row['title'],
+                    'space' => [
+                        'key' => $row['space_key'],
+                        'name' => $row['space_name'],
+                    ],
+                    'updated_at' => $row['updated_at'],
+                    'relevance' => (int) $row['relevance'],
+                ];
+            }
+        }
+
+        if ($type === 'tag' || $type === 'all') {
+            $metadata = new WikiMetadataService(
+                $this->app->database()
+            );
+
+            foreach ($repository->searchTags($query, 100) as $row) {
+                $visible = 0;
+                foreach (
+                    $metadata->pagesForTag((string) $row['slug'])
+                    as $tagPage
+                ) {
+                    if ($this->canViewPage($context, $tagPage)) {
+                        $visible++;
+                    }
+                }
+
+                if ($visible === 0) {
+                    continue;
+                }
+
+                $results[] = [
+                    'type' => 'tag',
+                    'id' => (int) $row['id'],
+                    'name' => $row['name'],
+                    'slug' => $row['slug'],
+                    'page_count' => $visible,
+                    'updated_at' => $row['created_at'],
+                    'relevance' => (int) $row['relevance'],
+                ];
+            }
+        }
+
+        usort(
+            $results,
+            static function (array $left, array $right): int {
+                $relevance = (int) $right['relevance']
+                    <=> (int) $left['relevance'];
+                if ($relevance !== 0) {
+                    return $relevance;
+                }
+
+                return strcmp(
+                    (string) ($right['updated_at'] ?? ''),
+                    (string) ($left['updated_at'] ?? '')
+                );
+            }
+        );
+
+        $total = count($results);
+
         return Response::json([
-            'data' => array_slice($filtered, $offset, $perPage),
-            'meta' => $this->paginationMeta($page, $perPage, $total),
+            'data' => array_slice(
+                $results,
+                $offset,
+                $perPage
+            ),
+            'meta' => $this->paginationMeta(
+                $page,
+                $perPage,
+                $total
+            ) + ['type' => $type],
         ]);
     }
 
@@ -2604,6 +2839,62 @@ final class ApiV1Controller extends Controller
     private function isSuperAdmin(array $context): bool
     {
         return in_array('*', $context['permissions'] ?? [], true);
+    }
+
+    private function apiSearchFilters(Request $request): array
+    {
+        $filters = [
+            'space' => mb_substr(
+                trim((string) $request->query('space', '')),
+                0,
+                191
+            ),
+            'author' => mb_substr(
+                trim((string) $request->query('author', '')),
+                0,
+                100
+            ),
+            'tag' => mb_substr(
+                trim((string) $request->query('tag', '')),
+                0,
+                100
+            ),
+        ];
+
+        foreach ([
+            'created_from' => false,
+            'created_to' => true,
+            'updated_from' => false,
+            'updated_to' => true,
+        ] as $field => $endOfDay) {
+            $value = trim((string) $request->query($field, ''));
+            if ($value === '') {
+                $filters[$field] = '';
+                continue;
+            }
+
+            if (
+                preg_match(
+                    '/^(\d{4})-(\d{2})-(\d{2})$/',
+                    $value,
+                    $match
+                ) !== 1
+                || !checkdate(
+                    (int) $match[2],
+                    (int) $match[3],
+                    (int) $match[1]
+                )
+            ) {
+                throw new \InvalidArgumentException(
+                    'Invalid date filter: ' . $field . '.'
+                );
+            }
+
+            $filters[$field] = $value
+                . ($endOfDay ? ' 23:59:59' : ' 00:00:00');
+        }
+
+        return $filters;
     }
 
     private function pagination(Request $request): array
