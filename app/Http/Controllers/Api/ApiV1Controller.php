@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OpenWiki\Http\Controllers\Api;
 
+use OpenWiki\Admin\DirectoryAdminService;
 use OpenWiki\Attachments\AttachmentService;
 use OpenWiki\Audit\AuditLogger;
 use OpenWiki\Auth\ApiTokenService;
