@@ -1458,6 +1458,259 @@ final class ApiV1Controller extends Controller
         }
     }
 
+    public function roles(Request $request): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'roles:read',
+            'role.manage'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        [$page, $perPage, $offset] = $this->pagination($request);
+        $rows = (new DirectoryAdminService(
+            $this->app->database()
+        ))->roles();
+
+        $total = count($rows);
+        return Response::json([
+            'data' => array_map(
+                [$this, 'roleResource'],
+                array_slice($rows, $offset, $perPage)
+            ),
+            'meta' => $this->paginationMeta($page, $perPage, $total),
+        ]);
+    }
+
+    public function role(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'roles:read',
+            'role.manage'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $roleId = $this->positiveId($id);
+        $role = $roleId === null
+            ? null
+            : (new DirectoryAdminService(
+                $this->app->database()
+            ))->role($roleId);
+
+        if ($role === null) {
+            return $this->error('not_found', 'Role not found.', 404);
+        }
+
+        return Response::json([
+            'data' => $this->roleResource($role),
+        ]);
+    }
+
+    public function createRole(Request $request): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'roles:write',
+            'role.manage'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        try {
+            $service = new DirectoryAdminService($this->app->database());
+            $roleId = $service->saveRole(
+                null,
+                (array) $request->input()
+            );
+            $role = $service->role($roleId);
+            if ($role === null) {
+                throw new \RuntimeException('Created role cannot be resolved.');
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'ROLE_CREATED',
+                'role',
+                $roleId,
+                (int) $context['user']['id'],
+                $request,
+                null,
+                [
+                    'name' => $role['name'],
+                    'slug' => $role['slug'],
+                    'source' => 'api',
+                ]
+            );
+
+            return Response::json([
+                'data' => $this->roleResource($role),
+            ], 201);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error(
+                'validation_error',
+                $exception->getMessage(),
+                422
+            );
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API role create] ' . $exception->getMessage());
+            return $this->error(
+                'server_error',
+                'Unable to create role.',
+                500
+            );
+        }
+    }
+
+    public function updateRole(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'roles:write',
+            'role.manage'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $roleId = $this->positiveId($id);
+        $service = new DirectoryAdminService($this->app->database());
+        $existing = $roleId === null ? null : $service->role($roleId);
+        if ($existing === null) {
+            return $this->error('not_found', 'Role not found.', 404);
+        }
+
+        $input = (array) $request->input();
+        $merged = [
+            'name' => $input['name'] ?? $existing['name'],
+            'slug' => $input['slug'] ?? $existing['slug'],
+            'description' => $input['description'] ?? $existing['description'],
+            'permission_ids' => $input['permission_ids'] ?? $existing['permission_ids'],
+        ];
+
+        try {
+            $service->saveRole($roleId, $merged);
+            $updated = $service->role($roleId);
+            if ($updated === null) {
+                throw new \RuntimeException('Updated role cannot be resolved.');
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'ROLE_UPDATED',
+                'role',
+                $roleId,
+                (int) $context['user']['id'],
+                $request,
+                [
+                    'name' => $existing['name'],
+                    'slug' => $existing['slug'],
+                    'permission_ids' => $existing['permission_ids'],
+                ],
+                [
+                    'name' => $updated['name'],
+                    'slug' => $updated['slug'],
+                    'permission_ids' => $updated['permission_ids'],
+                    'source' => 'api',
+                ]
+            );
+
+            return Response::json([
+                'data' => $this->roleResource($updated),
+            ]);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error(
+                'validation_error',
+                $exception->getMessage(),
+                422
+            );
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API role update] ' . $exception->getMessage());
+            return $this->error(
+                'server_error',
+                'Unable to update role.',
+                500
+            );
+        }
+    }
+
+    public function deleteRole(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'roles:write',
+            'role.manage'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $roleId = $this->positiveId($id);
+        $service = new DirectoryAdminService($this->app->database());
+        $existing = $roleId === null ? null : $service->role($roleId);
+        if ($existing === null) {
+            return $this->error('not_found', 'Role not found.', 404);
+        }
+
+        try {
+            if (!$service->deleteRole($roleId)) {
+                return $this->error('not_found', 'Role not found.', 404);
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'ROLE_DELETED',
+                'role',
+                $roleId,
+                (int) $context['user']['id'],
+                $request,
+                [
+                    'name' => $existing['name'],
+                    'slug' => $existing['slug'],
+                    'is_system' => (bool) $existing['is_system'],
+                ],
+                ['deleted' => true, 'source' => 'api']
+            );
+
+            return new Response('', 204);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error(
+                'validation_error',
+                $exception->getMessage(),
+                422
+            );
+        }
+    }
+
+    public function permissions(Request $request): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'roles:read',
+            'role.manage'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $rows = (new DirectoryAdminService(
+            $this->app->database()
+        ))->permissions();
+
+        return Response::json([
+            'data' => array_map(
+                static fn (array $row): array => [
+                    'id' => (int) $row['id'],
+                    'name' => $row['name'],
+                    'description' => $row['description'],
+                ],
+                $rows
+            ),
+        ]);
+    }
+
     public function tags(Request $request): Response
     {
         [$context, $failure] = $this->apiAuth($request, 'tags:read', 'page.view');
@@ -2342,6 +2595,29 @@ final class ApiV1Controller extends Controller
             'status' => $space['status'],
             'created_at' => $space['created_at'] ?? null,
             'updated_at' => $space['updated_at'] ?? null,
+        ];
+    }
+
+    private function roleResource(array $role): array
+    {
+        return [
+            'id' => (int) $role['id'],
+            'name' => $role['name'],
+            'slug' => $role['slug'],
+            'description' => $role['description'],
+            'is_system' => (bool) $role['is_system'],
+            'permission_ids' => array_values(array_map(
+                'intval',
+                $role['permission_ids'] ?? []
+            )),
+            'user_count' => isset($role['user_count'])
+                ? (int) $role['user_count']
+                : null,
+            'permission_count' => isset($role['permission_count'])
+                ? (int) $role['permission_count']
+                : count($role['permission_ids'] ?? []),
+            'created_at' => $role['created_at'],
+            'updated_at' => $role['updated_at'],
         ];
     }
 
