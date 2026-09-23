@@ -345,7 +345,7 @@ GET,POST                  /api/v1/templates
 GET,PUT,PATCH,DELETE      /api/v1/templates/{id}
 
 GET,POST                  /api/v1/webhooks
-GET,PATCH,DELETE          /api/v1/webhooks/{id}
+GET,PUT,PATCH,DELETE      /api/v1/webhooks/{id}
 GET                       /api/v1/webhooks/{id}/deliveries
 
 GET,POST                  /api/v1/attachments
