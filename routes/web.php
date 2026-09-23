@@ -103,7 +103,17 @@ $router->patch('/api/v1/comments/{id}', [ApiV1Controller::class, 'updateComment'
 $router->delete('/api/v1/comments/{id}', [ApiV1Controller::class, 'deleteComment']);
 $router->get('/api/v1/search', [ApiV1Controller::class, 'search']);
 $router->get('/api/v1/users', [ApiV1Controller::class, 'users']);
+$router->get('/api/v1/users/{id}', [ApiV1Controller::class, 'user']);
+$router->post('/api/v1/users', [ApiV1Controller::class, 'createUser']);
+$router->put('/api/v1/users/{id}', [ApiV1Controller::class, 'updateUser']);
+$router->patch('/api/v1/users/{id}', [ApiV1Controller::class, 'updateUser']);
+$router->delete('/api/v1/users/{id}', [ApiV1Controller::class, 'deleteUser']);
 $router->get('/api/v1/groups', [ApiV1Controller::class, 'groups']);
+$router->get('/api/v1/groups/{id}', [ApiV1Controller::class, 'group']);
+$router->post('/api/v1/groups', [ApiV1Controller::class, 'createGroup']);
+$router->put('/api/v1/groups/{id}', [ApiV1Controller::class, 'updateGroup']);
+$router->patch('/api/v1/groups/{id}', [ApiV1Controller::class, 'updateGroup']);
+$router->delete('/api/v1/groups/{id}', [ApiV1Controller::class, 'deleteGroup']);
 $router->get('/api/v1/tags', [ApiV1Controller::class, 'tags']);
 $router->get('/api/v1/attachments', [ApiV1Controller::class, 'attachments']);
 $router->get('/api/v1/attachments/{id}', [ApiV1Controller::class, 'attachment']);
