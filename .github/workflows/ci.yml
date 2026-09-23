@@ -50,6 +50,9 @@ jobs:
       - name: PHP syntax
         run: find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
 
+      - name: JavaScript syntax
+        run: node --check public/assets/app.js
+
       - name: Unit and integration tests
         env:
           OPENWIKI_TEST_DB_HOST: 127.0.0.1
