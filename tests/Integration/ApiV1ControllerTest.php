@@ -117,6 +117,12 @@ final class ApiV1ControllerTest extends TestCase
                 'comments:write',
                 'attachments:read',
                 'attachments:write',
+                'users:read',
+                'users:write',
+                'groups:read',
+                'groups:write',
+                'roles:read',
+                'roles:write',
                 'search:read',
             ],
             null
@@ -338,6 +344,156 @@ final class ApiV1ControllerTest extends TestCase
             (string) $spaceId
         );
         self::assertSame(204, $response->status());
+    }
+
+    public function testDirectoryAdministrationApiFlow(): void
+    {
+        $controller = new ApiV1Controller($this->app);
+        $suffix = bin2hex(random_bytes(3));
+
+        $permissions = $controller->permissions($this->request(
+            'GET',
+            '/api/v1/permissions'
+        ));
+        self::assertSame(200, $permissions->status());
+        self::assertNotEmpty($this->payload($permissions)['data']);
+
+        $roleResponse = $controller->createRole($this->request(
+            'POST',
+            '/api/v1/roles',
+            [],
+            [
+                'name' => 'API Role ' . $suffix,
+                'slug' => 'api-role-' . $suffix,
+                'description' => 'Created through API',
+                'permission_ids' => [],
+            ]
+        ));
+        self::assertSame(201, $roleResponse->status());
+        $role = $this->data($roleResponse);
+        $roleId = (int) $role['id'];
+
+        $groupResponse = $controller->createGroup($this->request(
+            'POST',
+            '/api/v1/groups',
+            [],
+            [
+                'name' => 'API Group ' . $suffix,
+                'slug' => 'api-group-' . $suffix,
+                'description' => 'Created through API',
+                'user_ids' => [],
+            ]
+        ));
+        self::assertSame(201, $groupResponse->status());
+        $group = $this->data($groupResponse);
+        $groupId = (int) $group['id'];
+
+        $userResponse = $controller->createUser($this->request(
+            'POST',
+            '/api/v1/users',
+            [],
+            [
+                'username' => 'managed-' . $suffix,
+                'email' => 'managed-' . $suffix . '@example.test',
+                'password' => 'CorrectHorseBatteryStaple!43',
+                'first_name' => 'Managed',
+                'last_name' => 'User',
+                'status' => 'active',
+                'force_password_change' => 1,
+                'role_ids' => [$roleId],
+                'group_ids' => [$groupId],
+            ]
+        ));
+        self::assertSame(201, $userResponse->status());
+        $user = $this->data($userResponse);
+        $managedUserId = (int) $user['id'];
+        self::assertSame([$roleId], $user['role_ids']);
+        self::assertSame([$groupId], $user['group_ids']);
+
+        $userResponse = $controller->updateUser(
+            $this->request(
+                'PATCH',
+                '/api/v1/users/' . $managedUserId,
+                [],
+                ['first_name' => 'Updated']
+            ),
+            (string) $managedUserId
+        );
+        self::assertSame(200, $userResponse->status());
+        self::assertSame('Updated', $this->data($userResponse)['first_name']);
+
+        $groupResponse = $controller->updateGroup(
+            $this->request(
+                'PATCH',
+                '/api/v1/groups/' . $groupId,
+                [],
+                [
+                    'description' => 'Updated group',
+                    'user_ids' => [$managedUserId],
+                ]
+            ),
+            (string) $groupId
+        );
+        self::assertSame(200, $groupResponse->status());
+        self::assertSame(
+            [$managedUserId],
+            $this->data($groupResponse)['user_ids']
+        );
+
+        $roleResponse = $controller->updateRole(
+            $this->request(
+                'PATCH',
+                '/api/v1/roles/' . $roleId,
+                [],
+                ['description' => 'Updated role']
+            ),
+            (string) $roleId
+        );
+        self::assertSame(200, $roleResponse->status());
+        self::assertSame(
+            'Updated role',
+            $this->data($roleResponse)['description']
+        );
+
+        $userResponse = $controller->user(
+            $this->request('GET', '/api/v1/users/' . $managedUserId),
+            (string) $managedUserId
+        );
+        self::assertSame(200, $userResponse->status());
+
+        $groupResponse = $controller->group(
+            $this->request('GET', '/api/v1/groups/' . $groupId),
+            (string) $groupId
+        );
+        self::assertSame(200, $groupResponse->status());
+
+        $roleResponse = $controller->role(
+            $this->request('GET', '/api/v1/roles/' . $roleId),
+            (string) $roleId
+        );
+        self::assertSame(200, $roleResponse->status());
+
+        self::assertSame(
+            204,
+            $controller->deleteUser(
+                $this->request('DELETE', '/api/v1/users/' . $managedUserId),
+                (string) $managedUserId
+            )->status()
+        );
+        self::assertSame(
+            204,
+            $controller->deleteGroup(
+                $this->request('DELETE', '/api/v1/groups/' . $groupId),
+                (string) $groupId
+            )->status()
+        );
+        self::assertSame(
+            204,
+            $controller->deleteRole(
+                $this->request('DELETE', '/api/v1/roles/' . $roleId),
+                (string) $roleId
+            )->status()
+        );
     }
 
     public function testMissingWriteScopeIsRejected(): void
