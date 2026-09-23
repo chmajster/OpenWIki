@@ -1781,6 +1781,54 @@ final class ApiV1Controller extends Controller
         ]);
     }
 
+    public function tag(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'tags:read',
+            'page.view'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $tagId = $this->positiveId($id);
+        if ($tagId === null) {
+            return $this->error('not_found', 'Tag not found.', 404);
+        }
+
+        $tag = $this->app->database()->fetchOne(
+            'SELECT id, name, slug, created_at
+             FROM tags
+             WHERE id = :id
+             LIMIT 1',
+            ['id' => $tagId]
+        );
+        if ($tag === null) {
+            return $this->error('not_found', 'Tag not found.', 404);
+        }
+
+        $metadata = new WikiMetadataService($this->app->database());
+        $pages = [];
+        foreach ($metadata->pagesForTag((string) $tag['slug']) as $row) {
+            if (!$this->canViewPage($context, $row)) {
+                continue;
+            }
+            $pages[] = $this->pageListResource($row);
+        }
+
+        return Response::json([
+            'data' => [
+                'id' => (int) $tag['id'],
+                'name' => $tag['name'],
+                'slug' => $tag['slug'],
+                'page_count' => count($pages),
+                'pages' => $pages,
+                'created_at' => $tag['created_at'],
+            ],
+        ]);
+    }
+
     public function attachments(Request $request): Response
     {
         [$context, $failure] = $this->apiAuth($request, 'attachments:read', 'page.view');
