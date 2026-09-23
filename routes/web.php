@@ -103,11 +103,13 @@ $router->post('/spaces/{spaceKey}/pages/{slug}/comments/{id}/edit', [CommentCont
 $router->post('/spaces/{spaceKey}/pages/{slug}/comments/{id}/delete', [CommentController::class, 'delete']);
 
 $router->post('/spaces/{spaceKey}/pages/{slug}/attachments', [AttachmentController::class, 'upload']);
+$router->post('/spaces/{spaceKey}/pages/{slug}/images', [AttachmentController::class, 'imageUpload']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/attachments/{id}/version', [AttachmentController::class, 'version']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/attachments/{id}/rename', [AttachmentController::class, 'rename']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/attachments/{id}/delete', [AttachmentController::class, 'delete']);
 $router->get('/attachments/{id}/download', [AttachmentController::class, 'download']);
 $router->get('/attachments/{id}/preview', [AttachmentController::class, 'preview']);
+$router->get('/attachments/{id}/thumbnail', [AttachmentController::class, 'thumbnail']);
 $router->get('/attachments/{id}/versions/{version}/download', [AttachmentController::class, 'downloadVersion']);
 
 $router->get('/spaces/{spaceKey}/wiki/{reference}', [WikiMetadataController::class, 'resolve']);
