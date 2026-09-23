@@ -10,6 +10,7 @@ use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
 use OpenWiki\Http\Controller;
+use OpenWiki\Images\ImageService;
 use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
@@ -55,6 +56,125 @@ final class AttachmentController extends Controller
         }
 
         return Response::redirect($this->pageUrl($space, $page) . '#attachments');
+    }
+
+
+    public function imageUpload(Request $request, string $spaceKey, string $slug): Response
+    {
+        if (($failure = $this->authorize($request, 'attachment.upload')) !== null) {
+            return $failure;
+        }
+        if (($failure = $this->verifyCsrf($request)) !== null) {
+            return $failure;
+        }
+
+        [$space, $page, $failure] = $this->editablePage($spaceKey, $slug);
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $file = $request->file('image') ?? [];
+        $error = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
+        if ($error !== UPLOAD_ERR_OK) {
+            return Response::json([
+                'error' => ['code' => 'invalid_upload', 'message' => 'Choose a valid image file.'],
+            ], 422);
+        }
+
+        $path = (string) ($file['tmp_name'] ?? '');
+        if ($path === '' || !is_uploaded_file($path)) {
+            return Response::json([
+                'error' => ['code' => 'invalid_upload', 'message' => 'Invalid uploaded image.'],
+            ], 422);
+        }
+
+        try {
+            $service = $this->service();
+            $images = new ImageService($service, $this->app->basePath());
+            $info = $images->inspectPath($path);
+            $user = $this->app->auth()->user();
+
+            $attachmentId = $service->upload(
+                (int) $page['id'],
+                (int) $user['id'],
+                $file
+            );
+            $attachment = $service->find($attachmentId);
+            if ($attachment === null) {
+                throw new \RuntimeException('Uploaded image attachment cannot be resolved.');
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'IMAGE_UPLOADED',
+                'attachment',
+                $attachmentId,
+                (int) $user['id'],
+                $request,
+                null,
+                [
+                    'page_id' => (int) $page['id'],
+                    'width' => $info['width'],
+                    'height' => $info['height'],
+                    'mime_type' => $info['mime_type'],
+                ]
+            );
+
+            $defaultWidth = min(1280, (int) $info['width']);
+
+            return Response::json([
+                'data' => [
+                    'id' => $attachmentId,
+                    'name' => $attachment['name'],
+                    'mime_type' => $info['mime_type'],
+                    'width' => (int) $info['width'],
+                    'height' => (int) $info['height'],
+                    'preview_url' => '/attachments/' . $attachmentId . '/preview',
+                    'thumbnail_url' => '/attachments/' . $attachmentId
+                        . '/thumbnail?width=' . $defaultWidth,
+                ],
+            ], 201);
+        } catch (\InvalidArgumentException $exception) {
+            return Response::json([
+                'error' => ['code' => 'invalid_image', 'message' => $exception->getMessage()],
+            ], 422);
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki image upload] ' . $exception->getMessage());
+            return Response::json([
+                'error' => ['code' => 'server_error', 'message' => 'Unable to upload image.'],
+            ], 500);
+        }
+    }
+
+    public function thumbnail(Request $request, string $id): Response
+    {
+        $attachment = $this->accessibleAttachment($id);
+        if ($attachment instanceof Response) {
+            return $attachment;
+        }
+
+        $width = filter_var($request->query('width', 640), FILTER_VALIDATE_INT);
+        $width = $width === false ? 640 : (int) $width;
+
+        try {
+            $service = $this->service();
+            $thumbnail = (new ImageService(
+                $service,
+                $this->app->basePath()
+            ))->thumbnail($attachment, $width);
+
+            return Response::file(
+                $thumbnail['path'],
+                $thumbnail['mime_type'],
+                'thumbnail-' . (int) $attachment['id']
+                    . '-' . (int) $thumbnail['width'],
+                true
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return $this->render('errors/404', ['title' => 'Image not found'], 404);
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki image thumbnail] ' . $exception->getMessage());
+            return $this->render('errors/404', ['title' => 'Image not found'], 404);
+        }
     }
 
     public function version(Request $request, string $spaceKey, string $slug, string $id): Response
