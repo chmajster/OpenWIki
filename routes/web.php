@@ -123,6 +123,20 @@ $router->patch('/api/v1/groups/{id}', [ApiV1Controller::class, 'updateGroup']);
 $router->delete('/api/v1/groups/{id}', [ApiV1Controller::class, 'deleteGroup']);
 $router->get('/api/v1/tags', [ApiV1Controller::class, 'tags']);
 $router->get('/api/v1/tags/{id}', [ApiV1Controller::class, 'tag']);
+$router->get('/api/v1/templates', [ApiV1Controller::class, 'templates']);
+$router->post('/api/v1/templates', [ApiV1Controller::class, 'createTemplate']);
+$router->get('/api/v1/templates/{id}', [ApiV1Controller::class, 'template']);
+$router->put('/api/v1/templates/{id}', [ApiV1Controller::class, 'updateTemplate']);
+$router->patch('/api/v1/templates/{id}', [ApiV1Controller::class, 'updateTemplate']);
+$router->delete('/api/v1/templates/{id}', [ApiV1Controller::class, 'deleteTemplate']);
+
+$router->get('/api/v1/webhooks', [ApiV1Controller::class, 'webhooks']);
+$router->post('/api/v1/webhooks', [ApiV1Controller::class, 'createWebhook']);
+$router->get('/api/v1/webhooks/{id}', [ApiV1Controller::class, 'webhook']);
+$router->patch('/api/v1/webhooks/{id}', [ApiV1Controller::class, 'updateWebhook']);
+$router->delete('/api/v1/webhooks/{id}', [ApiV1Controller::class, 'deleteWebhook']);
+$router->get('/api/v1/webhooks/{id}/deliveries', [ApiV1Controller::class, 'webhookDeliveries']);
+
 $router->get('/api/v1/attachments', [ApiV1Controller::class, 'attachments']);
 $router->get('/api/v1/attachments/{id}', [ApiV1Controller::class, 'attachment']);
 $router->patch('/api/v1/attachments/{id}', [ApiV1Controller::class, 'renameAttachment']);
