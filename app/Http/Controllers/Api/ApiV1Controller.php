@@ -718,6 +718,222 @@ final class ApiV1Controller extends Controller
         return new Response('', 204);
     }
 
+    public function comments(Request $request): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'comments:read', 'page.view');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $pageId = $this->positiveId((string) $request->query('page_id', ''));
+        if ($pageId === null) {
+            return $this->error('validation_error', 'page_id is required.', 422);
+        }
+
+        $pageRow = $this->pageRow($pageId);
+        if ($pageRow === null || !$this->canViewPage($context, $pageRow)) {
+            return $this->error('not_found', 'Page not found.', 404);
+        }
+
+        [$page, $perPage, $offset] = $this->pagination($request);
+        $rows = (new CommentService($this->app->database()))->listForPage($pageId);
+        $total = count($rows);
+
+        return Response::json([
+            'data' => array_map(
+                [$this, 'commentResource'],
+                array_slice($rows, $offset, $perPage)
+            ),
+            'meta' => $this->paginationMeta($page, $perPage, $total),
+        ]);
+    }
+
+    public function createComment(Request $request): Response
+    {
+        [$context, $failure] = $this->apiAuth(
+            $request,
+            'comments:write',
+            'comment.create'
+        );
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $pageId = $this->positiveId((string) $request->input('page_id', ''));
+        if ($pageId === null) {
+            return $this->error('validation_error', 'page_id is required.', 422);
+        }
+
+        $pageRow = $this->pageRow($pageId);
+        if ($pageRow === null || !$this->canViewPage($context, $pageRow)) {
+            return $this->error('not_found', 'Page not found.', 404);
+        }
+
+        $parentValue = $request->input('parent_id');
+        $parentId = ($parentValue === null || $parentValue === '')
+            ? null
+            : filter_var($parentValue, FILTER_VALIDATE_INT);
+        if ($parentId === false || (is_int($parentId) && $parentId < 1)) {
+            return $this->error('validation_error', 'Invalid parent_id.', 422);
+        }
+
+        try {
+            $service = new CommentService($this->app->database());
+            $commentId = $service->create(
+                $pageId,
+                (int) $pageRow['space_id'],
+                (int) $context['user']['id'],
+                (string) $request->input('body', ''),
+                $parentId === null ? null : (int) $parentId,
+                (string) $pageRow['title'],
+                '/spaces/' . rawurlencode((string) $pageRow['space_key'])
+                    . '/pages/' . rawurlencode((string) $pageRow['slug'])
+            );
+
+            try {
+                (new WebhookService($this->app->database()))->queue(
+                    'comment.created',
+                    [
+                        'id' => $commentId,
+                        'page_id' => $pageId,
+                        'space_id' => (int) $pageRow['space_id'],
+                        'author_id' => (int) $context['user']['id'],
+                        'parent_id' => $parentId === null ? null : (int) $parentId,
+                        'source' => 'api',
+                    ]
+                );
+            } catch (\Throwable $webhookError) {
+                error_log('[OpenWiki API comment webhook] ' . $webhookError->getMessage());
+            }
+
+            $comment = $this->commentRow($commentId);
+            if ($comment === null) {
+                throw new \RuntimeException('Created comment cannot be resolved.');
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'COMMENT_CREATED',
+                'comment',
+                $commentId,
+                (int) $context['user']['id'],
+                $request,
+                null,
+                [
+                    'page_id' => $pageId,
+                    'parent_id' => $parentId === null ? null : (int) $parentId,
+                ]
+            );
+
+            return Response::json(['data' => $this->commentResource($comment)], 201);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error('validation_error', $exception->getMessage(), 422);
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API comment create] ' . $exception->getMessage());
+            return $this->error('server_error', 'Unable to create comment.', 500);
+        }
+    }
+
+    public function updateComment(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'comments:write');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $commentId = $this->positiveId($id);
+        $comment = $commentId === null ? null : $this->commentRow($commentId);
+        if ($comment === null) {
+            return $this->error('not_found', 'Comment not found.', 404);
+        }
+
+        $pageRow = $this->pageRow((int) $comment['page_id']);
+        if ($pageRow === null || !$this->canViewPage($context, $pageRow)) {
+            return $this->error('not_found', 'Comment not found.', 404);
+        }
+
+        try {
+            $service = new CommentService($this->app->database());
+            if (!$service->update(
+                $commentId,
+                (int) $context['user']['id'],
+                (string) $request->input('body', '')
+            )) {
+                return $this->error('not_found', 'Comment not found.', 404);
+            }
+
+            $updated = $this->commentRow($commentId);
+            if ($updated === null) {
+                throw new \RuntimeException('Updated comment cannot be resolved.');
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'COMMENT_UPDATED',
+                'comment',
+                $commentId,
+                (int) $context['user']['id'],
+                $request,
+                ['page_id' => (int) $comment['page_id']],
+                ['updated' => true]
+            );
+
+            return Response::json(['data' => $this->commentResource($updated)]);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error('validation_error', $exception->getMessage(), 422);
+        } catch (\RuntimeException $exception) {
+            if ($exception->getMessage() === 'COMMENT_EDIT_FORBIDDEN') {
+                return $this->error('forbidden', 'You can edit only your own comments.', 403);
+            }
+            throw $exception;
+        }
+    }
+
+    public function deleteComment(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'comments:write');
+        if ($failure !== null) {
+            return $failure;
+        }
+
+        $commentId = $this->positiveId($id);
+        $comment = $commentId === null ? null : $this->commentRow($commentId);
+        if ($comment === null) {
+            return $this->error('not_found', 'Comment not found.', 404);
+        }
+
+        $pageRow = $this->pageRow((int) $comment['page_id']);
+        if ($pageRow === null || !$this->canViewPage($context, $pageRow)) {
+            return $this->error('not_found', 'Comment not found.', 404);
+        }
+
+        try {
+            $deleted = (new CommentService($this->app->database()))->delete(
+                $commentId,
+                (int) $context['user']['id'],
+                $this->contextHasPermission($context, 'comment.delete')
+            );
+            if (!$deleted) {
+                return $this->error('not_found', 'Comment not found.', 404);
+            }
+
+            (new AuditLogger($this->app->database()))->log(
+                'COMMENT_DELETED',
+                'comment',
+                $commentId,
+                (int) $context['user']['id'],
+                $request,
+                ['page_id' => (int) $comment['page_id']],
+                ['deleted' => true]
+            );
+
+            return new Response('', 204);
+        } catch (\RuntimeException $exception) {
+            if ($exception->getMessage() === 'COMMENT_DELETE_FORBIDDEN') {
+                return $this->error('forbidden', 'You cannot delete this comment.', 403);
+            }
+            throw $exception;
+        }
+    }
+
     public function search(Request $request): Response
     {
         [$context, $failure] = $this->apiAuth($request, 'search:read', 'page.view');
@@ -1158,6 +1374,20 @@ final class ApiV1Controller extends Controller
         ];
     }
 
+    private function commentRow(int $commentId): ?array
+    {
+        return $this->app->database()->fetchOne(
+            'SELECT c.id, c.page_id, c.parent_id, c.author_id, c.body_html,
+                    c.created_at, c.updated_at,
+                    u.username, u.first_name, u.last_name
+             FROM comments c
+             INNER JOIN users u ON u.id = c.author_id
+             WHERE c.id = :id AND c.deleted_at IS NULL
+             LIMIT 1',
+            ['id' => $commentId]
+        );
+    }
+
     private function pageRow(int $pageId): ?array
     {
         return $this->app->database()->fetchOne(
@@ -1275,6 +1505,26 @@ final class ApiV1Controller extends Controller
             'status' => $space['status'],
             'created_at' => $space['created_at'] ?? null,
             'updated_at' => $space['updated_at'] ?? null,
+        ];
+    }
+
+    private function commentResource(array $comment): array
+    {
+        return [
+            'id' => (int) $comment['id'],
+            'page_id' => (int) $comment['page_id'],
+            'parent_id' => $comment['parent_id'] === null
+                ? null
+                : (int) $comment['parent_id'],
+            'author' => [
+                'id' => (int) $comment['author_id'],
+                'username' => $comment['username'],
+                'first_name' => $comment['first_name'],
+                'last_name' => $comment['last_name'],
+            ],
+            'body_html' => $comment['body_html'],
+            'created_at' => $comment['created_at'],
+            'updated_at' => $comment['updated_at'],
         ];
     }
 
