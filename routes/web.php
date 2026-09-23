@@ -126,6 +126,8 @@ $router->get('/api/v1/tags/{id}', [ApiV1Controller::class, 'tag']);
 $router->get('/api/v1/attachments', [ApiV1Controller::class, 'attachments']);
 $router->get('/api/v1/attachments/{id}', [ApiV1Controller::class, 'attachment']);
 $router->patch('/api/v1/attachments/{id}', [ApiV1Controller::class, 'renameAttachment']);
+$router->get('/api/v1/attachments/{id}/preview', [ApiV1Controller::class, 'previewAttachment']);
+$router->get('/api/v1/attachments/{id}/thumbnail', [ApiV1Controller::class, 'thumbnailAttachment']);
 $router->get('/api/v1/attachments/{id}/download', [ApiV1Controller::class, 'downloadAttachment']);
 $router->get('/api/v1/attachments/{id}/versions/{version}/download', [ApiV1Controller::class, 'downloadAttachmentVersion']);
 $router->post('/api/v1/attachments', [ApiV1Controller::class, 'uploadAttachment']);
