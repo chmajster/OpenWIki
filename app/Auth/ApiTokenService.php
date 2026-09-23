@@ -20,6 +20,8 @@ final class ApiTokenService
         'users:write',
         'groups:read',
         'groups:write',
+        'roles:read',
+        'roles:write',
         'tags:read',
         'attachments:read',
         'attachments:write',
