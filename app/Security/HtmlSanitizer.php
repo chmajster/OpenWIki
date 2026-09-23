@@ -14,14 +14,17 @@ final class HtmlSanitizer
         'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'del',
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
         'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
-        'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+        'a', 'img', 'figure', 'figcaption', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
         'hr', 'div', 'span', 'section', 'aside',
     ];
 
     private const GLOBAL_ATTRIBUTES = ['id', 'class', 'title', 'aria-label', 'data-callout'];
     private const TAG_ATTRIBUTES = [
         'a' => ['href', 'target', 'rel'],
-        'img' => ['src', 'alt', 'width', 'height', 'loading'],
+        'img' => [
+            'src', 'alt', 'width', 'height', 'loading',
+            'data-attachment-id', 'data-original-width', 'data-original-height',
+        ],
         'td' => ['colspan', 'rowspan'],
         'th' => ['colspan', 'rowspan', 'scope'],
         'code' => ['data-language'],
