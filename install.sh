@@ -1,0 +1,389 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+APP_NAME="OpenWiki"
+REPO_URL="https://github.com/chmajster/OpenWIki.git"
+INSTALL_DIR="${OPENWIKI_INSTALL_DIR:-/var/www/openwiki}"
+DB_NAME="${OPENWIKI_DB_NAME:-openwiki}"
+DB_USER="${OPENWIKI_DB_USER:-openwiki}"
+WEB_USER=""
+NGINX_SITE="openwiki"
+CRON_FILE="/etc/cron.d/openwiki"
+MODE="install"
+NO_COLOR=0
+
+if [[ -t 1 && "${NO_COLOR:-0}" != "1" ]]; then
+  C_OK='\033[0;32m'; C_INFO='\033[0;36m'; C_WARN='\033[1;33m'; C_FAIL='\033[0;31m'; C_RESET='\033[0m'
+else
+  C_OK=''; C_INFO=''; C_WARN=''; C_FAIL=''; C_RESET=''
+fi
+
+ok()   { printf "%b[ OK ]%b %s\n" "$C_OK" "$C_RESET" "$*"; }
+info() { printf "%b[INFO]%b %s\n" "$C_INFO" "$C_RESET" "$*"; }
+warn() { printf "%b[WARN]%b %s\n" "$C_WARN" "$C_RESET" "$*" >&2; }
+fail() { printf "%b[FAIL]%b %s\n" "$C_FAIL" "$C_RESET" "$*" >&2; exit 1; }
+
+trap 'fail "Instalacja przerwana w linii $LINENO."' ERR
+
+usage() {
+  cat <<EOF
+OpenWiki installer
+
+Użycie:
+  sudo ./install.sh [opcje]
+
+Opcje:
+  --install              Instalacja lub naprawa OpenWiki (domyślnie)
+  --status               Status aplikacji i usług
+  --uninstall            Usuń konfigurację usług i pliki OpenWiki
+  --install-dir PATH     Katalog instalacji (domyślnie: /var/www/openwiki)
+  --no-color             Wyłącz kolory
+  --help                 Pomoc
+
+Zmienne środowiskowe:
+  OPENWIKI_INSTALL_DIR
+  OPENWIKI_DB_NAME
+  OPENWIKI_DB_USER
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --install) MODE="install" ;;
+    --status) MODE="status" ;;
+    --uninstall) MODE="uninstall" ;;
+    --install-dir) shift; [[ $# -gt 0 ]] || fail "Brak wartości dla --install-dir"; INSTALL_DIR="$1" ;;
+    --no-color) NO_COLOR=1; C_OK=''; C_INFO=''; C_WARN=''; C_FAIL=''; C_RESET='' ;;
+    --help|-h) usage; exit 0 ;;
+    *) fail "Nieznana opcja: $1" ;;
+  esac
+  shift
+done
+
+require_root() {
+  [[ $EUID -eq 0 ]] || fail "Uruchom jako root: sudo ./install.sh"
+}
+
+detect_os() {
+  [[ -r /etc/os-release ]] || fail "Brak /etc/os-release."
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  OS_ID="${ID:-}"
+  OS_LIKE="${ID_LIKE:-}"
+
+  if [[ "$OS_ID" =~ ^(ubuntu|debian)$ || "$OS_LIKE" == *debian* ]]; then
+    PKG_FAMILY="apt"
+    WEB_USER="www-data"
+  elif [[ "$OS_ID" =~ ^(rhel|rocky|almalinux|centos|fedora)$ || "$OS_LIKE" == *rhel* || "$OS_LIKE" == *fedora* ]]; then
+    PKG_FAMILY="dnf"
+    WEB_USER="nginx"
+  else
+    fail "Nieobsługiwany system: ${PRETTY_NAME:-$OS_ID}. Obsługiwane: Debian/Ubuntu, RHEL/Rocky/Alma/Fedora."
+  fi
+}
+
+install_packages() {
+  info "[1/8] Instalacja zależności"
+  if [[ "$PKG_FAMILY" == "apt" ]]; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y
+    apt-get install -y git curl ca-certificates nginx mariadb-server composer \
+      php-cli php-fpm php-mysql php-mbstring php-xml php-curl php-ldap php-zip php-gd
+  else
+    dnf install -y git curl ca-certificates nginx mariadb-server composer \
+      php-cli php-fpm php-mysqlnd php-mbstring php-xml php-curl php-ldap php-zip php-gd
+  fi
+
+  command -v php >/dev/null || fail "PHP nie został zainstalowany."
+  command -v nginx >/dev/null || fail "Nginx nie został zainstalowany."
+  command -v mariadb >/dev/null || command -v mysql >/dev/null || fail "Klient MariaDB/MySQL nie został zainstalowany."
+
+  php -r 'exit(version_compare(PHP_VERSION, "8.2.0", ">=") ? 0 : 1);' ||
+    fail "OpenWiki wymaga PHP >= 8.2. Zainstalowana wersja: $(php -r 'echo PHP_VERSION;')"
+
+  local missing=()
+  for ext in pdo pdo_mysql mbstring openssl dom phar curl ldap zip gd; do
+    php -m | grep -qi "^$ext$" || missing+=("$ext")
+  done
+  [[ ${#missing[@]} -eq 0 ]] || fail "Brak rozszerzeń PHP: ${missing[*]}"
+  ok "Zależności są dostępne."
+}
+
+start_services() {
+  info "[2/8] Uruchamianie usług"
+  systemctl enable --now mariadb
+  systemctl enable --now nginx
+
+  local php_fpm_service
+  php_fpm_service="$(systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -E '^php([0-9.]+-fpm|)-?fpm?\.service$|^php-fpm\.service$' | head -n1 || true)"
+  if [[ -z "$php_fpm_service" ]]; then
+    php_fpm_service="$(systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -E '^php[0-9.]+-fpm\.service$' | head -n1 || true)"
+  fi
+  [[ -n "$php_fpm_service" ]] || fail "Nie znaleziono usługi PHP-FPM."
+  systemctl enable --now "$php_fpm_service"
+  PHP_FPM_SERVICE="$php_fpm_service"
+  ok "MariaDB, Nginx i PHP-FPM działają."
+}
+
+deploy_code() {
+  info "[3/8] Pobieranie aplikacji"
+  if [[ -d "$INSTALL_DIR/.git" ]]; then
+    git -C "$INSTALL_DIR" fetch --prune origin
+    git -C "$INSTALL_DIR" checkout main
+    git -C "$INSTALL_DIR" pull --ff-only origin main
+  elif [[ -f "$(pwd)/composer.json" && -d "$(pwd)/app" && -d "$(pwd)/public" ]]; then
+    mkdir -p "$INSTALL_DIR"
+    if [[ "$(readlink -f "$(pwd)")" != "$(readlink -f "$INSTALL_DIR")" ]]; then
+      cp -a "$(pwd)/." "$INSTALL_DIR/"
+    fi
+  else
+    [[ ! -e "$INSTALL_DIR" || -z "$(ls -A "$INSTALL_DIR" 2>/dev/null || true)" ]] ||
+      fail "Katalog $INSTALL_DIR istnieje i nie jest pusty."
+    git clone --branch main --depth 1 "$REPO_URL" "$INSTALL_DIR"
+  fi
+
+  cd "$INSTALL_DIR"
+  composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+  mkdir -p storage/{attachments,backups,cache,temp,logs}
+  chown -R root:"$WEB_USER" "$INSTALL_DIR"
+  find "$INSTALL_DIR" -type d -exec chmod 0755 {} \;
+  find "$INSTALL_DIR" -type f -exec chmod 0644 {} \;
+  chown -R "$WEB_USER":"$WEB_USER" "$INSTALL_DIR/storage"
+  find "$INSTALL_DIR/storage" -type d -exec chmod 0770 {} \;
+  find "$INSTALL_DIR/storage" -type f -exec chmod 0660 {} \;
+  chmod 0755 "$INSTALL_DIR/bin/console"
+  ok "Kod aplikacji przygotowany w $INSTALL_DIR."
+}
+
+read_value() {
+  local __var="$1" prompt="$2" default="${3:-}" value
+  if [[ -n "$default" ]]; then
+    read -r -p "$prompt [$default]: " value
+    value="${value:-$default}"
+  else
+    read -r -p "$prompt: " value
+  fi
+  printf -v "$__var" '%s' "$value"
+}
+
+read_secret() {
+  local __var="$1" prompt="$2" value
+  read -r -s -p "$prompt: " value
+  printf '\n'
+  printf -v "$__var" '%s' "$value"
+}
+
+configure_database() {
+  info "[4/8] Konfiguracja bazy danych"
+
+  read_value DB_NAME_INPUT "Nazwa bazy danych" "$DB_NAME"
+  read_value DB_USER_INPUT "Użytkownik bazy danych" "$DB_USER"
+  DB_NAME="$DB_NAME_INPUT"
+  DB_USER="$DB_USER_INPUT"
+
+  while true; do
+    read_secret DB_PASSWORD "Hasło użytkownika bazy (pozostaw puste, aby wygenerować)"
+    if [[ -z "$DB_PASSWORD" ]]; then
+      DB_PASSWORD="$(php -r 'echo bin2hex(random_bytes(18));')"
+      break
+    fi
+    [[ ${#DB_PASSWORD} -ge 12 ]] && break
+    warn "Hasło bazy powinno mieć co najmniej 12 znaków."
+  done
+
+  [[ "$DB_NAME" =~ ^[A-Za-z0-9_]+$ ]] || fail "Nieprawidłowa nazwa bazy."
+  [[ "$DB_USER" =~ ^[A-Za-z0-9_.-]+$ ]] || fail "Nieprawidłowa nazwa użytkownika bazy."
+
+  local sql_pass
+  sql_pass="${DB_PASSWORD//\\/\\\\}"
+  sql_pass="${sql_pass//\'/\'\'}"
+
+  mariadb --protocol=socket <<SQL
+CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$sql_pass';
+ALTER USER '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$sql_pass';
+GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'127.0.0.1';
+FLUSH PRIVILEGES;
+SQL
+  ok "Baza $DB_NAME i użytkownik $DB_USER są gotowe."
+}
+
+run_app_installer() {
+  info "[5/8] Instalacja OpenWiki"
+  if [[ -f "$INSTALL_DIR/storage/installed.lock" ]]; then
+    warn "OpenWiki jest już zainstalowane. Pomijam inicjalizację aplikacji."
+    return
+  fi
+
+  read_value INSTANCE_NAME "Nazwa instancji" "OpenWiki"
+  read_value APP_URL "URL aplikacji" "http://$(hostname -f 2>/dev/null || hostname)"
+  read_value APP_TIMEZONE "Strefa czasowa" "Europe/Warsaw"
+  read_value ADMIN_USERNAME "Login administratora" "admin"
+  read_value ADMIN_EMAIL "E-mail administratora" ""
+
+  while true; do
+    read_secret ADMIN_PASSWORD "Hasło administratora (min. 12 znaków)"
+    [[ ${#ADMIN_PASSWORD} -ge 12 ]] && break
+    warn "Hasło administratora musi mieć co najmniej 12 znaków."
+  done
+
+  read_value ADMIN_FIRST_NAME "Imię administratora" ""
+  read_value ADMIN_LAST_NAME "Nazwisko administratora" ""
+
+  printf '%s\n' \
+    "$INSTANCE_NAME" \
+    "$APP_URL" \
+    "$APP_TIMEZONE" \
+    "127.0.0.1" \
+    "3306" \
+    "$DB_NAME" \
+    "$DB_USER" \
+    "$DB_PASSWORD" \
+    "n" \
+    "$ADMIN_USERNAME" \
+    "$ADMIN_EMAIL" \
+    "$ADMIN_PASSWORD" \
+    "$ADMIN_FIRST_NAME" \
+    "$ADMIN_LAST_NAME" | php "$INSTALL_DIR/bin/console" install
+
+  chown "$WEB_USER":"$WEB_USER" "$INSTALL_DIR/.env"
+  chmod 0640 "$INSTALL_DIR/.env"
+  chown -R "$WEB_USER":"$WEB_USER" "$INSTALL_DIR/storage"
+  ok "Instalator aplikacji zakończony."
+}
+
+detect_fpm_socket() {
+  local sockets=(
+    /run/php/php*-fpm.sock
+    /run/php-fpm/www.sock
+    /var/run/php-fpm/www.sock
+  )
+  local s
+  for s in "${sockets[@]}"; do
+    for candidate in $s; do
+      [[ -S "$candidate" ]] && { printf '%s' "$candidate"; return 0; }
+    done
+  done
+  return 1
+}
+
+configure_nginx() {
+  info "[6/8] Konfiguracja Nginx"
+  local socket
+  socket="$(detect_fpm_socket)" || fail "Nie znaleziono socketu PHP-FPM."
+
+  local conf
+  if [[ "$PKG_FAMILY" == "apt" ]]; then
+    conf="/etc/nginx/sites-available/$NGINX_SITE"
+  else
+    conf="/etc/nginx/conf.d/$NGINX_SITE.conf"
+  fi
+
+  cat > "$conf" <<NGINX
+server {
+    listen 80;
+    listen [::]:80;
+    server_name _;
+    root $INSTALL_DIR/public;
+    index index.php;
+
+    client_max_body_size 64m;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    location ~ \.php$ {
+        try_files \$uri =404;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param HTTP_PROXY "";
+        fastcgi_pass unix:$socket;
+    }
+
+    location ~ /\. {
+        deny all;
+    }
+}
+NGINX
+
+  if [[ "$PKG_FAMILY" == "apt" ]]; then
+    ln -sfn "$conf" "/etc/nginx/sites-enabled/$NGINX_SITE"
+    rm -f /etc/nginx/sites-enabled/default
+  fi
+
+  nginx -t
+  systemctl reload nginx
+  ok "Nginx wskazuje na $INSTALL_DIR/public."
+}
+
+configure_cron() {
+  info "[7/8] Konfiguracja zadań cyklicznych"
+  cat > "$CRON_FILE" <<EOF
+* * * * * $WEB_USER cd $INSTALL_DIR && /usr/bin/php bin/console cron:run >/dev/null 2>&1
+EOF
+  chmod 0644 "$CRON_FILE"
+  ok "Cron OpenWiki skonfigurowany."
+}
+
+verify_installation() {
+  info "[8/8] Weryfikacja"
+  cd "$INSTALL_DIR"
+  php bin/console system:check
+  php bin/console db:status
+  nginx -t
+  systemctl is-active --quiet nginx
+  systemctl is-active --quiet mariadb
+  curl --fail --silent --show-error --max-time 10 http://127.0.0.1/health >/dev/null
+  ok "Healthcheck HTTP zakończony powodzeniem."
+  printf '\n'
+  ok "OpenWiki jest zainstalowane."
+  info "Katalog: $INSTALL_DIR"
+  info "Adres: http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo localhost)/"
+}
+
+status_mode() {
+  detect_os
+  info "OpenWiki status"
+  [[ -d "$INSTALL_DIR" ]] && ok "Katalog: $INSTALL_DIR" || warn "Brak katalogu: $INSTALL_DIR"
+  [[ -f "$INSTALL_DIR/storage/installed.lock" ]] && ok "installed.lock obecny" || warn "Brak installed.lock"
+  systemctl is-active --quiet nginx && ok "nginx active" || warn "nginx inactive"
+  systemctl is-active --quiet mariadb && ok "mariadb active" || warn "mariadb inactive"
+  if [[ -f "$INSTALL_DIR/bin/console" ]]; then
+    (cd "$INSTALL_DIR" && php bin/console system:check) || true
+  fi
+}
+
+uninstall_mode() {
+  require_root
+  detect_os
+  warn "Usunięcie OpenWiki skasuje pliki aplikacji. Baza danych pozostanie bez zmian."
+  read -r -p "Wpisz DELETE aby kontynuować: " confirmation
+  [[ "$confirmation" == "DELETE" ]] || fail "Anulowano."
+
+  rm -f "$CRON_FILE"
+  if [[ "$PKG_FAMILY" == "apt" ]]; then
+    rm -f "/etc/nginx/sites-enabled/$NGINX_SITE" "/etc/nginx/sites-available/$NGINX_SITE"
+  else
+    rm -f "/etc/nginx/conf.d/$NGINX_SITE.conf"
+  fi
+  nginx -t && systemctl reload nginx || true
+  rm -rf "$INSTALL_DIR"
+  ok "Pliki i konfiguracja OpenWiki zostały usunięte. Baza danych nie została usunięta."
+}
+
+case "$MODE" in
+  status) status_mode; exit 0 ;;
+  uninstall) uninstall_mode; exit 0 ;;
+esac
+
+require_root
+detect_os
+install_packages
+start_services
+deploy_code
+configure_database
+run_app_installer
+configure_nginx
+configure_cron
+verify_installation
