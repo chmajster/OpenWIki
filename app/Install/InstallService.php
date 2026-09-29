@@ -81,6 +81,12 @@ final class InstallService
         $runner->migrate();
 
         $adminId = $this->seedAdministrator($database, $config['admin']);
+        if (!empty($config['admin']['force_password_change'])) {
+            $database->execute(
+                'UPDATE users SET force_password_change = 1, updated_at = UTC_TIMESTAMP() WHERE id = :id',
+                ['id' => $adminId]
+            );
+        }
         $this->seedAuthorization($database, $adminId);
         $this->seedSettingsAndTemplates($database, $adminId, $config['app']);
 
@@ -143,9 +149,10 @@ final class InstallService
             throw new \InvalidArgumentException('Invalid database port.');
         }
 
-        $username = trim((string) ($input['admin_username'] ?? ''));
-        $email = trim((string) ($input['admin_email'] ?? ''));
-        $password = (string) ($input['admin_password'] ?? '');
+        $username = trim((string) ($input['admin_username'] ?? 'admin'));
+        $email = trim((string) ($input['admin_email'] ?? 'admin@localhost.invalid'));
+        $password = (string) ($input['admin_password'] ?? 'admin');
+        $isDefaultBootstrapAdmin = $username === 'admin' && $password === 'admin';
 
         if (!preg_match('/^[A-Za-z0-9._-]{3,100}$/', $username)) {
             throw new \InvalidArgumentException('Administrator username must contain 3-100 safe characters.');
@@ -155,8 +162,10 @@ final class InstallService
             throw new \InvalidArgumentException('Administrator email is invalid.');
         }
 
-        if (strlen($password) < 12 || strlen($password) > 1024) {
-            throw new \InvalidArgumentException('Administrator password must contain at least 12 characters.');
+        if ((!$isDefaultBootstrapAdmin && strlen($password) < 12) || strlen($password) > 1024) {
+            throw new \InvalidArgumentException(
+                'Administrator password must contain at least 12 characters unless the default bootstrap admin/admin account is used.'
+            );
         }
 
         return [
@@ -176,6 +185,7 @@ final class InstallService
                 'password' => $password,
                 'first_name' => trim((string) ($input['admin_first_name'] ?? '')),
                 'last_name' => trim((string) ($input['admin_last_name'] ?? '')),
+                'force_password_change' => $isDefaultBootstrapAdmin,
             ],
         ];
     }

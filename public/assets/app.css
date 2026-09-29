@@ -661,3 +661,307 @@ textarea { resize: vertical; }
     outline: 2px solid var(--accent);
     outline-offset: 3px;
 }
+
+
+/* First-run installation wizard */
+.install-layout--wizard {
+    place-items: stretch;
+    padding: 34px 22px 56px;
+}
+.install-wizard {
+    width: min(1160px, 100%);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+.install-sidebar {
+    padding: 24px;
+    position: sticky;
+    top: 84px;
+}
+.install-sidebar h1 {
+    margin: 6px 0 8px;
+    font-size: 1.55rem;
+}
+.install-steps {
+    list-style: none;
+    display: grid;
+    gap: 8px;
+    padding: 0;
+    margin: 24px 0;
+}
+.install-steps li {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    color: var(--muted);
+}
+.install-steps li > span {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    font-weight: 800;
+}
+.install-steps li div {
+    display: grid;
+    gap: 2px;
+}
+.install-steps li strong {
+    color: inherit;
+    font-size: .9rem;
+}
+.install-steps li small {
+    font-size: .74rem;
+}
+.install-steps li.is-active {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--border);
+}
+.install-steps li.is-active > span {
+    border-color: var(--accent);
+    background: rgba(110, 168, 254, .14);
+    color: var(--accent-strong);
+}
+.install-steps li.is-complete {
+    color: var(--success);
+}
+.install-bootstrap-note {
+    display: grid;
+    gap: 5px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-2);
+}
+.install-bootstrap-note strong {
+    font-family: "SFMono-Regular", Consolas, monospace;
+}
+.install-bootstrap-note small {
+    color: var(--muted);
+    line-height: 1.45;
+}
+.install-wizard .install-card {
+    width: 100%;
+    padding: 28px;
+}
+.install-card__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-start;
+    padding-bottom: 22px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+}
+.install-card__header h2 {
+    margin: 6px 0 0;
+    font-size: 1.7rem;
+}
+.install-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 5px 10px;
+    border: 1px solid rgba(97, 208, 149, .35);
+    border-radius: 999px;
+    color: var(--success);
+    background: rgba(97, 208, 149, .08);
+    font-size: .76rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+.install-form {
+    margin-top: 24px;
+}
+.install-panel {
+    display: grid;
+    gap: 22px;
+}
+.install-wizard.is-enhanced .install-panel {
+    display: none;
+}
+.install-wizard.is-enhanced .install-panel.is-active {
+    display: grid;
+}
+.install-wizard:not(.is-enhanced) [data-wizard-only] {
+    display: none;
+}
+.install-panel + .install-panel {
+    margin-top: 34px;
+    padding-top: 34px;
+    border-top: 1px solid var(--border);
+}
+.install-wizard.is-enhanced .install-panel + .install-panel {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+}
+.install-panel__heading {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 13px;
+    align-items: start;
+}
+.install-panel__heading h3 {
+    margin: 0 0 5px;
+    font-size: 1.15rem;
+}
+.install-panel__heading p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.55;
+}
+.install-step-number {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: var(--surface-3);
+    color: var(--accent-strong);
+    font-weight: 900;
+}
+.install-checks {
+    margin-bottom: 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px 16px;
+    background: var(--surface-2);
+}
+.install-checks .check-row:last-child {
+    border-bottom: 0;
+}
+.install-checkbox {
+    align-items: flex-start;
+    padding: 13px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface-2);
+}
+.install-checkbox span {
+    display: grid;
+    gap: 4px;
+}
+.install-checkbox small {
+    color: var(--muted);
+    font-weight: 400;
+    line-height: 1.4;
+}
+.wizard-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    padding-top: 4px;
+}
+.install-summary {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+}
+.install-summary > div {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 16px;
+    padding: 12px 14px;
+    background: var(--surface-2);
+}
+.install-summary > div + div {
+    border-top: 1px solid var(--border);
+}
+.install-summary dt {
+    color: var(--muted);
+}
+.install-summary dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+.install-credentials {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    align-items: center;
+    padding: 18px;
+    border: 1px solid rgba(242, 198, 109, .35);
+    border-radius: 10px;
+    background: rgba(242, 198, 109, .08);
+}
+.install-credentials h4 {
+    margin: 5px 0 6px;
+    font-size: 1.1rem;
+}
+.install-credentials p {
+    margin: 0;
+    max-width: 660px;
+    color: var(--muted);
+    line-height: 1.5;
+}
+.install-credentials code {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    font-size: 1rem;
+}
+.install-card .alert {
+    max-width: none;
+    margin: 20px 0 0;
+    display: grid;
+    gap: 4px;
+}
+@media (max-width: 860px) {
+    .install-wizard {
+        grid-template-columns: 1fr;
+    }
+    .install-sidebar {
+        position: static;
+    }
+    .install-steps {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .install-steps li {
+        grid-template-columns: 1fr;
+        justify-items: center;
+        text-align: center;
+    }
+    .install-steps li div small {
+        display: none;
+    }
+}
+@media (max-width: 620px) {
+    .install-layout--wizard {
+        padding: 18px 12px 36px;
+    }
+    .install-wizard .install-card,
+    .install-sidebar {
+        padding: 18px;
+    }
+    .install-card__header,
+    .install-credentials {
+        flex-direction: column;
+    }
+    .install-summary > div {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+    .wizard-actions {
+        align-items: stretch;
+    }
+    .wizard-actions .button {
+        flex: 1;
+    }
+}

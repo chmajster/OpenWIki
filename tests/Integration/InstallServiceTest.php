@@ -42,11 +42,6 @@ final class InstallServiceTest extends TestCase
             'db_username' => getenv('OPENWIKI_TEST_DB_USERNAME'),
             'db_password' => getenv('OPENWIKI_TEST_DB_PASSWORD'),
             'create_database' => false,
-            'admin_username' => 'admin',
-            'admin_email' => 'admin@example.test',
-            'admin_password' => 'CorrectHorseBatteryStaple!42',
-            'admin_first_name' => 'OpenWiki',
-            'admin_last_name' => 'Admin',
         ]);
 
         self::assertFileExists($this->basePath . '/.env');
@@ -55,7 +50,9 @@ final class InstallServiceTest extends TestCase
         $db = $this->database();
         $admin = $db->fetchOne('SELECT * FROM users WHERE username = "admin"');
         self::assertNotNull($admin);
-        self::assertTrue(password_verify('CorrectHorseBatteryStaple!42', $admin['password_hash']));
+        self::assertSame('admin@localhost.invalid', $admin['email']);
+        self::assertTrue(password_verify('admin', $admin['password_hash']));
+        self::assertSame(1, (int) $admin['force_password_change']);
 
         $role = $db->fetchOne(
             'SELECT r.slug
