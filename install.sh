@@ -94,9 +94,11 @@ install_packages() {
     apt-get install -y git curl ca-certificates nginx mariadb-server composer \
       php-cli php-fpm php-mysql php-mbstring php-xml php-curl php-ldap php-zip php-gd
   else
-    if dnf -q module list php:8.2 >/dev/null 2>&1; then
-      dnf -y module reset php >/dev/null
-      dnf -y module enable php:8.2 >/dev/null
+    if ! command -v php >/dev/null 2>&1 || ! php -r 'exit(version_compare(PHP_VERSION, "8.2.0", ">=") ? 0 : 1);' >/dev/null 2>&1; then
+      if dnf -q module list php:8.2 >/dev/null 2>&1; then
+        dnf -y module reset php >/dev/null
+        dnf -y module enable php:8.2 >/dev/null
+      fi
     fi
     dnf install -y git curl ca-certificates nginx mariadb-server composer policycoreutils-python-utils \
       php-cli php-fpm php-mysqlnd php-mbstring php-xml php-curl php-ldap php-zip php-gd
@@ -191,6 +193,7 @@ deploy_code() {
   find "$INSTALL_DIR/storage" -type d -exec chmod 0770 {} \;
   find "$INSTALL_DIR/storage" -type f -exec chmod 0660 {} \;
   chmod 0755 "$INSTALL_DIR/bin/console"
+  [[ -f "$INSTALL_DIR/install.sh" ]] && chmod 0755 "$INSTALL_DIR/install.sh"
   secure_env_permissions
   ok "Kod aplikacji przygotowany w $INSTALL_DIR."
 }
@@ -216,7 +219,8 @@ read_secret() {
 configure_database() {
   info "[4/8] Konfiguracja bazy danych"
 
-  if [[ -f "$INSTALL_DIR/storage/installed.lock" && -f "$INSTALL_DIR/.env" ]]; then
+  if [[ -f "$INSTALL_DIR/storage/installed.lock" ]]; then
+    [[ -f "$INSTALL_DIR/.env" ]] || fail "Wykryto installed.lock bez .env. Napraw konfigurację przed ponownym uruchomieniem."
     ok "Wykryto istniejącą instalację. Dane logowania DB pozostają bez zmian."
     return 0
   fi
@@ -256,6 +260,7 @@ SQL
 run_app_installer() {
   info "[5/8] Instalacja OpenWiki"
   if [[ -f "$INSTALL_DIR/storage/installed.lock" ]]; then
+    [[ -f "$INSTALL_DIR/.env" ]] || fail "Wykryto installed.lock bez .env. Instalacja jest niespójna."
     secure_env_permissions
     ok "OpenWiki jest już zainstalowane. Pomijam ponowną inicjalizację aplikacji."
     return 0
@@ -424,6 +429,14 @@ verify_installation() {
   cd "$INSTALL_DIR"
   php bin/console system:check
   php bin/console db:status
+  if command -v runuser >/dev/null 2>&1; then
+    runuser -u "$WEB_USER" -- test -r "$INSTALL_DIR/.env"
+    runuser -u "$WEB_USER" -- test -w "$INSTALL_DIR/storage"
+    runuser -u "$WEB_USER" -- php "$INSTALL_DIR/bin/console" db:status
+    ok "Runtime $WEB_USER ma dostęp do konfiguracji, storage i bazy."
+  else
+    warn "Brak runuser — pominięto weryfikację uprawnień jako $WEB_USER."
+  fi
   nginx -t
   systemctl is-active --quiet nginx
   systemctl is-active --quiet mariadb
