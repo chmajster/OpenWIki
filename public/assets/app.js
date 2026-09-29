@@ -553,3 +553,81 @@ document.querySelectorAll('[data-document-content] pre').forEach((pre) => {
 
     pre.appendChild(button);
 });
+
+
+document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
+    const panels = Array.from(wizard.querySelectorAll('[data-wizard-panel]'));
+    const indicators = Array.from(wizard.querySelectorAll('[data-wizard-indicator]'));
+    const form = wizard.querySelector('[data-wizard-form]');
+    const requirementsOk = wizard.dataset.requirementsOk === '1';
+    let currentStep = 1;
+
+    const updateSummary = () => {
+        if (!form) return;
+        wizard.querySelectorAll('[data-wizard-summary]').forEach((target) => {
+            const name = target.dataset.wizardSummary || '';
+            const field = form.elements.namedItem(name);
+            if (!field || !('value' in field)) return;
+            target.textContent = String(field.value || '—');
+        });
+    };
+
+    const showStep = (step) => {
+        currentStep = Math.max(1, Math.min(panels.length, step));
+
+        panels.forEach((panel) => {
+            panel.classList.toggle('is-active', Number(panel.dataset.wizardPanel) === currentStep);
+        });
+
+        indicators.forEach((indicator) => {
+            const indicatorStep = Number(indicator.dataset.wizardIndicator);
+            indicator.classList.toggle('is-active', indicatorStep === currentStep);
+            indicator.classList.toggle('is-complete', indicatorStep < currentStep);
+        });
+
+        if (currentStep === panels.length) {
+            updateSummary();
+        }
+
+        wizard.scrollIntoView({behavior: 'smooth', block: 'start'});
+    };
+
+    const validateCurrentStep = () => {
+        const panel = panels.find((item) => Number(item.dataset.wizardPanel) === currentStep);
+        if (!panel) return true;
+
+        const fields = Array.from(panel.querySelectorAll('input, select, textarea'));
+        for (const field of fields) {
+            if (field.disabled) continue;
+            if (!field.checkValidity()) {
+                field.reportValidity();
+                field.focus();
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    wizard.classList.add('is-enhanced');
+
+    wizard.querySelectorAll('[data-wizard-next]').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (currentStep === 1 && !requirementsOk) return;
+            if (!validateCurrentStep()) return;
+            showStep(currentStep + 1);
+        });
+    });
+
+    wizard.querySelectorAll('[data-wizard-prev]').forEach((button) => {
+        button.addEventListener('click', () => showStep(currentStep - 1));
+    });
+
+    if (form) {
+        form.addEventListener('input', updateSummary);
+        form.addEventListener('change', updateSummary);
+    }
+
+    updateSummary();
+    showStep(1);
+});
