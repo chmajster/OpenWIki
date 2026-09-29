@@ -64,6 +64,22 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+validate_install_dir() {
+  [[ "$INSTALL_DIR" == /* ]] || fail "Katalog instalacji musi być ścieżką absolutną."
+
+  local normalized
+  normalized="$(readlink -m -- "$INSTALL_DIR")"
+  case "$normalized" in
+    /|/bin|/boot|/dev|/etc|/home|/lib|/lib32|/lib64|/media|/mnt|/opt|/proc|/root|/run|/sbin|/srv|/sys|/tmp|/usr|/var|/var/www)
+      fail "Niebezpieczny katalog instalacji: $normalized"
+      ;;
+  esac
+
+  [[ "$normalized" != *$'\n'* && "$normalized" != *$'\r'* ]] ||
+    fail "Katalog instalacji zawiera niedozwolone znaki."
+  INSTALL_DIR="$normalized"
+}
+
 require_root() {
   [[ $EUID -eq 0 ]] || fail "Uruchom jako root: sudo ./install.sh"
 }
@@ -418,7 +434,7 @@ NGINX
 configure_cron() {
   info "[7/8] Konfiguracja zadań cyklicznych"
   cat > "$CRON_FILE" <<EOF
-* * * * * $WEB_USER cd $INSTALL_DIR && /usr/bin/php bin/console cron:run >/dev/null 2>&1
+* * * * * $WEB_USER cd "$INSTALL_DIR" && /usr/bin/php bin/console cron:run >/dev/null 2>&1
 EOF
   chmod 0644 "$CRON_FILE"
   ok "Cron OpenWiki skonfigurowany."
@@ -474,6 +490,9 @@ uninstall_mode() {
   [[ "$confirmation" == "DELETE" ]] || fail "Anulowano."
 
   rm -f "$CRON_FILE"
+  if [[ "$PKG_FAMILY" == "dnf" ]] && command -v semanage >/dev/null 2>&1; then
+    semanage fcontext -d "$INSTALL_DIR/storage(/.*)?" 2>/dev/null || true
+  fi
   if [[ "$PKG_FAMILY" == "apt" ]]; then
     rm -f "/etc/nginx/sites-enabled/$NGINX_SITE" "/etc/nginx/sites-available/$NGINX_SITE"
     if [[ -f /etc/nginx/sites-available/default ]]; then
@@ -486,6 +505,8 @@ uninstall_mode() {
   rm -rf "$INSTALL_DIR"
   ok "Pliki i konfiguracja OpenWiki zostały usunięte. Baza danych nie została usunięta."
 }
+
+validate_install_dir
 
 case "$MODE" in
   status) status_mode; exit 0 ;;
