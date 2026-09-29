@@ -25,11 +25,13 @@ final class InstallerController extends Controller
             'title' => 'Install OpenWiki',
             'requirements' => $service->requirements(),
             'defaults' => [
+                'app_name' => 'OpenWiki',
                 'app_url' => $this->suggestedUrl($request),
                 'timezone' => 'UTC',
                 'db_host' => '127.0.0.1',
                 'db_port' => 3306,
                 'db_database' => 'openwiki',
+                'create_database' => true,
             ],
         ]);
     }
@@ -47,7 +49,10 @@ final class InstallerController extends Controller
         try {
             (new InstallService($this->app->basePath()))->install((array) $request->input());
             Env::load($this->app->basePath('.env'));
-            Session::flash('success', 'Installation completed. Sign in with the administrator account.');
+            Session::flash(
+                'success',
+                'Installation completed. Sign in with admin/admin. You will be required to change the password.'
+            );
             return Response::redirect('/login');
         } catch (\Throwable $exception) {
             error_log('[OpenWiki installer] ' . $exception->getMessage());

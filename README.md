@@ -7,7 +7,7 @@ OpenWiki is a self-hosted knowledge base and enterprise wiki written for PHP 8.2
 - PHP 8.2+
 - MySQL 8 or compatible MariaDB
 - PHP extensions: PDO, pdo_mysql, mbstring, OpenSSL, DOM, Phar, cURL, LDAP, ZIP, GD
-- a web server whose document root points to `public/`
+- Apache with `mod_rewrite` (repository-root deployment) or a web server whose document root points to `public/`
 - writable `storage/` directories
 
 Composer is used for development/test dependencies. Production runtime does not require Node.js.
@@ -19,11 +19,11 @@ git clone https://github.com/chmajster/OpenWIki.git
 cd OpenWIki
 ```
 
-Point Apache or Nginx at the repository's `public/` directory. On the first HTTP request OpenWiki redirects to `/install`.
+For Apache, the repository can be extracted directly into the virtual host web root. The included root `index.php` and `.htaccess` route requests into the application while blocking direct access to internal directories. The Apache virtual host must allow `.htaccess` overrides and `mod_rewrite` must be enabled. Nginx and hardened production deployments should still point the document root directly to `public/`.
 
-The installer validates the runtime, connects to MySQL/MariaDB, applies migrations, creates the initial Super Admin, seeds RBAC and system templates, writes `.env`, performs its final persistence steps and creates `storage/installed.lock`.
+On the first HTTP request OpenWiki automatically redirects to `/install`. The four-step browser wizard checks the runtime, collects instance settings, configures MySQL/MariaDB, applies migrations, seeds RBAC and system templates, writes `.env`, creates the installation lock and creates the initial Super Admin account.
 
-The installation lock prevents the graphical installer from running again.
+The default first-login credentials are `admin` / `admin`. The account is marked for mandatory password change immediately after the first successful sign-in. The installation lock prevents the graphical installer from running again.
 
 ## Production installer
 
@@ -90,11 +90,11 @@ Run housekeeping periodically, for example once per minute:
 
 ## Web server
 
-The public document root must be `public/`, never the repository root. Attachments and runtime data live outside the public directory.
+The recommended production document root is `public/`; attachments and runtime data remain outside that directory.
 
-Apache users can use the included `public/.htaccess` when `mod_rewrite` is enabled.
+Apache additionally supports repository-root deployment for the download-and-extract installation flow. The root `.htaccess` blocks internal application directories, maps `/assets/*` to `public/assets/` and sends application requests through the root front controller. This mode requires `AllowOverride` for the site and `mod_rewrite`. If those controls are unavailable, use `public/` as the document root instead.
 
-For Nginx, route requests for non-existent files to `/index.php` and pass PHP requests to PHP-FPM.
+For Nginx, point the document root to `public/`, route requests for non-existent files to `/index.php` and pass PHP requests to PHP-FPM.
 
 ## Current implemented foundation
 

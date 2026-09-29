@@ -1,0 +1,32 @@
+Options -Indexes
+DirectoryIndex index.php
+
+<IfModule mod_authz_core.c>
+    <FilesMatch "^(?:\.env(?:\..*)?|composer\.(?:json|lock)|phpunit\.xml|AGENTS\.md)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Never expose application internals when the repository root is used as
+    # the web root.
+    RewriteRule ^(?:\.git|\.github|\.svn|\.hg|app|bin|bootstrap|database|resources|routes|storage|tests|vendor)(?:/|$) - [R=404,L]
+
+    # Public assets keep their normal /assets/... URLs.
+    RewriteRule ^assets/(.*)$ public/assets/$1 [L]
+
+    # Existing files in the repository root (for example favicon/robots added
+    # by an administrator) may be served directly after the protected paths
+    # above have been rejected.
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteRule ^ - [L]
+
+    # Route every application request through the front controller.
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+</IfModule>
