@@ -6,7 +6,7 @@ OpenWiki is a self-hosted knowledge base and enterprise wiki written for PHP 8.2
 
 - PHP 8.2+
 - MySQL 8 or compatible MariaDB
-- PHP extensions: PDO, pdo_mysql, mbstring, OpenSSL, DOM, Phar, cURL, LDAP, ZIP
+- PHP extensions: PDO, pdo_mysql, mbstring, OpenSSL, DOM, Phar, cURL, LDAP, ZIP, GD
 - a web server whose document root points to `public/`
 - writable `storage/` directories
 
@@ -24,6 +24,40 @@ Point Apache or Nginx at the repository's `public/` directory. On the first HTTP
 The installer validates the runtime, connects to MySQL/MariaDB, applies migrations, creates the initial Super Admin, seeds RBAC and system templates, writes `.env`, performs its final persistence steps and creates `storage/installed.lock`.
 
 The installation lock prevents the graphical installer from running again.
+
+## Production installer
+
+For a fresh Debian/Ubuntu or RHEL/Rocky/Alma/Fedora host, run:
+
+```bash
+sudo ./install.sh
+```
+
+The script installs and starts Nginx, MariaDB and PHP-FPM, installs Composer dependencies, provisions the OpenWiki database account, runs the shared CLI installer, configures cron, Nginx and SELinux where applicable, and performs application/database/HTTP health checks.
+
+Re-running the installer repairs the deployment without rotating credentials of an already installed database account:
+
+```bash
+sudo ./install.sh
+sudo ./install.sh --status
+```
+
+Uninstall removes the OpenWiki files, cron entry and Nginx site. The database is intentionally retained:
+
+```bash
+sudo ./install.sh --uninstall
+```
+
+Useful environment overrides:
+
+```bash
+OPENWIKI_INSTALL_DIR=/var/www/openwiki
+OPENWIKI_DB_NAME=openwiki
+OPENWIKI_DB_USER=openwiki
+OPENWIKI_GIT_REF=main
+```
+
+The configured distribution repositories must provide PHP 8.2 or newer. On modular DNF systems the installer enables the PHP 8.2 stream when it is available.
 
 ## CLI installation
 
