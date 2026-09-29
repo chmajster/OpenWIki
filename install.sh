@@ -120,7 +120,50 @@ install_packages() {
 find_php_fpm_service() {
   systemctl list-unit-files --type=service --no-legend 2>/dev/null |
     awk '{print $1}' |
-    grep -E '^(php-fpm|php[0-9]+(\.[0-9]+)?-fpm)\.service
+    grep -E '^(php-fpm|php[0-9]+(\.[0-9]+)?-fpm)\.service$' |
+    head -n1 || true
+}
+
+detect_php_runtime_user() {
+  local conf user
+  local configs=()
+
+  if [[ "$PKG_FAMILY" == "apt" ]]; then
+    configs=(/etc/php/*/fpm/pool.d/www.conf)
+  else
+    configs=(/etc/php-fpm.d/www.conf)
+  fi
+
+  for conf in "${configs[@]}"; do
+    [[ -f "$conf" ]] || continue
+    user="$(awk -F= '/^[[:space:]]*user[[:space:]]*=/{gsub(/[[:space:]]/, "", $2); print $2; exit}' "$conf")"
+    if [[ -n "$user" ]] && id "$user" >/dev/null 2>&1; then
+      WEB_USER="$user"
+      return 0
+    fi
+  done
+
+  id "$WEB_USER" >/dev/null 2>&1 || fail "Nie znaleziono użytkownika runtime PHP-FPM."
+}
+
+secure_env_permissions() {
+  [[ -f "$INSTALL_DIR/.env" ]] || return 0
+  chown root:"$WEB_USER" "$INSTALL_DIR/.env"
+  chmod 0640 "$INSTALL_DIR/.env"
+}
+
+start_services() {
+  info "[2/8] Uruchamianie usług"
+  systemctl enable --now mariadb
+  systemctl enable --now nginx
+
+  PHP_FPM_SERVICE="$(find_php_fpm_service)"
+  [[ -n "$PHP_FPM_SERVICE" ]] || fail "Nie znaleziono usługi PHP-FPM."
+  systemctl enable --now "$PHP_FPM_SERVICE"
+  detect_php_runtime_user
+  ok "MariaDB, Nginx i PHP-FPM działają (runtime: $WEB_USER)."
+}
+
 deploy_code() {
   info "[3/8] Pobieranie aplikacji"
   if [[ -d "$INSTALL_DIR/.git" ]]; then
@@ -444,312 +487,6 @@ deploy_code
 configure_database
 run_app_installer
 configure_selinux
-configure_nginx
-configure_cron
-verify_installation
- |
-    head -n1 || true
-}
-
-detect_php_runtime_user() {
-  local conf user
-  local configs=()
-
-  if [[ "$PKG_FAMILY" == "apt" ]]; then
-    configs=(/etc/php/*/fpm/pool.d/www.conf)
-  else
-    configs=(/etc/php-fpm.d/www.conf)
-  fi
-
-  for conf in "${configs[@]}"; do
-    [[ -f "$conf" ]] || continue
-    user="$(awk -F= '/^[[:space:]]*user[[:space:]]*=/{gsub(/[[:space:]]/, "", $2); print $2; exit}' "$conf")"
-    if [[ -n "$user" ]] && id "$user" >/dev/null 2>&1; then
-      WEB_USER="$user"
-      return 0
-    fi
-  done
-
-  id "$WEB_USER" >/dev/null 2>&1 || fail "Nie znaleziono użytkownika runtime PHP-FPM."
-}
-
-secure_env_permissions() {
-  [[ -f "$INSTALL_DIR/.env" ]] || return 0
-  chown root:"$WEB_USER" "$INSTALL_DIR/.env"
-  chmod 0640 "$INSTALL_DIR/.env"
-}
-
-start_services() {
-  info "[2/8] Uruchamianie usług"
-  systemctl enable --now mariadb
-  systemctl enable --now nginx
-
-  PHP_FPM_SERVICE="$(find_php_fpm_service)"
-  [[ -n "$PHP_FPM_SERVICE" ]] || fail "Nie znaleziono usługi PHP-FPM."
-  systemctl enable --now "$PHP_FPM_SERVICE"
-  detect_php_runtime_user
-  ok "MariaDB, Nginx i PHP-FPM działają (runtime: $WEB_USER)."
-}
-
-deploy_code() {
-  info "[3/8] Pobieranie aplikacji"
-  if [[ -d "$INSTALL_DIR/.git" ]]; then
-    git -C "$INSTALL_DIR" fetch --prune origin
-    git -C "$INSTALL_DIR" checkout main
-    git -C "$INSTALL_DIR" pull --ff-only origin main
-  elif [[ -f "$(pwd)/composer.json" && -d "$(pwd)/app" && -d "$(pwd)/public" ]]; then
-    mkdir -p "$INSTALL_DIR"
-    if [[ "$(readlink -f "$(pwd)")" != "$(readlink -f "$INSTALL_DIR")" ]]; then
-      cp -a "$(pwd)/." "$INSTALL_DIR/"
-    fi
-  else
-    [[ ! -e "$INSTALL_DIR" || -z "$(ls -A "$INSTALL_DIR" 2>/dev/null || true)" ]] ||
-      fail "Katalog $INSTALL_DIR istnieje i nie jest pusty."
-    git clone --branch main --depth 1 "$REPO_URL" "$INSTALL_DIR"
-  fi
-
-  cd "$INSTALL_DIR"
-  composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
-  mkdir -p storage/{attachments,backups,cache,temp,logs}
-  chown -R root:"$WEB_USER" "$INSTALL_DIR"
-  find "$INSTALL_DIR" -type d -exec chmod 0755 {} \;
-  find "$INSTALL_DIR" -type f -exec chmod 0644 {} \;
-  chown -R "$WEB_USER":"$WEB_USER" "$INSTALL_DIR/storage"
-  find "$INSTALL_DIR/storage" -type d -exec chmod 0770 {} \;
-  find "$INSTALL_DIR/storage" -type f -exec chmod 0660 {} \;
-  chmod 0755 "$INSTALL_DIR/bin/console"
-  ok "Kod aplikacji przygotowany w $INSTALL_DIR."
-}
-
-read_value() {
-  local __var="$1" prompt="$2" default="${3:-}" value
-  if [[ -n "$default" ]]; then
-    read -r -p "$prompt [$default]: " value
-    value="${value:-$default}"
-  else
-    read -r -p "$prompt: " value
-  fi
-  printf -v "$__var" '%s' "$value"
-}
-
-read_secret() {
-  local __var="$1" prompt="$2" value
-  read -r -s -p "$prompt: " value
-  printf '\n'
-  printf -v "$__var" '%s' "$value"
-}
-
-configure_database() {
-  info "[4/8] Konfiguracja bazy danych"
-
-  read_value DB_NAME_INPUT "Nazwa bazy danych" "$DB_NAME"
-  read_value DB_USER_INPUT "Użytkownik bazy danych" "$DB_USER"
-  DB_NAME="$DB_NAME_INPUT"
-  DB_USER="$DB_USER_INPUT"
-
-  while true; do
-    read_secret DB_PASSWORD "Hasło użytkownika bazy (pozostaw puste, aby wygenerować)"
-    if [[ -z "$DB_PASSWORD" ]]; then
-      DB_PASSWORD="$(php -r 'echo bin2hex(random_bytes(18));')"
-      break
-    fi
-    [[ ${#DB_PASSWORD} -ge 12 ]] && break
-    warn "Hasło bazy powinno mieć co najmniej 12 znaków."
-  done
-
-  [[ "$DB_NAME" =~ ^[A-Za-z0-9_]+$ ]] || fail "Nieprawidłowa nazwa bazy."
-  [[ "$DB_USER" =~ ^[A-Za-z0-9_.-]+$ ]] || fail "Nieprawidłowa nazwa użytkownika bazy."
-
-  local sql_pass
-  sql_pass="${DB_PASSWORD//\\/\\\\}"
-  sql_pass="${sql_pass//\'/\'\'}"
-
-  mariadb --protocol=socket <<SQL
-CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$sql_pass';
-ALTER USER '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$sql_pass';
-GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'127.0.0.1';
-FLUSH PRIVILEGES;
-SQL
-  ok "Baza $DB_NAME i użytkownik $DB_USER są gotowe."
-}
-
-run_app_installer() {
-  info "[5/8] Instalacja OpenWiki"
-  if [[ -f "$INSTALL_DIR/storage/installed.lock" ]]; then
-    warn "OpenWiki jest już zainstalowane. Pomijam inicjalizację aplikacji."
-    return
-  fi
-
-  read_value INSTANCE_NAME "Nazwa instancji" "OpenWiki"
-  read_value APP_URL "URL aplikacji" "http://$(hostname -f 2>/dev/null || hostname)"
-  read_value APP_TIMEZONE "Strefa czasowa" "Europe/Warsaw"
-  read_value ADMIN_USERNAME "Login administratora" "admin"
-  read_value ADMIN_EMAIL "E-mail administratora" ""
-
-  while true; do
-    read_secret ADMIN_PASSWORD "Hasło administratora (min. 12 znaków)"
-    [[ ${#ADMIN_PASSWORD} -ge 12 ]] && break
-    warn "Hasło administratora musi mieć co najmniej 12 znaków."
-  done
-
-  read_value ADMIN_FIRST_NAME "Imię administratora" ""
-  read_value ADMIN_LAST_NAME "Nazwisko administratora" ""
-
-  printf '%s\n' \
-    "$INSTANCE_NAME" \
-    "$APP_URL" \
-    "$APP_TIMEZONE" \
-    "127.0.0.1" \
-    "3306" \
-    "$DB_NAME" \
-    "$DB_USER" \
-    "$DB_PASSWORD" \
-    "n" \
-    "$ADMIN_USERNAME" \
-    "$ADMIN_EMAIL" \
-    "$ADMIN_PASSWORD" \
-    "$ADMIN_FIRST_NAME" \
-    "$ADMIN_LAST_NAME" | php "$INSTALL_DIR/bin/console" install
-
-  chown "$WEB_USER":"$WEB_USER" "$INSTALL_DIR/.env"
-  chmod 0640 "$INSTALL_DIR/.env"
-  chown -R "$WEB_USER":"$WEB_USER" "$INSTALL_DIR/storage"
-  ok "Instalator aplikacji zakończony."
-}
-
-detect_fpm_socket() {
-  local sockets=(
-    /run/php/php*-fpm.sock
-    /run/php-fpm/www.sock
-    /var/run/php-fpm/www.sock
-  )
-  local s
-  for s in "${sockets[@]}"; do
-    for candidate in $s; do
-      [[ -S "$candidate" ]] && { printf '%s' "$candidate"; return 0; }
-    done
-  done
-  return 1
-}
-
-configure_nginx() {
-  info "[6/8] Konfiguracja Nginx"
-  local socket
-  socket="$(detect_fpm_socket)" || fail "Nie znaleziono socketu PHP-FPM."
-
-  local conf
-  if [[ "$PKG_FAMILY" == "apt" ]]; then
-    conf="/etc/nginx/sites-available/$NGINX_SITE"
-  else
-    conf="/etc/nginx/conf.d/$NGINX_SITE.conf"
-  fi
-
-  cat > "$conf" <<NGINX
-server {
-    listen 80;
-    listen [::]:80;
-    server_name _;
-    root $INSTALL_DIR/public;
-    index index.php;
-
-    client_max_body_size 64m;
-
-    location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
-    }
-
-    location ~ \.php$ {
-        try_files \$uri =404;
-        include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        fastcgi_param HTTP_PROXY "";
-        fastcgi_pass unix:$socket;
-    }
-
-    location ~ /\. {
-        deny all;
-    }
-}
-NGINX
-
-  if [[ "$PKG_FAMILY" == "apt" ]]; then
-    ln -sfn "$conf" "/etc/nginx/sites-enabled/$NGINX_SITE"
-    rm -f /etc/nginx/sites-enabled/default
-  fi
-
-  nginx -t
-  systemctl reload nginx
-  ok "Nginx wskazuje na $INSTALL_DIR/public."
-}
-
-configure_cron() {
-  info "[7/8] Konfiguracja zadań cyklicznych"
-  cat > "$CRON_FILE" <<EOF
-* * * * * $WEB_USER cd $INSTALL_DIR && /usr/bin/php bin/console cron:run >/dev/null 2>&1
-EOF
-  chmod 0644 "$CRON_FILE"
-  ok "Cron OpenWiki skonfigurowany."
-}
-
-verify_installation() {
-  info "[8/8] Weryfikacja"
-  cd "$INSTALL_DIR"
-  php bin/console system:check
-  php bin/console db:status
-  nginx -t
-  systemctl is-active --quiet nginx
-  systemctl is-active --quiet mariadb
-  curl --fail --silent --show-error --max-time 10 http://127.0.0.1/health >/dev/null
-  ok "Healthcheck HTTP zakończony powodzeniem."
-  printf '\n'
-  ok "OpenWiki jest zainstalowane."
-  info "Katalog: $INSTALL_DIR"
-  info "Adres: http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo localhost)/"
-}
-
-status_mode() {
-  detect_os
-  info "OpenWiki status"
-  [[ -d "$INSTALL_DIR" ]] && ok "Katalog: $INSTALL_DIR" || warn "Brak katalogu: $INSTALL_DIR"
-  [[ -f "$INSTALL_DIR/storage/installed.lock" ]] && ok "installed.lock obecny" || warn "Brak installed.lock"
-  systemctl is-active --quiet nginx && ok "nginx active" || warn "nginx inactive"
-  systemctl is-active --quiet mariadb && ok "mariadb active" || warn "mariadb inactive"
-  if [[ -f "$INSTALL_DIR/bin/console" ]]; then
-    (cd "$INSTALL_DIR" && php bin/console system:check) || true
-  fi
-}
-
-uninstall_mode() {
-  require_root
-  detect_os
-  warn "Usunięcie OpenWiki skasuje pliki aplikacji. Baza danych pozostanie bez zmian."
-  read -r -p "Wpisz DELETE aby kontynuować: " confirmation
-  [[ "$confirmation" == "DELETE" ]] || fail "Anulowano."
-
-  rm -f "$CRON_FILE"
-  if [[ "$PKG_FAMILY" == "apt" ]]; then
-    rm -f "/etc/nginx/sites-enabled/$NGINX_SITE" "/etc/nginx/sites-available/$NGINX_SITE"
-  else
-    rm -f "/etc/nginx/conf.d/$NGINX_SITE.conf"
-  fi
-  nginx -t && systemctl reload nginx || true
-  rm -rf "$INSTALL_DIR"
-  ok "Pliki i konfiguracja OpenWiki zostały usunięte. Baza danych nie została usunięta."
-}
-
-case "$MODE" in
-  status) status_mode; exit 0 ;;
-  uninstall) uninstall_mode; exit 0 ;;
-esac
-
-require_root
-detect_os
-install_packages
-start_services
-deploy_code
-configure_database
-run_app_installer
 configure_nginx
 configure_cron
 verify_installation
