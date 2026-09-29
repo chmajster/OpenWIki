@@ -53,6 +53,12 @@ jobs:
       - name: JavaScript syntax
         run: node --check public/assets/app.js
 
+      - name: Bash installer syntax
+        run: bash -n install.sh
+
+      - name: Bash installer help
+        run: NO_COLOR=1 bash install.sh --help
+
       - name: Unit and integration tests
         env:
           OPENWIKI_TEST_DB_HOST: 127.0.0.1
