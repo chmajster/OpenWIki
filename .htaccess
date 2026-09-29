@@ -12,7 +12,7 @@ DirectoryIndex index.php
 
     # Never expose application internals when the repository root is used as
     # the web root.
-    RewriteRule ^(?:app|bin|bootstrap|database|resources|routes|storage|tests|vendor)(?:/|$) - [R=404,L]
+    RewriteRule ^(?:\.git|\.github|\.svn|\.hg|app|bin|bootstrap|database|resources|routes|storage|tests|vendor)(?:/|$) - [R=404,L]
 
     # Public assets keep their normal /assets/... URLs.
     RewriteRule ^assets/(.*)$ public/assets/$1 [L]
