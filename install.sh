@@ -185,9 +185,8 @@ start_services() {
 deploy_code() {
   info "[3/8] Pobieranie aplikacji"
   if [[ -d "$INSTALL_DIR/.git" ]]; then
-    git -C "$INSTALL_DIR" fetch --prune origin
-    git -C "$INSTALL_DIR" checkout "$GIT_REF"
-    git -C "$INSTALL_DIR" pull --ff-only origin "$GIT_REF"
+    git -C "$INSTALL_DIR" fetch --prune --depth 1 origin "$GIT_REF"
+    git -C "$INSTALL_DIR" checkout --detach FETCH_HEAD
   elif [[ -f "$SCRIPT_DIR/composer.json" && -d "$SCRIPT_DIR/app" && -d "$SCRIPT_DIR/public" ]]; then
     mkdir -p "$INSTALL_DIR"
     if [[ "$(readlink -f "$SCRIPT_DIR")" != "$(readlink -f "$INSTALL_DIR")" ]]; then
