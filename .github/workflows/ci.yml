@@ -53,6 +53,12 @@ jobs:
       - name: JavaScript syntax
         run: node --check public/assets/app.js
 
+      - name: Bash installer syntax
+        run: bash -n install.sh
+
+      - name: Bash installer help
+        run: NO_COLOR=1 bash install.sh --help
+
       - name: Unit and integration tests
         env:
           OPENWIKI_TEST_DB_HOST: 127.0.0.1
@@ -61,3 +67,63 @@ jobs:
           OPENWIKI_TEST_DB_USERNAME: root
           OPENWIKI_TEST_DB_PASSWORD: root
         run: vendor/bin/phpunit
+
+
+  installer-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fresh host install
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci OPENWIKI_GIT_REF="$ref" NO_COLOR=1 \
+            bash ./install.sh <<'EOF'
+          openwiki_ci
+          openwiki_ci
+          OpenWiki-DB-CI-Password-123!
+          OpenWiki CI
+          http://127.0.0.1
+          UTC
+          ci-admin
+          ci@example.invalid
+          OpenWiki-Admin-CI-Password-123!
+          CI
+          Admin
+          EOF
+
+      - name: Verify installed runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error http://127.0.0.1/health >/dev/null
+          test "$(sudo stat -c '%a' /var/www/openwiki-ci/.env)" = "640"
+          test "$(sudo stat -c '%a' /var/www/openwiki-ci/install.sh)" = "755"
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --status
+
+      - name: Verify repair idempotency
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          before="$(sudo sha256sum /var/www/openwiki-ci/.env | awk '{print $1}')"
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci OPENWIKI_GIT_REF="$ref" NO_COLOR=1 \
+            bash ./install.sh </dev/null
+          after="$(sudo sha256sum /var/www/openwiki-ci/.env | awk '{print $1}')"
+          test "$before" = "$after"
+          curl --fail --silent --show-error http://127.0.0.1/health >/dev/null
+
+      - name: Uninstall
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          printf 'DELETE\n' |
+            sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --uninstall
+          test ! -e /var/www/openwiki-ci

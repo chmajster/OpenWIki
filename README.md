@@ -6,7 +6,7 @@ OpenWiki is a self-hosted knowledge base and enterprise wiki written for PHP 8.2
 
 - PHP 8.2+
 - MySQL 8 or compatible MariaDB
-- PHP extensions: PDO, pdo_mysql, mbstring, OpenSSL, DOM, Phar, cURL, LDAP, ZIP
+- PHP extensions: PDO, pdo_mysql, mbstring, OpenSSL, DOM, Phar, cURL, LDAP, ZIP, GD
 - Apache with `mod_rewrite` (repository-root deployment) or a web server whose document root points to `public/`
 - writable `storage/` directories
 
@@ -24,6 +24,40 @@ For Apache, the repository can be extracted directly into the virtual host web r
 On the first HTTP request OpenWiki automatically redirects to `/install`. The four-step browser wizard checks the runtime, collects instance settings, configures MySQL/MariaDB, applies migrations, seeds RBAC and system templates, writes `.env`, creates the installation lock and creates the initial Super Admin account.
 
 The default first-login credentials are `admin` / `admin`. The account is marked for mandatory password change immediately after the first successful sign-in. The installation lock prevents the graphical installer from running again.
+
+## Production installer
+
+For a fresh Debian/Ubuntu or RHEL/Rocky/Alma/Fedora host, run:
+
+```bash
+sudo ./install.sh
+```
+
+The script installs and starts Nginx, MariaDB and PHP-FPM, installs Composer dependencies, provisions the OpenWiki database account, runs the shared CLI installer, configures cron, Nginx and SELinux where applicable, and performs application/database/HTTP health checks.
+
+Re-running the installer repairs the deployment without rotating credentials of an already installed database account:
+
+```bash
+sudo ./install.sh
+sudo ./install.sh --status
+```
+
+Uninstall removes the OpenWiki files, cron entry and Nginx site. The database is intentionally retained:
+
+```bash
+sudo ./install.sh --uninstall
+```
+
+Useful environment overrides:
+
+```bash
+OPENWIKI_INSTALL_DIR=/var/www/openwiki
+OPENWIKI_DB_NAME=openwiki
+OPENWIKI_DB_USER=openwiki
+OPENWIKI_GIT_REF=main
+```
+
+The configured distribution repositories must provide PHP 8.2 or newer. On modular DNF systems the installer enables the PHP 8.2 stream when it is available.
 
 ## CLI installation
 
