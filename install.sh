@@ -348,6 +348,8 @@ configure_selinux() {
 
   info "[SELinux] Konfiguracja dostępu aplikacji"
   if command -v semanage >/dev/null 2>&1; then
+    semanage fcontext -a -t httpd_sys_content_t "$INSTALL_DIR(/.*)?" 2>/dev/null ||
+      semanage fcontext -m -t httpd_sys_content_t "$INSTALL_DIR(/.*)?"
     semanage fcontext -a -t httpd_sys_rw_content_t "$INSTALL_DIR/storage(/.*)?" 2>/dev/null ||
       semanage fcontext -m -t httpd_sys_rw_content_t "$INSTALL_DIR/storage(/.*)?"
   fi
@@ -491,6 +493,7 @@ uninstall_mode() {
   rm -f "$CRON_FILE"
   if [[ "$PKG_FAMILY" == "dnf" ]] && command -v semanage >/dev/null 2>&1; then
     semanage fcontext -d "$INSTALL_DIR/storage(/.*)?" 2>/dev/null || true
+    semanage fcontext -d "$INSTALL_DIR(/.*)?" 2>/dev/null || true
   fi
   if [[ "$PKG_FAMILY" == "apt" ]]; then
     rm -f "/etc/nginx/sites-enabled/$NGINX_SITE" "/etc/nginx/sites-available/$NGINX_SITE"
