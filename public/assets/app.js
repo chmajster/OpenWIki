@@ -631,3 +631,49 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
     updateSummary();
     showStep(1);
 });
+
+document.querySelectorAll('[data-timezone-picker]').forEach((picker) => {
+    const input = picker.querySelector('[data-timezone-input]');
+    const detectButton = picker.querySelector('[data-timezone-detect]');
+    const help = picker.closest('label')?.querySelector('[data-timezone-help]');
+    const datalistId = input?.getAttribute('list') || '';
+    const datalist = datalistId ? document.getElementById(datalistId) : null;
+
+    if (!input) return;
+
+    const supportedTimezones = new Set(
+        datalist
+            ? Array.from(datalist.querySelectorAll('option')).map((option) => option.value)
+            : []
+    );
+
+    const detectTimezone = () => {
+        try {
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+            if (!timezone) {
+                if (help) help.textContent = 'The browser did not return a timezone. Choose one from the list.';
+                return false;
+            }
+
+            if (supportedTimezones.size > 0 && !supportedTimezones.has(timezone)) {
+                if (help) help.textContent = 'Detected ' + timezone + ', but PHP does not support this identifier. Choose one from the list.';
+                return false;
+            }
+
+            input.value = timezone;
+            input.dispatchEvent(new Event('input', {bubbles: true}));
+            input.dispatchEvent(new Event('change', {bubbles: true}));
+            if (help) help.textContent = 'Detected from this device: ' + timezone + '. You can change it manually.';
+            return true;
+        } catch {
+            if (help) help.textContent = 'Automatic timezone detection is unavailable. Choose one from the list.';
+            return false;
+        }
+    };
+
+    detectButton?.addEventListener('click', detectTimezone);
+
+    if (picker.dataset.timezoneAutodetect === '1') {
+        detectTimezone();
+    }
+});
