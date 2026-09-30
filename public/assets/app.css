@@ -867,6 +867,47 @@ textarea { resize: vertical; }
 .timezone-picker .button {
     white-space: nowrap;
 }
+.database-test {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-2);
+}
+.database-test__actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.database-test__hint {
+    color: var(--muted);
+    font-size: .78rem;
+    font-weight: 400;
+}
+.database-test__status {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: .82rem;
+    font-weight: 650;
+    line-height: 1.45;
+}
+.database-test__status.is-pending {
+    color: var(--muted);
+    background: var(--surface-3);
+}
+.database-test__status.is-success {
+    color: var(--success);
+    border-color: rgba(97, 208, 149, .35);
+    background: rgba(97, 208, 149, .08);
+}
+.database-test__status.is-error {
+    color: #ffb0b0;
+    border-color: rgba(255, 123, 123, .35);
+    background: rgba(255, 123, 123, .08);
+}
 .wizard-actions {
     display: flex;
     justify-content: space-between;
@@ -977,6 +1018,12 @@ textarea { resize: vertical; }
         grid-template-columns: 1fr;
     }
     .timezone-picker .button {
+        width: 100%;
+    }
+    .database-test__actions {
+        align-items: stretch;
+    }
+    .database-test__actions .button {
         width: 100%;
     }
 }

@@ -200,11 +200,29 @@ $timezones = array_values($timezones);
                                 <small>The supplied database account must have CREATE DATABASE permission.</small>
                             </span>
                         </label>
+
+                        <div class="database-test" data-database-test data-test-url="/install/test-database">
+                            <div class="database-test__actions">
+                                <button class="button button--secondary" type="button" data-database-test-button>
+                                    Test connection
+                                </button>
+                                <span class="database-test__hint">A successful test is required before continuing.</span>
+                            </div>
+                            <div
+                                class="database-test__status"
+                                data-database-test-status
+                                role="status"
+                                aria-live="polite"
+                                hidden
+                            ></div>
+                        </div>
                     </div>
 
                     <div class="wizard-actions" data-wizard-only>
                         <button class="button button--ghost" type="button" data-wizard-prev>Back</button>
-                        <button class="button button--primary" type="button" data-wizard-next>Review</button>
+                        <button class="button button--primary" type="button" data-wizard-next data-database-next disabled>
+                            Review
+                        </button>
                     </div>
                 </section>
 

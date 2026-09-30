@@ -30,6 +30,21 @@ final class InstallServiceTest extends TestCase
         @unlink($this->basePath . '/storage/installed.lock');
     }
 
+    public function testDatabaseConnectionSucceedsForConfiguredDatabase(): void
+    {
+        $result = (new InstallService($this->basePath))->testDatabaseConnection([
+            'db_host' => getenv('OPENWIKI_TEST_DB_HOST'),
+            'db_port' => getenv('OPENWIKI_TEST_DB_PORT'),
+            'db_database' => getenv('OPENWIKI_TEST_DB_DATABASE'),
+            'db_username' => getenv('OPENWIKI_TEST_DB_USERNAME'),
+            'db_password' => getenv('OPENWIKI_TEST_DB_PASSWORD'),
+            'create_database' => false,
+        ]);
+
+        self::assertTrue($result['ok']);
+        self::assertTrue($result['database_exists']);
+    }
+
     public function testFreshInstallCreatesSchemaAdminRolesAndLock(): void
     {
         (new InstallService($this->basePath))->install([
