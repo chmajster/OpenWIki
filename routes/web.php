@@ -34,6 +34,7 @@ use OpenWiki\Http\Controllers\WebhookAdminController;
 $router = $app->router();
 
 $router->get('/install', [InstallerController::class, 'index']);
+$router->post('/install/test-database', [InstallerController::class, 'testDatabase']);
 $router->post('/install', [InstallerController::class, 'store']);
 $router->get('/health', [HealthController::class, 'show']);
 
