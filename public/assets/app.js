@@ -625,10 +625,10 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
 
     const resetDatabaseTest = () => {
         if (!databaseNext) return;
-        const wasPassed = databaseTestPassed;
+        const hadStatus = databaseTestStatus !== null && !databaseTestStatus.hidden;
         databaseTestPassed = false;
         databaseNext.disabled = true;
-        if (wasPassed) {
+        if (hadStatus) {
             setDatabaseTestStatus('pending', 'Connection settings changed. Test the connection again.');
         }
     };
