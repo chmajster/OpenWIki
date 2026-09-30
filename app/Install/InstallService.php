@@ -55,6 +55,41 @@ final class InstallService
         ];
     }
 
+    public function testDatabaseConnection(array $input): array
+    {
+        $config = $this->databaseConfig($input);
+        $createDatabase = filter_var($input['create_database'] ?? false, FILTER_VALIDATE_BOOL);
+
+        try {
+            $database = Database::connect($config, true);
+            $database->fetchOne('SELECT 1 AS ok');
+
+            return [
+                'ok' => true,
+                'database_exists' => true,
+                'message' => 'Database connection successful.',
+            ];
+        } catch (\RuntimeException $exception) {
+            $previous = $exception->getPrevious();
+            $mysqlError = $previous instanceof \PDOException
+                ? (int) ($previous->errorInfo[1] ?? 0)
+                : 0;
+
+            if (!$createDatabase || $mysqlError !== 1049) {
+                throw $exception;
+            }
+        }
+
+        $server = Database::connect($config, false);
+        $server->fetchOne('SELECT 1 AS ok');
+
+        return [
+            'ok' => true,
+            'database_exists' => false,
+            'message' => 'Server connection successful. The database does not exist yet and will be created during installation.',
+        ];
+    }
+
     public function install(array $input): void
     {
         if (is_file($this->basePath . '/storage/installed.lock')) {
@@ -139,15 +174,7 @@ final class InstallService
             throw new \InvalidArgumentException('Invalid timezone.');
         }
 
-        $databaseName = trim((string) ($input['db_database'] ?? ''));
-        if (!preg_match('/^[A-Za-z0-9_]+$/', $databaseName)) {
-            throw new \InvalidArgumentException('Database name may contain only letters, numbers and underscore.');
-        }
-
-        $port = filter_var($input['db_port'] ?? 3306, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]);
-        if ($port === false) {
-            throw new \InvalidArgumentException('Invalid database port.');
-        }
+        $databaseConfig = $this->databaseConfig($input);
 
         $username = trim((string) ($input['admin_username'] ?? 'admin'));
         $email = trim((string) ($input['admin_email'] ?? 'admin@localhost.invalid'));
@@ -170,14 +197,7 @@ final class InstallService
 
         return [
             'app' => ['name' => $appName, 'url' => $appUrl, 'timezone' => $timezone],
-            'database' => [
-                'host' => trim((string) ($input['db_host'] ?? '127.0.0.1')),
-                'port' => (int) $port,
-                'database' => $databaseName,
-                'username' => (string) ($input['db_username'] ?? ''),
-                'password' => (string) ($input['db_password'] ?? ''),
-                'charset' => 'utf8mb4',
-            ],
+            'database' => $databaseConfig,
             'create_database' => filter_var($input['create_database'] ?? false, FILTER_VALIDATE_BOOL),
             'admin' => [
                 'username' => $username,
@@ -187,6 +207,42 @@ final class InstallService
                 'last_name' => trim((string) ($input['admin_last_name'] ?? '')),
                 'force_password_change' => $isDefaultBootstrapAdmin,
             ],
+        ];
+    }
+
+    private function databaseConfig(array $input): array
+    {
+        $host = trim((string) ($input['db_host'] ?? '127.0.0.1'));
+        if ($host === '') {
+            throw new \InvalidArgumentException('Database host is required.');
+        }
+
+        $databaseName = trim((string) ($input['db_database'] ?? ''));
+        if (!preg_match('/^[A-Za-z0-9_]+$/', $databaseName)) {
+            throw new \InvalidArgumentException('Database name may contain only letters, numbers and underscore.');
+        }
+
+        $port = filter_var(
+            $input['db_port'] ?? 3306,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1, 'max_range' => 65535]]
+        );
+        if ($port === false) {
+            throw new \InvalidArgumentException('Invalid database port.');
+        }
+
+        $username = trim((string) ($input['db_username'] ?? ''));
+        if ($username === '') {
+            throw new \InvalidArgumentException('Database username is required.');
+        }
+
+        return [
+            'host' => $host,
+            'port' => (int) $port,
+            'database' => $databaseName,
+            'username' => $username,
+            'password' => (string) ($input['db_password'] ?? ''),
+            'charset' => 'utf8mb4',
         ];
     }
 
