@@ -858,6 +858,15 @@ textarea { resize: vertical; }
     font-weight: 400;
     line-height: 1.4;
 }
+.timezone-picker {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+}
+.timezone-picker .button {
+    white-space: nowrap;
+}
 .wizard-actions {
     display: flex;
     justify-content: space-between;
@@ -963,5 +972,11 @@ textarea { resize: vertical; }
     }
     .wizard-actions .button {
         flex: 1;
+    }
+    .timezone-picker {
+        grid-template-columns: 1fr;
+    }
+    .timezone-picker .button {
+        width: 100%;
     }
 }
