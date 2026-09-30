@@ -6,6 +6,12 @@ $relativePath = static function (string $path) use ($app, $e): string {
     $relative = str_starts_with($path, $base) ? substr($path, strlen($base)) : $path;
     return $e(str_replace('\\', '/', $relative));
 };
+$timezones = timezone_identifiers_list();
+if (!in_array('UTC', $timezones, true)) {
+    array_unshift($timezones, 'UTC');
+}
+natcasesort($timezones);
+$timezones = array_values($timezones);
 ?>
 <section class="install-layout install-layout--wizard">
     <div
@@ -125,16 +131,31 @@ $relativePath = static function (string $path) use ($app, $e): string {
                             <span class="field-help">Public base URL used by OpenWiki, including http:// or https://.</span>
                         </label>
                         <label>Timezone
-                            <input name="timezone" required value="<?= $value('timezone', 'UTC') ?>" list="openwiki-timezones">
-                            <span class="field-help">Use a PHP timezone identifier, for example Europe/Warsaw or UTC.</span>
+                            <div
+                                class="timezone-picker"
+                                data-timezone-picker
+                                data-timezone-autodetect="<?= empty($installError) ? '1' : '0' ?>"
+                            >
+                                <input
+                                    name="timezone"
+                                    required
+                                    value="<?= $value('timezone', 'UTC') ?>"
+                                    list="openwiki-timezones"
+                                    autocomplete="off"
+                                    data-timezone-input
+                                >
+                                <button class="button button--ghost" type="button" data-timezone-detect>
+                                    Detect from device
+                                </button>
+                            </div>
+                            <span class="field-help" data-timezone-help>
+                                Choose a PHP timezone identifier or let OpenWiki detect it from this browser.
+                            </span>
                         </label>
                         <datalist id="openwiki-timezones">
-                            <option value="UTC">
-                            <option value="Europe/Warsaw">
-                            <option value="Europe/Berlin">
-                            <option value="Europe/London">
-                            <option value="America/New_York">
-                            <option value="America/Los_Angeles">
+                            <?php foreach ($timezones as $timezone): ?>
+                                <option value="<?= $e($timezone) ?>"></option>
+                            <?php endforeach; ?>
                         </datalist>
                     </div>
 
