@@ -36,6 +36,35 @@ final class InstallerController extends Controller
         ]);
     }
 
+    public function testDatabase(Request $request): Response
+    {
+        if ($this->app->installed()) {
+            return Response::json([
+                'error' => ['code' => 'already_installed', 'message' => 'OpenWiki is already installed.'],
+            ], 409);
+        }
+
+        if (($failure = $this->verifyCsrf($request)) !== null) {
+            return $failure;
+        }
+
+        try {
+            $result = (new InstallService($this->app->basePath()))
+                ->testDatabaseConnection((array) $request->input());
+
+            return Response::json(['data' => $result]);
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki installer database test] ' . $exception->getMessage());
+
+            return Response::json([
+                'error' => [
+                    'code' => 'database_connection_failed',
+                    'message' => $exception->getMessage(),
+                ],
+            ], 422);
+        }
+    }
+
     public function store(Request $request): Response
     {
         if ($this->app->installed()) {
