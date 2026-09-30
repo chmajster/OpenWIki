@@ -560,7 +560,12 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
     const indicators = Array.from(wizard.querySelectorAll('[data-wizard-indicator]'));
     const form = wizard.querySelector('[data-wizard-form]');
     const requirementsOk = wizard.dataset.requirementsOk === '1';
+    const databaseTest = wizard.querySelector('[data-database-test]');
+    const databaseTestButton = databaseTest?.querySelector('[data-database-test-button]') || null;
+    const databaseTestStatus = databaseTest?.querySelector('[data-database-test-status]') || null;
+    const databaseNext = wizard.querySelector('[data-database-next]');
     let currentStep = 1;
+    let databaseTestPassed = databaseNext === null;
 
     const updateSummary = () => {
         if (!form) return;
@@ -609,11 +614,34 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
         return true;
     };
 
+    const setDatabaseTestStatus = (state, message) => {
+        if (!databaseTestStatus) return;
+        databaseTestStatus.hidden = false;
+        databaseTestStatus.classList.toggle('is-success', state === 'success');
+        databaseTestStatus.classList.toggle('is-error', state === 'error');
+        databaseTestStatus.classList.toggle('is-pending', state === 'pending');
+        databaseTestStatus.textContent = message;
+    };
+
+    const resetDatabaseTest = () => {
+        if (!databaseNext) return;
+        const wasPassed = databaseTestPassed;
+        databaseTestPassed = false;
+        databaseNext.disabled = true;
+        if (wasPassed) {
+            setDatabaseTestStatus('pending', 'Connection settings changed. Test the connection again.');
+        }
+    };
+
     wizard.classList.add('is-enhanced');
 
     wizard.querySelectorAll('[data-wizard-next]').forEach((button) => {
         button.addEventListener('click', () => {
             if (currentStep === 1 && !requirementsOk) return;
+            if (button.matches('[data-database-next]') && !databaseTestPassed) {
+                setDatabaseTestStatus('error', 'Test the database connection successfully before continuing.');
+                return;
+            }
             if (!validateCurrentStep()) return;
             showStep(currentStep + 1);
         });
@@ -626,7 +654,57 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
     if (form) {
         form.addEventListener('input', updateSummary);
         form.addEventListener('change', updateSummary);
+
+        ['db_host', 'db_port', 'db_database', 'db_username', 'db_password', 'create_database'].forEach((name) => {
+            const field = form.elements.namedItem(name);
+            if (!field || !('addEventListener' in field)) return;
+            field.addEventListener('input', resetDatabaseTest);
+            field.addEventListener('change', resetDatabaseTest);
+        });
     }
+
+    databaseTestButton?.addEventListener('click', async () => {
+        if (!form || !databaseTest) return;
+        if (!validateCurrentStep()) return;
+
+        databaseTestPassed = false;
+        if (databaseNext) databaseNext.disabled = true;
+        databaseTestButton.disabled = true;
+        const originalLabel = databaseTestButton.textContent;
+        databaseTestButton.textContent = 'Testing...';
+        setDatabaseTestStatus('pending', 'Checking database connection...');
+
+        try {
+            const response = await fetch(databaseTest.dataset.testUrl || '/install/test-database', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: new FormData(form),
+                credentials: 'same-origin',
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload?.data?.ok !== true) {
+                throw new Error(payload?.error?.message || 'Database connection test failed.');
+            }
+
+            databaseTestPassed = true;
+            if (databaseNext) databaseNext.disabled = false;
+            setDatabaseTestStatus('success', payload.data.message || 'Database connection successful.');
+        } catch (error) {
+            databaseTestPassed = false;
+            if (databaseNext) databaseNext.disabled = true;
+            setDatabaseTestStatus(
+                'error',
+                error instanceof Error ? error.message : 'Database connection test failed.'
+            );
+        } finally {
+            databaseTestButton.disabled = false;
+            databaseTestButton.textContent = originalLabel;
+        }
+    });
 
     updateSummary();
     showStep(1);
