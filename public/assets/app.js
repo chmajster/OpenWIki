@@ -1,6 +1,28 @@
 'use strict';
 
+const uiCatalog = JSON.parse(document.querySelector('[data-ui-translations]')?.value || '{}');
+window.wikiTranslate = (text) => uiCatalog[text] || text;
+const t = window.wikiTranslate;
+document.querySelectorAll('form[data-confirm]').forEach((form) => form.addEventListener('submit', (event) => {
+    if (!window.confirm(t(form.dataset.confirm))) event.preventDefault();
+}));
+const pagePanelMedia = window.matchMedia('(max-width: 860px)');
+document.querySelectorAll('[data-page-panel]').forEach((panel) => {
+    const adapt = () => { panel.open = !pagePanelMedia.matches; };
+    adapt();
+    pagePanelMedia.addEventListener('change', adapt);
+});
 document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const open = event.target.closest('[data-close-on-escape][open], [data-page-panel][open]');
+    if (open && (!open.matches('[data-page-panel]') || pagePanelMedia.matches)) {
+        open.open = false;
+        open.querySelector('summary').focus();
+    }
+});
+
+document.addEventListener('keydown', (event) => {
+    if (event.defaultPrevented) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         const search = document.querySelector('#global-search');
         if (search) {
@@ -42,18 +64,18 @@ document.querySelectorAll('[data-document-content] pre').forEach((pre) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'code-copy';
-    button.textContent = 'Copy';
+    button.textContent = t('Copy');
     button.addEventListener('click', async () => {
         try {
             await navigator.clipboard.writeText(code.innerText);
-            button.textContent = 'Copied';
+            button.textContent = t('Copied');
             window.setTimeout(() => {
-                button.textContent = 'Copy';
+                button.textContent = t('Copy');
             }, 1500);
         } catch {
-            button.textContent = 'Copy failed';
+            button.textContent = t('Copy failed');
             window.setTimeout(() => {
-                button.textContent = 'Copy';
+                button.textContent = t('Copy');
             }, 1500);
         }
     });
@@ -194,7 +216,7 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
 
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload?.data?.ok !== true) {
-                throw new Error(payload?.error?.message || 'Database connection test failed.');
+                throw new Error(t(payload?.error?.message) || 'Database connection test failed.');
             }
 
             databaseTestPassed = true;
