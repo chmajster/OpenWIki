@@ -983,6 +983,7 @@ textarea { resize: vertical; }
     gap: 4px;
 }
 @media (max-width: 860px) {
+ .topbar { position: static; }
     .install-wizard {
         grid-template-columns: 1fr;
     }
@@ -1080,7 +1081,8 @@ dialog .button { margin: 8px 8px 0 0; }
  .sidebar-body { max-height: 65dvh; overflow: auto; }
  .topbar__inner { flex-wrap: wrap; gap: 10px; }
  .top-search { order: 3; flex: 1 1 100%; }
- .top-actions { margin-left: auto; gap: 4px; }
+ .top-actions { margin-left: auto; gap: 4px; flex: 0 1 auto; }
+ .account-menu > summary { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
  .editor-toolbar button, .editor-table-tools button { min-height: 38px; }
  .editor-toolbar { position: static; }
  .page-actions { flex-wrap: wrap; }

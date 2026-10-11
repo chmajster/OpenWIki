@@ -49,17 +49,12 @@ $notificationCount = $currentUser === null
                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                         <button class="button button--ghost" type="submit"><?= $e($t('Sign out')) ?></button>
                     </form>
+                    <?php require __DIR__ . '/../partials/language-form.php'; ?>
                     </div></details>
                 <?php else: ?>
                     <a class="button button--primary" href="/login"><?= $e($t('Sign in')) ?></a>
+                    <?php require __DIR__ . '/../partials/language-form.php'; ?>
                 <?php endif; ?>
-                <form method="post" action="/language" class="language-form">
-                    <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                    <input type="hidden" name="back" value="<?= $e($_SERVER['REQUEST_URI'] ?? '/') ?>">
-                    <label class="sr-only" for="interface-language"><?= $e($t('Interface language')) ?></label>
-                    <select name="locale" id="interface-language"><option value="pl" <?= $locale === 'pl' ? 'selected' : '' ?>>Polski</option><option value="en" <?= $locale === 'en' ? 'selected' : '' ?>>English</option></select>
-                    <button class="button button--ghost" type="submit"><?= $e($t('Apply')) ?></button>
-                </form>
             </nav>
         <?php endif; ?>
     </div>

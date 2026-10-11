@@ -74,7 +74,7 @@ export function createRichEditor(element, html, sanitize, onUpdate, onSelection)
                 addCommands() { return {toggleCodeBlock: (attributes) => ({commands}) => commands.toggleNode('codeBlock', 'paragraph', attributes)}; },
                 addKeyboardShortcuts() { return {'Mod-Alt-c': () => this.editor.commands.toggleCodeBlock(), 'Mod-Enter': () => this.editor.commands.exitCode(), Enter: () => this.editor.commands.newlineInCode()}; }
             }), CompatibleTable.configure({resizable: false}), TableRow, TableCell, TableHeader,
-            TaskList, Tasks.configure({nested: true}), ImageFigure, Callout, Container, Span, globalAttributes],
+            TaskList, Tasks.configure({nested: true, a11y: {checkboxLabel: (node) => window.wikiTranslate('Task') + ': ' + (node.textContent || window.wikiTranslate('Empty task'))}}), ImageFigure, Callout, Container, Span, globalAttributes],
         editorProps: {
             attributes: {'data-visual-editor': '', role: 'textbox', 'aria-label': element.dataset.label, 'aria-multiline': 'true', class: 'visual-editor document-content'},
             transformPastedHTML: sanitize,

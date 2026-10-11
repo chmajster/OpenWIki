@@ -5,6 +5,8 @@ const fixture = () => JSON.parse(fs.readFileSync('storage/temp/editor-browser.js
 const editor = (page) => page.locator('[data-visual-editor]');
 const state = (page) => page.locator('[data-save-state]');
 const unique = (prefix) => prefix + '-' + Date.now() + '-' + Math.random().toString(16).slice(2, 7);
+const pageErrors = [];
+const observeErrors = (page) => page.on('pageerror', (error) => pageErrors.push(error.message));
 const api = async (request, method, path, data) => {
     const response = await request[method]('/api/v1/' + path, {headers: {Authorization: 'Bearer ' + fixture().token}, data});
     expect(response.ok(), await response.text()).toBeTruthy();
@@ -22,10 +24,14 @@ const login = async (page, index = 0) => {
     await page.getByRole('button', {name: 'Sign in', exact: true}).click();
     await expect(page).toHaveURL('/');
 };
-test.beforeEach(async ({page}) => {
+test.beforeEach(async ({page, context}) => {
+    pageErrors.length = 0;
+    observeErrors(page);
+    context.on('page', observeErrors);
     page.on('dialog', (dialog) => dialog.accept());
     await login(page);
 });
+test.afterEach(() => { expect(pageErrors, 'Unexpected browser JavaScript errors').toEqual([]); });
 
 test('the real create form transfers the latest source in both directions and saves all fields', async ({page, request}) => {
     const parent = await create(request, unique('Parent'));
@@ -433,6 +439,7 @@ test('rich tools save and reopen tables, code languages, callouts, links and mac
     await page.locator('[data-macro-name]').selectOption('status');
     await page.locator('[data-macro-parameter]').fill('Ready for daily use');
     await page.getByRole('button', {name: 'Insert macro', exact: true}).click();
+    await page.screenshot({path: 'storage/temp/daily-editor-desktop-rich.png', fullPage: true});
     await editor(page).press('ControlOrMeta+S');
     const saved = page.locator('[data-document-content]');
     await expect(saved.locator('h2')).toContainText('Daily heading');
@@ -579,6 +586,7 @@ test('page link search, macro results and editor endpoints enforce actual ACL', 
     await page.request.post(pathFor(visibleChild) + '/permissions/inheritance', {form: {_token: ownerCsrf, inherit_acl: '0'}});
     const context = await browser.newContext();
     const limited = await context.newPage();
+    observeErrors(limited);
     await login(limited, 2);
     await limited.goto(pathFor(parent));
     await expect(limited.locator('[data-document-content]')).not.toContainText(hidden.title);
@@ -611,9 +619,11 @@ test('Polish interface, mobile tree, account menu and keyboard form work togethe
     await page.locator('[name=identifier]').fill(fixture().users[0].username);
     await page.locator('[name=password]').fill(fixture().users[0].password);
     await page.getByRole('button', {name: 'Zaloguj', exact: true}).click();
+    await page.locator('.account-menu summary').click();
     await page.locator('#interface-language').selectOption('en');
     await page.locator('.language-form').getByRole('button').click();
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await page.locator('.account-menu summary').click();
     await page.locator('#interface-language').selectOption('pl');
     await page.locator('.language-form').getByRole('button').click();
     await page.reload();

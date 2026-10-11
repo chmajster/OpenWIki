@@ -276,4 +276,5 @@ return [
     'Page created.' => 'Utworzono stronę.', 'Page updated.' => 'Zaktualizowano stronę.', 'Page restored.' => 'Przywrócono stronę.',
     'Attachment uploaded.' => 'Przesłano załącznik.', 'Sign in to continue.' => 'Zaloguj się, aby kontynuować.',
     'Current parent (restricted)' => 'Obecna strona nadrzędna (ograniczony dostęp)',
+    'Task' => 'Zadanie', 'Empty task' => 'Puste zadanie',
 ];

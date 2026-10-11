@@ -264,7 +264,7 @@ $preserveParent = $isEdit && (int) $parentValue > 0
                 <textarea name="change_summary" rows="3" maxlength="500" placeholder="<?= $e($t('Describe this change')) ?>"><?= $e($changeSummary) ?></textarea>
             </label>
             <?php if ($isEdit): ?>
-                <p class="field-help" data-version-hint><?= $e($t('Based on version')) ?> <?= (int) $field('base_version', $page['version']) ?>. Concurrent changes are protected by optimistic locking.</p>
+                <p class="field-help" data-version-hint><?= $e($t('Based on version')) ?> <?= (int) $field('base_version', $page['version']) ?><?= $e($t('. Concurrent changes are protected by optimistic locking.')) ?></p>
             <?php else: ?>
                 <p class="field-help" data-version-hint><?= $e($t('The initial save creates revision 1.')) ?></p>
             <?php endif; ?>
