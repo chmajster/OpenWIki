@@ -43,7 +43,10 @@ final class InstallService
         $assets = [
             'Composer runtime dependencies' => class_exists(\League\CommonMark\MarkdownConverter::class),
             'Compiled editor assets' => is_readable($this->basePath . '/public/assets/wiki-editor.js')
-                && filesize($this->basePath . '/public/assets/wiki-editor.js') > 0,
+                && filesize($this->basePath . '/public/assets/wiki-editor.js') > 0
+                && is_readable($this->basePath . '/public/assets/diagram.js')
+                && is_readable($this->basePath . '/public/assets/document-reader.js')
+                && is_readable($this->basePath . '/public/assets/diagram.html'),
         ];
 
         return [

@@ -10,6 +10,19 @@ final class ContentService
 {
     public const SCHEMA_VERSION = 1;
 
+    public static function storedSource(?array $row): ?array
+    {
+        if ($row === null || ($row['document_json'] ?? null) === null) return $row;
+        $source = json_decode($row['document_json'], true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($source) || ($source['version'] ?? null) !== self::SCHEMA_VERSION
+            || !in_array($source['format'] ?? null, ['visual', 'markdown'], true) || !is_string($source['source'] ?? null)) {
+            throw new \RuntimeException('Unsupported stored document schema.');
+        }
+        $row['content_format'] = $source['format'];
+        $row[$source['format'] === 'visual' ? 'content_html' : 'content_markdown'] = $source['source'];
+        return $row;
+    }
+
     public function document(array $input): array
     {
         if (($input['version'] ?? null) !== self::SCHEMA_VERSION || !is_string($input['format'] ?? null)
@@ -25,23 +38,23 @@ final class ContentService
     ) {
     }
 
-    public function normalize(string $format, string $html, string $markdown): array
+    public function normalize(string $format, string $html, string $markdown, bool $validate = true): array
     {
         if (!in_array($format, ['visual', 'markdown'], true)) {
             throw new \InvalidArgumentException('Unsupported content format.');
         }
 
         if ($format === 'markdown') {
-            if (mb_strlen($markdown) > 2_000_000) {
+            if ($validate && mb_strlen($markdown) > 2_000_000) {
                 throw new \InvalidArgumentException('Page content is too large.');
             }
-            $cleanHtml = $this->sanitizer->sanitize($this->markdown->render($markdown));
+            $cleanHtml = $this->sanitizer->sanitize($this->markdown->render($markdown), $validate);
             $storedMarkdown = $markdown;
         } else {
-            if (mb_strlen($html) > 2_000_000) {
+            if ($validate && mb_strlen($html) > 2_000_000) {
                 throw new \InvalidArgumentException('Page content is too large.');
             }
-            $cleanHtml = $this->sanitizer->sanitize($html);
+            $cleanHtml = $this->sanitizer->sanitize($html, $validate);
             $storedMarkdown = null;
         }
 

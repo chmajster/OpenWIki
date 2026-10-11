@@ -407,6 +407,7 @@ test('rich tools save and reopen tables, code languages, callouts, links and mac
     await editor(page).press('ControlOrMeta+End');
     await editor(page).press('Enter');
     await page.getByRole('button', {name: 'Table', exact: true}).click();
+    await page.locator('[data-table-insert]').click();
     await editor(page).locator('th').first().click();
     await page.keyboard.type('Table heading');
     await page.getByRole('button', {name: 'Row after', exact: true}).click();

@@ -147,7 +147,8 @@ final class PageController extends Controller
             }
         ));
 
-        $rendered = (new MacroService($this->app))->renderPage($page, $space);
+        $safe = (new \OpenWiki\Wiki\ContentService())->normalize($page['content_format'], $page['content_html'], $page['content_markdown'] ?? '', false);
+        $rendered = (new MacroService($this->app))->renderPage(array_replace($page, ['content_html' => $safe['html']]), $space);
 
         return $this->render('pages/show', [
             'title' => $page['title'],
@@ -302,6 +303,21 @@ final class PageController extends Controller
         ]);
     }
 
+    public function revision(Request $request, string $spaceKey, string $slug, string $number): Response
+    {
+        $space = $this->space($spaceKey);
+        if ($space instanceof Response) return $space;
+        $repository = new PageRepository($this->app->database());
+        $page = $repository->findBySlug((int) $space['id'], $slug);
+        if ($page === null || !ctype_digit($number)) return $this->render('errors/404', ['title' => 'Revision not found'], 404);
+        if (!(new PageAclService($this->app))->canView($page, $space)) return $this->render('errors/403', ['title' => 'Permission denied'], 403);
+        $revision = $repository->revision((int) $page['id'], (int) $number);
+        if ($revision === null) return $this->render('errors/404', ['title' => 'Revision not found'], 404);
+        $content = (new \OpenWiki\Wiki\ContentService())->normalize($revision['content_format'], $revision['content_html'], $revision['content_markdown'] ?? '', false);
+        // Historical source is immutable; read-time sanitation never writes it back.
+        return $this->render('pages/revision', ['title' => $revision['title'], 'space' => $space, 'page' => $page, 'revision' => $revision, 'html' => $content['html']]);
+    }
+
     public function restore(Request $request, string $spaceKey, string $slug): Response
     {
         if (($failure = $this->authorize($request, 'page.edit')) !== null) {
@@ -400,6 +416,12 @@ final class PageController extends Controller
 
         $repository = new PageRepository($this->app->database());
         $old = $document ?? (array) $request->input();
+        if (is_array($old['document'] ?? null)) {
+            try {
+                $source = (new \OpenWiki\Wiki\ContentService())->document($old['document']);
+                $old['content_format'] = $source['format']; $old['content_html'] = $source['html']; $old['content_markdown'] = $source['markdown'] ?? '';
+            } catch (\InvalidArgumentException) { /* Render safely retained legacy fields for an invalid envelope. */ }
+        }
         $baseVersion = (int) ($old['base_version'] ?? 0);
         $conflict = null;
         if ($exception->getMessage() === 'EDIT_CONFLICT' && $page !== null) {

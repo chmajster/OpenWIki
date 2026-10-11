@@ -14,34 +14,34 @@ final class PageRepository
 
     public function findBySlug(int $spaceId, string $slug): ?array
     {
-        return $this->database->fetchOne(
+        return \OpenWiki\Wiki\ContentService::storedSource($this->database->fetchOne(
             'SELECT p.*, u.username AS author_username
              FROM pages p
              INNER JOIN users u ON u.id = p.author_id
              WHERE p.space_id = :space_id AND p.slug = :slug AND p.deleted_at IS NULL
              LIMIT 1',
             ['space_id' => $spaceId, 'slug' => $slug]
-        );
+        ));
     }
 
     public function findById(int $pageId): ?array
     {
-        return $this->database->fetchOne(
+        return \OpenWiki\Wiki\ContentService::storedSource($this->database->fetchOne(
             'SELECT * FROM pages WHERE id = :id AND deleted_at IS NULL LIMIT 1',
             ['id' => $pageId]
-        );
+        ));
     }
 
     public function redirectTarget(int $spaceId, string $oldSlug): ?array
     {
-        return $this->database->fetchOne(
+        return \OpenWiki\Wiki\ContentService::storedSource($this->database->fetchOne(
             'SELECT p.*
              FROM page_redirects r
              INNER JOIN pages p ON p.id = r.page_id
              WHERE r.space_id = :space_id AND r.old_slug = :old_slug AND p.deleted_at IS NULL
              LIMIT 1',
             ['space_id' => $spaceId, 'old_slug' => $oldSlug]
-        );
+        ));
     }
 
     public function tree(int $spaceId): array
@@ -208,12 +208,12 @@ final class PageRepository
 
     public function revision(int $pageId, int $revisionNumber): ?array
     {
-        return $this->database->fetchOne(
+        return \OpenWiki\Wiki\ContentService::storedSource($this->database->fetchOne(
             'SELECT * FROM page_revisions
              WHERE page_id = :page_id AND revision_number = :revision_number
              LIMIT 1',
             ['page_id' => $pageId, 'revision_number' => $revisionNumber]
-        );
+        ));
     }
 
     public function wouldCreateCycle(int $pageId, ?int $parentId): bool

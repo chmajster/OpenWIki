@@ -62,6 +62,7 @@ $router->get('/spaces/{spaceKey}/pages/{slug}', [PageController::class, 'show'])
 $router->get('/spaces/{spaceKey}/pages/{slug}/edit', [PageController::class, 'edit']);
 $router->post('/spaces/{spaceKey}/pages/{slug}', [PageController::class, 'update']);
 $router->get('/spaces/{spaceKey}/pages/{slug}/history', [PageController::class, 'history']);
+$router->get('/spaces/{spaceKey}/pages/{slug}/revisions/{number}', [PageController::class, 'revision']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/restore', [PageController::class, 'restore']);
 $router->get('/spaces/{spaceKey}/pages/{slug}/export/{format}', [ImportExportController::class, 'exportPage']);
 $router->get('/spaces/{spaceKey}/export', [ImportExportController::class, 'exportSpace']);
@@ -80,6 +81,7 @@ $router->post('/spaces/{spaceKey}/editor-drafts', [PageDraftController::class, '
 $router->post('/spaces/{spaceKey}/editor-convert', [PageDraftController::class, 'convert']);
 $router->post('/spaces/{spaceKey}/editor-preview', [PageDraftController::class, 'preview']);
 $router->get('/spaces/{spaceKey}/editor-pages', [PageDraftController::class, 'pages']);
+$router->get('/spaces/{spaceKey}/editor-users', [PageDraftController::class, 'users']);
 $router->post('/spaces/{spaceKey}/editor-files', [PageDraftController::class, 'uploadFile']);
 $router->get('/editor-files/{id}/{mode}', [PageDraftController::class, 'file']);
 

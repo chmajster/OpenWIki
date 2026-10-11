@@ -11,14 +11,24 @@ use DOMNode;
 final class HtmlSanitizer
 {
     private const ALLOWED_TAGS = [
-        'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'del',
+        'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'del', 'sup', 'sub', 'details', 'summary',
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
         'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
         'a', 'img', 'figure', 'figcaption', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
         'hr', 'div', 'span', 'section', 'aside',
     ];
 
-    private const GLOBAL_ATTRIBUTES = ['id', 'class', 'title', 'aria-label', 'data-callout'];
+    private const GLOBAL_ATTRIBUTES = ['id', 'class', 'title', 'aria-label', 'data-callout', 'data-align', 'data-text-color', 'data-highlight',
+        'data-columns', 'data-column', 'data-disclosure', 'data-disclosure-content'];
+    private const VALUES = [
+        'data-align' => ['left', 'center', 'right', 'justify'],
+        'data-text-color' => ['red', 'blue', 'green', 'orange', 'purple', 'gray'],
+        'data-highlight' => ['yellow', 'green', 'blue', 'pink'],
+        'data-cell-color' => ['yellow', 'green', 'blue', 'pink', 'gray'],
+        'data-columns' => ['2', '3'], 'data-column' => ['true'], 'data-disclosure' => ['true'], 'data-disclosure-content' => ['true'],
+        'data-diagram' => ['mermaid'], 'data-line-numbers' => ['true', 'false'], 'data-code-wrap' => ['true', 'false'],
+        'data-callout' => ['info', 'note', 'warning', 'success'],
+    ];
     private const TAG_ATTRIBUTES = [
         'ul' => ['data-type'],
         'ol' => ['start'],
@@ -29,17 +39,18 @@ final class HtmlSanitizer
             'data-attachment-id', 'data-original-width', 'data-original-height',
             'data-draft-file-id',
         ],
-        'td' => ['colspan', 'rowspan'],
-        'th' => ['colspan', 'rowspan', 'scope'],
+        'td' => ['colspan', 'rowspan', 'colwidth', 'data-cell-color'],
+        'th' => ['colspan', 'rowspan', 'scope', 'colwidth', 'data-cell-color'],
+        'pre' => ['data-diagram', 'data-line-numbers', 'data-code-wrap'],
         'code' => ['data-language'],
     ];
 
     public static function policy(): array
     {
-        return ['tags' => self::ALLOWED_TAGS, 'global' => self::GLOBAL_ATTRIBUTES, 'attributes' => self::TAG_ATTRIBUTES];
+        return ['tags' => self::ALLOWED_TAGS, 'global' => self::GLOBAL_ATTRIBUTES, 'attributes' => self::TAG_ATTRIBUTES, 'values' => self::VALUES];
     }
 
-    public function sanitize(string $html): string
+    public function sanitize(string $html, bool $validateStructure = false): string
     {
         if (trim($html) === '') {
             return '';
@@ -61,6 +72,15 @@ final class HtmlSanitizer
         $root = $document->getElementById('openwiki-root');
         if (!$root) {
             return '';
+        }
+
+        if ($validateStructure) {
+            $stack = [[$root, 0]]; $count = 0;
+            while ($stack !== []) {
+                [$element, $depth] = array_pop($stack);
+                if ($depth > 100 || ++$count > 50000) throw new \InvalidArgumentException('Document structure exceeds the supported depth or element count.');
+                foreach ($element->childNodes as $child) if ($child instanceof DOMElement) $stack[] = [$child, $depth + 1];
+            }
         }
 
         $this->cleanChildren($root);
@@ -107,6 +127,12 @@ final class HtmlSanitizer
                     if (in_array($name, ['href', 'src'], true) && !$this->safeUrl($attribute->value, $tag === 'img')) {
                         $toRemove[] = $attribute->name;
                     }
+                    if (isset(self::VALUES[$name]) && !in_array($attribute->value, self::VALUES[$name], true)) $toRemove[] = $attribute->name;
+                    if ($name === 'colwidth' && (!preg_match('/^(?:0|[1-9][0-9]{0,3})(?:,(?:0|[1-9][0-9]{0,3})){0,29}$/D', $attribute->value)
+                        || max(array_map('intval', explode(',', $attribute->value))) > 1600)) $toRemove[] = $attribute->name;
+                    if (in_array($name, ['colspan', 'rowspan'], true) && (!ctype_digit($attribute->value) || (int) $attribute->value < 1 || (int) $attribute->value > 100)) $toRemove[] = $attribute->name;
+                    if (in_array($name, ['width', 'height', 'data-original-width', 'data-original-height'], true)
+                        && (!ctype_digit($attribute->value) || (int) $attribute->value < 1 || (int) $attribute->value > 20000)) $toRemove[] = $attribute->name;
                 }
 
                 foreach ($toRemove as $attributeName) {

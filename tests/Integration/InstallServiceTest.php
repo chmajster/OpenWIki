@@ -22,7 +22,7 @@ final class InstallServiceTest extends TestCase
         mkdir($this->basePath . '/database/migrations', 0770, true);
         mkdir($this->basePath . '/public/assets', 0770, true);
         foreach (glob(dirname(__DIR__, 2) . '/database/migrations/*.php') as $file) copy($file, $this->basePath . '/database/migrations/' . basename($file));
-        copy(dirname(__DIR__, 2) . '/public/assets/wiki-editor.js', $this->basePath . '/public/assets/wiki-editor.js');
+        foreach (['wiki-editor.js', 'diagram.js', 'document-reader.js', 'diagram.html'] as $asset) copy(dirname(__DIR__, 2) . '/public/assets/' . $asset, $this->basePath . '/public/assets/' . $asset);
     }
 
     protected function tearDown(): void

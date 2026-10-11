@@ -97,6 +97,18 @@ jobs:
           path: test-results/
           retention-days: 3
 
+      - name: Editor screenshots and measured performance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-verification
+          path: |
+            storage/temp/editor-*.png
+            storage/temp/document-*.png
+            storage/temp/daily-editor-*.png
+            storage/temp/editor-performance.json
+          retention-days: 7
+
       - name: Verify PHP release package without Node.js runtime
         shell: bash
         run: |
@@ -104,7 +116,7 @@ jobs:
           node scripts/package-release.cjs "$RUNNER_TEMP/openwiki.tar.gz"
           mkdir "$RUNNER_TEMP/openwiki-runtime"
           tar -xzf "$RUNNER_TEMP/openwiki.tar.gz" -C "$RUNNER_TEMP/openwiki-runtime"
-          test -s "$RUNNER_TEMP/openwiki-runtime/public/assets/wiki-editor.js"
+          for asset in wiki-editor.js diagram.js document-reader.js diagram.html; do test -s "$RUNNER_TEMP/openwiki-runtime/public/assets/$asset"; done
           test ! -d "$RUNNER_TEMP/openwiki-runtime/node_modules"
           test ! -f "$RUNNER_TEMP/openwiki-runtime/.env"
           cd "$RUNNER_TEMP/openwiki-runtime"
@@ -148,7 +160,7 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1/health >/dev/null
           test "$(sudo stat -c '%a' /var/www/openwiki-ci/.env)" = "640"
           test "$(sudo stat -c '%a' /var/www/openwiki-ci/install.sh)" = "755"
-          test -s /var/www/openwiki-ci/public/assets/wiki-editor.js
+          for asset in wiki-editor.js diagram.js document-reader.js diagram.html; do test -s "/var/www/openwiki-ci/public/assets/$asset"; done
           curl --fail --silent --show-error http://127.0.0.1/assets/wiki-editor.js >/dev/null
           sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --status
 

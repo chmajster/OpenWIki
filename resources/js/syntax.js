@@ -1,0 +1,12 @@
+import hljs from 'highlight.js/lib/core';
+import bash from 'highlight.js/lib/languages/bash';
+import powershell from 'highlight.js/lib/languages/powershell';
+import python from 'highlight.js/lib/languages/python';
+import php from 'highlight.js/lib/languages/php';
+import javascript from 'highlight.js/lib/languages/javascript';
+import sql from 'highlight.js/lib/languages/sql';
+import json from 'highlight.js/lib/languages/json';
+import yaml from 'highlight.js/lib/languages/yaml';
+import xml from 'highlight.js/lib/languages/xml';
+for (const [name, language] of Object.entries({bash, powershell, python, php, javascript, sql, json, yaml, xml})) hljs.registerLanguage(name, language);
+export default hljs;

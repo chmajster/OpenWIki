@@ -17,7 +17,7 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
     const refresh = () => {
         q('[data-table-tools]').hidden = !editor.isActive('table') || !canEdit();
         q('[data-heading]').value = String(editor.getAttributes('heading').level || 0);
-        root.querySelectorAll('[data-insert-table], [data-open-link], [data-open-code], [data-open-callout], [data-open-macro], [data-image-picker], [data-heading]').forEach((control) => { control.disabled = !canEdit(); });
+        root.querySelectorAll('[data-insert-table], [data-open-link], [data-open-code], [data-open-callout], [data-open-macro], [data-image-picker], [data-attachment-picker], [data-heading]').forEach((control) => { control.disabled = !canEdit(); });
         root.querySelectorAll('[data-rich-command]').forEach((button) => {
             const name = button.dataset.richCommand;
             button.disabled = !canEdit() || (['undo', 'redo'].includes(name) && !editor.can()[name]());
@@ -32,7 +32,13 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
         const level = Number(event.target.value);
         level ? focusedChain().setHeading({level}).run() : focusedChain().setParagraph().run();
     });
-    q('[data-insert-table]').addEventListener('click', () => { if (canEdit()) focusedChain().insertTable({rows: 3, cols: 3, withHeaderRow: true}).run(); });
+    q('[data-insert-table]').addEventListener('click', () => { if (canEdit()) dialog('table').showModal(); });
+    q('[data-table-insert]').addEventListener('click', () => {
+        if (!canEdit()) return;
+        const rows = Number(q('[data-table-rows]').value), cols = Number(q('[data-table-cols]').value);
+        if (!Number.isInteger(rows) || rows < 1 || rows > 50 || !Number.isInteger(cols) || cols < 1 || cols > 30) { q('[data-table-error]').textContent = 'Wybierz 1–50 wierszy i 1–30 kolumn.'; return; }
+        focusedChain().insertTable({rows, cols, withHeaderRow: q('[data-table-header]').checked}).run(); close('table');
+    });
     root.querySelectorAll('[data-table-command]').forEach((button) => button.addEventListener('click', () => { if (canEdit()) focusedChain()[button.dataset.tableCommand]().run(); }));
     root.querySelectorAll('[data-dialog-close]').forEach((button) => button.addEventListener('click', () => button.closest('dialog').close()));
     const openLink = () => {
@@ -120,7 +126,6 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
     });
     root.addEventListener('keydown', (event) => {
         if (!(event.ctrlKey || event.metaKey)) return;
-        if (event.key.toLowerCase() === 's') { event.preventDefault(); root.querySelector('[data-editor-form]').requestSubmit(); }
         if (event.key.toLowerCase() === 'k' && !event.target.closest('dialog')) { event.preventDefault(); openLink(); }
     });
     root.querySelectorAll('[data-editor-mode]').forEach((tab) => tab.addEventListener('keydown', (event) => {

@@ -7,8 +7,8 @@ return [
     'up' => [
         'ALTER TABLE pages ADD COLUMN document_json MEDIUMTEXT NULL',
         'ALTER TABLE page_revisions ADD COLUMN document_json MEDIUMTEXT NULL',
-        "UPDATE pages SET document_json = JSON_OBJECT('version', 1, 'format', content_format, 'source', IF(content_format = 'markdown', COALESCE(content_markdown, ''), content_html))",
-        "UPDATE page_revisions SET document_json = JSON_OBJECT('version', 1, 'format', content_format, 'source', IF(content_format = 'markdown', COALESCE(content_markdown, ''), content_html))",
+        "UPDATE pages SET document_json = JSON_OBJECT('version', 1, 'format', IF(content_format = 'markdown' AND COALESCE(content_markdown, '') = '' AND content_html <> '', 'visual', content_format), 'source', IF(content_format = 'markdown' AND COALESCE(content_markdown, '') <> '', content_markdown, content_html))",
+        "UPDATE page_revisions SET document_json = JSON_OBJECT('version', 1, 'format', IF(content_format = 'markdown' AND COALESCE(content_markdown, '') = '' AND content_html <> '', 'visual', content_format), 'source', IF(content_format = 'markdown' AND COALESCE(content_markdown, '') <> '', content_markdown, content_html))",
         'ALTER TABLE page_editor_drafts ADD COLUMN draft_version BIGINT UNSIGNED NOT NULL DEFAULT 0',
         <<<'SQL'
 CREATE TABLE editor_draft_operations (

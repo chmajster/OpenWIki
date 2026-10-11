@@ -98,14 +98,51 @@ final class DraftFileService
             $this->database->execute('DELETE FROM editor_draft_files WHERE id = :id', ['id' => $row['id']]);
             if ($fresh['attachment_id'] === null) $this->attachments->purgeStorageKeys([$fresh['storage_key']]);
         });
+        // Foreign-key deletion of an account/space can remove the journal first.
+        // Only old opaque bytes with no live or historical owner may be collected.
+        $candidates = []; $collected = 0;
+        $root = $this->basePath . '/storage/attachments';
+        if (is_dir($root)) {
+            $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS));
+            foreach ($iterator as $file) {
+                if (!$file->isFile() || $file->isLink() || $file->getMTime() >= time() - 30 * 86400) continue;
+                $key = str_replace('\\', '/', substr($file->getPathname(), strlen($root) + 1));
+                if (!preg_match('~^[a-f0-9]{2}/[a-f0-9]{2}/[a-f0-9]{64}\.bin$~D', $key)) continue;
+                $candidates[] = $key;
+                if (count($candidates) === 500) {
+                    $collected += $this->pruneOrphanBatch($candidates); $candidates = [];
+                    if ($collected >= 500) break;
+                }
+            }
+        }
+        if ($candidates !== []) $this->pruneOrphanBatch($candidates);
         return count($rows);
+    }
+
+    private function pruneOrphanBatch(array $candidates): int
+    {
+        $placeholders = implode(',', array_fill(0, count($candidates), '?'));
+        $owners = $this->database->fetchAll('SELECT storage_key FROM attachment_versions WHERE storage_key IN (' . $placeholders . ')
+            UNION SELECT storage_key FROM attachments WHERE storage_key IN (' . $placeholders . ')
+            UNION SELECT storage_key FROM editor_draft_files WHERE storage_key IN (' . $placeholders . ')', array_merge($candidates, $candidates, $candidates));
+        $unused = array_values(array_diff($candidates, array_column($owners, 'storage_key')));
+        $this->attachments->purgeStorageKeys($unused);
+        return count($unused);
     }
 
     public function touch(string $html, int $space, int $user, string $document): void
     {
-        preg_match_all('/data-draft-file-id="([0-9]+)"/', $html, $matches);
-        preg_match_all('~/editor-files/([1-9][0-9]*)/(?:preview|thumbnail|download)~', $html, $urls);
-        foreach (array_unique(array_merge($matches[1], $urls[1])) as $id) {
+        if (!str_contains($html, 'data-draft-file-id') && !str_contains($html, '/editor-files/')) return;
+        $dom = new \DOMDocument('1.0', 'UTF-8'); $previous = libxml_use_internal_errors(true);
+        $dom->loadHTML('<meta charset="utf-8"><div>' . $html . '</div>'); libxml_clear_errors(); libxml_use_internal_errors($previous);
+        $ids = [];
+        foreach ((new \DOMXPath($dom))->query('//img | //a') as $element) {
+            $id = $element->getAttribute('data-draft-file-id');
+            $url = $element->getAttribute($element->tagName === 'img' ? 'src' : 'href');
+            if ($id === '' && preg_match('~^/editor-files/([1-9][0-9]*)/(?:preview|thumbnail|download)(?:\?[^#]*)?$~D', $url, $match)) $id = $match[1];
+            if ($id !== '') $ids[] = $id;
+        }
+        foreach (array_unique($ids) as $id) {
             $file = $this->database->fetchOne('SELECT id FROM editor_draft_files WHERE id = :id AND space_id = :space AND user_id = :user AND document_key = :document',
                 ['id' => $id, 'space' => $space, 'user' => $user, 'document' => $document]);
             if ($file === null) throw new \DomainException('You cannot use a file from another draft.');

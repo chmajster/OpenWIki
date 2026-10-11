@@ -3,7 +3,10 @@ export function setupUploads(root, editor, local, context, uuid, changed, pendin
     const list = root.querySelector('[data-upload-list]');
     const prefix = () => 'upload:' + root.dataset.instanceId + ':' + root.dataset.userId + ':' + root.dataset.spaceId + ':' + context().documentKey + ':';
     const updatePending = () => pending([...rows.values()].filter((row) => !row.done).length);
-    const insert = (data) => {
+    const insert = async (data) => {
+        let exists = false;
+        editor.state.doc.descendants(node => { if (String(node.attrs['data-draft-file-id']) === String(data.id) || node.marks.some(mark => String(mark.attrs['data-draft-file-id']) === String(data.id))) exists = true; });
+        if (exists) return changed();
         editor.view.focus();
         if (data.width !== null) editor.commands.insertContent({type: 'imageFigure', attrs: {
             src: data.thumbnail_url, 'data-draft-file-id': String(data.id), 'data-original-width': String(data.width), 'data-original-height': String(data.height),
@@ -11,7 +14,7 @@ export function setupUploads(root, editor, local, context, uuid, changed, pendin
         }});
         else editor.commands.insertContent({type: 'paragraph', content: [{type: 'text', text: data.name + ' · ' + data.mime_type + ' · ' + Math.ceil(data.size_bytes / 1024) + ' KiB',
             marks: [{type: 'link', attrs: {href: data.download_url, 'data-draft-file-id': String(data.id), 'data-file-size': String(data.size_bytes), 'data-file-type': data.mime_type, class: 'wiki-file'}}]}]});
-        changed();
+        return changed();
     };
     const send = async (row) => {
         if (row.running || row.done || !context().canSend || row.documentKey !== context().documentKey) return;
@@ -20,6 +23,7 @@ export function setupUploads(root, editor, local, context, uuid, changed, pendin
             if (!navigator.onLine) throw new Error('Brak połączenia. Plik oczekuje na ponowienie.');
             const data = await new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
+                row.xhr = xhr; xhr.onabort = () => reject(new Error('Upload anulowany.'));
                 xhr.open('POST', root.dataset.filesUrl); xhr.setRequestHeader('Accept', 'application/json'); xhr.timeout = 30000;
                 xhr.upload.onprogress = (event) => { if (event.lengthComputable) row.progress.value = event.loaded / event.total * 100; };
                 xhr.onerror = () => reject(new Error('Błąd sieci podczas uploadu. Plik pozostaje w kolejce.'));
@@ -39,12 +43,13 @@ export function setupUploads(root, editor, local, context, uuid, changed, pendin
                 body.append('document_key', row.documentKey); body.append('operation_id', row.operation);
                 body.append('file', row.file, row.file.name || 'clipboard-image.png'); xhr.send(body);
             });
+            if (row.cancelled) return;
             if (!context().canSend) throw new Error('Zmieniono konto lub uprawnienia. Plik zachowano dla pierwotnego konta.');
-            insert(data); row.done = true; row.progress.value = 100;
+            const protectedCopy = await insert(data); row.done = true; row.progress.value = 100;
             row.status.textContent = 'Zapisano jako prywatny plik szkicu.';
-            await local.removeUpload(row.key).catch(() => {});
-        } catch (error) { row.status.textContent = error.message; row.retry.hidden = false; failed(error); }
-        finally { row.running = false; updatePending(); }
+            if (protectedCopy) await local.removeUpload(row.key).catch(() => {});
+        } catch (error) { if (!row.cancelled) { row.status.textContent = error.message; row.retry.hidden = false; failed(error); } }
+        finally { row.running = false; row.xhr = null; updatePending(); }
     };
     const add = async (file, stored = null) => {
         if (!file || !context().canSend) return;
@@ -54,9 +59,15 @@ export function setupUploads(root, editor, local, context, uuid, changed, pendin
         const element = document.createElement('li'), name = document.createElement('strong'), status = document.createElement('span'), progress = document.createElement('progress'), retry = document.createElement('button');
         name.textContent = file.name; status.textContent = 'Zapisuję plik lokalnie…'; progress.max = 100; progress.value = 0;
         retry.type = 'button'; retry.className = 'button'; retry.textContent = 'Ponów upload'; retry.hidden = true;
-        element.append(name, progress, status, retry); list.append(element);
+        const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Usuń z kolejki'; cancel.className = 'button button--ghost';
+        element.append(name, progress, status, retry, cancel); list.append(element);
         const row = {key, operation, documentKey: context().documentKey, file, status, progress, retry, done: false, running: false};
         rows.set(key, row); updatePending(); retry.onclick = () => send(row);
+        cancel.onclick = async () => {
+            row.cancelled = true; row.xhr?.abort(); rows.delete(key); updatePending();
+            try { await local.removeUpload(key); element.remove(); }
+            catch { status.textContent = 'Anulowano w tej karcie. Lokalny magazyn nie pozwolił usunąć pliku z kolejki.'; retry.hidden = true; cancel.disabled = true; }
+        };
         try { await local.putUpload(key, {file, operation, documentKey: row.documentKey}); }
         catch { status.textContent = 'Plik jest tylko w pamięci tej karty. Lokalny magazyn jest niedostępny.'; failed(new Error(status.textContent)); }
         send(row);

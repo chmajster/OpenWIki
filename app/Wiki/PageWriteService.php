@@ -25,6 +25,7 @@ final class PageWriteService
 
     public function validate(array $space, ?array $current, array $input, ?callable $can = null): array
     {
+        $canonical = null;
         if (array_key_exists('document', $input)) {
             if (!is_array($input['document'])) throw new \InvalidArgumentException('document must be a versioned source object.');
             $canonical = (new ContentService())->document($input['document']);
@@ -89,7 +90,7 @@ final class PageWriteService
         if ($current !== null && $format !== $current['content_format'] && !array_key_exists($sourceField, $input)) {
             throw new \InvalidArgumentException('Changing content_format requires the converted source content.');
         }
-        $content = (new ContentService())->normalize(
+        $content = $canonical ?? (new ContentService())->normalize(
             $format,
             (string) $value('content_html'),
             (string) $value('content_markdown')

@@ -33,10 +33,24 @@ export class LocalRecovery {
     save(key, data) {
         // Later snapshots cannot be overwritten by an earlier asynchronous transaction.
         const task = this.serial.then(async () => {
+            const encoded = JSON.stringify(data);
             let fallback = false;
-            try { localStorage.setItem(key, JSON.stringify(data)); fallback = true; } catch {}
-            try { await this.operation('copies', 'readwrite', (store) => store.put({key, data, updated: Date.now()})); return true; }
-            catch { return fallback; }
+            // Large snapshots stay in the asynchronous store; small copies also have a fallback.
+            const mirror = () => {
+                if (!localStorage.getItem(key) && Object.keys(localStorage).filter(value => value.startsWith('openwiki:draft:v2:')).length >= 100) return false;
+                localStorage.setItem(key, encoded); return true;
+            };
+            if (encoded.length < 250000) try { fallback = mirror(); } catch {}
+            try {
+                const records = await this.operation('copies', 'readonly', store => store.getAllKeys());
+                if (records.length >= 100 && !records.includes(key)) throw new Error('Local copy quota reached.');
+                await this.operation('copies', 'readwrite', store => store.put({key, data, updated: Date.now()}));
+                if (encoded.length >= 250000) try { localStorage.removeItem(key); } catch {}
+                return true;
+            } catch {
+                if (!fallback) try { fallback = mirror(); } catch {}
+                return fallback;
+            }
         });
         this.serial = task.catch(() => {});
         return task;
@@ -76,10 +90,19 @@ export class LocalRecovery {
     }
 
     async uploads(prefix) {
-        try { return (await this.operation('uploads', 'readonly', (store) => store.getAll())).filter((record) => record.key.startsWith(prefix)); }
+        try {
+            const records = await this.operation('uploads', 'readonly', store => store.getAll());
+            for (const record of records) if (record.updated < Date.now() - RETENTION) await this.removeUpload(record.key);
+            return records.filter(record => record.updated >= Date.now() - RETENTION && record.key.startsWith(prefix));
+        }
         catch { return []; }
     }
 
-    putUpload(key, data) { return this.operation('uploads', 'readwrite', (store) => store.put({key, ...data, updated: Date.now()})); }
+    async putUpload(key, data) {
+        const records = await this.operation('uploads', 'readonly', store => store.getAll());
+        const other = records.filter(record => record.key !== key);
+        if (other.length >= 50 || other.reduce((size, record) => size + record.file.size, data.file.size) > 100 * 1024 * 1024) throw new Error('Local upload quota reached.');
+        return this.operation('uploads', 'readwrite', store => store.put({key, ...data, updated: Date.now()}));
+    }
     removeUpload(key) { return this.operation('uploads', 'readwrite', (store) => store.delete(key)); }
 }

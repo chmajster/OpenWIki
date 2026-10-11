@@ -4,6 +4,7 @@ import {sanitizeHtml, contentSignature} from './html.js';
 import {setupEditorTools} from './editor-tools.js';
 import {LocalRecovery} from './local-recovery.js';
 import {setupUploads} from './upload-queue.js';
+import {setupWorkspace} from './workspace-tools.js';
 'use strict';
 
 const editorRoot = document.querySelector('[data-wiki-editor]');
@@ -237,6 +238,16 @@ if (editorRoot) {
         recoveryBanner.hidden = true;
         saveState.textContent = t('Recovery restored with base version ') + data.baseVersion + t('. Saving still checks for concurrent changes.');
     });
+    editorRoot.querySelector('[data-compare-recovery]').onclick = async () => {
+        let data = recoveryCopies.get(recoverySelect.value); if (!data) return;
+        try {
+            if (data.checkpoint) data = (await requestJson(editorRoot.dataset.draftsUrl + '?document_key=' + encodeURIComponent(documentKey) + '&checkpoint=' + data.checkpoint)).draft;
+            editorRoot.querySelector('[data-recovery-comparison-info]').textContent = data.savedAt + ' · wersja bazowa ' + data.baseVersion + ' · wersja szkicu ' + (data.draftVersion || 0);
+            editorRoot.querySelector('[data-recovery-current]').textContent = describe(snapshot());
+            editorRoot.querySelector('[data-recovery-copy]').textContent = describe(data);
+            editorRoot.querySelector('[data-recovery-dialog]').showModal();
+        } catch (error) { saveState.textContent = error.message; }
+    };
     editorRoot.querySelector('[data-hide-recovery]').addEventListener('click', () => { recoveryBanner.hidden = true; });
 
     const fields = (data) => ({
@@ -307,6 +318,22 @@ if (editorRoot) {
     });
     const initialConflict = editorRoot.querySelector('[data-initial-conflict]');
     if (initialConflict) showConflict(JSON.parse(initialConflict.value));
+    editorRoot.querySelector('[data-conflict-fork]').onclick = async () => {
+        const local = snapshot(), key = recoveryKey;
+        await persistLocalRecovery(); recoveryCopies.set(editorId, {...local, localKey: key});
+        editorId = uuid(); recoveryKey = recoveryPrefix + editorId; draftVersion = 0; draftAttempt = null;
+        markDirty(); await autosave(); showRecovery();
+    };
+    editorRoot.querySelector('[data-use-server-version]').onclick = async () => {
+        if (!conflict?.server) return;
+        const server = conflict.server, local = snapshot(), key = recoveryKey;
+        await persistLocalRecovery(); recoveryCopies.set(editorId, {...local, localKey: key});
+        editorId = uuid(); recoveryKey = recoveryPrefix + editorId; draftVersion = 0; draftAttempt = null;
+        restoreSnapshot({...local, title: server.title, slug: server.slug, parentId: String(server.parent_id ?? ''), status: server.status,
+            tags: (server.tags || []).join(', '), changeSummary: '', baseVersion: server.version, format: server.content_format,
+            html: server.content_html, markdown: server.content_markdown || '', conversionBackup: null, originalMarkdown: null});
+        showRecovery(); await autosave();
+    };
 
     const applyConversion = (data, before) => {
         conversionBackup = {format: before.format, html: before.html, markdown: before.markdown};
@@ -398,12 +425,16 @@ if (editorRoot) {
             || image.dataset.originalWidth
             || image.naturalWidth
             || 640;
+        editorRoot.querySelector('[data-image-align]').value = figure?.dataset.align || 'left';
+        editorRoot.querySelector('[data-image-height]').value = image.getAttribute('height') || '';
+        editorRoot.querySelector('[data-image-ratio]').checked = !image.hasAttribute('height');
+        editorRoot.querySelector('[data-image-preview]').href = image.dataset.draftFileId ? '/editor-files/' + image.dataset.draftFileId + '/preview' : image.dataset.attachmentId ? '/attachments/' + image.dataset.attachmentId + '/preview' : image.src;
         imageInspector.hidden = false;
     };
 
     if (canUploadImage) setupUploads(editorRoot, richEditor, localRecovery,
         () => ({documentKey, csrfToken, canSend: !accountChanged && !authStopped && !modelPending && sourceOverride === null && formatInput.value === 'visual'}),
-        uuid, markDirty, (count) => { pendingImages = count; updateSaveButton(); }, (error) => {
+        uuid, () => { markDirty(); return persistLocalRecovery(); }, (count) => { pendingImages = count; updateSaveButton(); }, (error) => {
             saveState.textContent = error.message;
             if ([401, 403, 419].includes(error.status)) { authStopped = true; editorRoot.querySelector('[data-resume-save]').hidden = false; }
         });
@@ -424,12 +455,12 @@ if (editorRoot) {
         imageApplyButton.addEventListener('click', () => {
             if (!selectedImage) return;
             const values = {width: String(clampImageWidth(imageWidthInput?.value, 640)),
-                alt: imageAltInput.value.trim(), caption: imageCaptionInput.value.trim() || null};
+                alt: imageAltInput.value.trim(), caption: imageCaptionInput.value.trim() || null, alignment: editorRoot.querySelector('[data-image-align]').value};
             const pos = selectModelImage(richEditor, selectedImage);
             if (pos === null) return;
             const attrs = richEditor.state.doc.nodeAt(pos).attrs;
             const width = Math.min(Number(values.width), Number(attrs['data-original-width']) || 1600);
-            richEditor.view.dispatch(richEditor.state.tr.setNodeMarkup(pos, undefined, {...attrs, ...values, width: String(width), height: null,
+            richEditor.view.dispatch(richEditor.state.tr.setNodeMarkup(pos, undefined, {...attrs, ...values, width: String(width), height: editorRoot.querySelector('[data-image-ratio]').checked ? null : String(Math.max(32, Math.min(1600, Number(editorRoot.querySelector('[data-image-height]').value) || 200))),
                 src: attrs['data-draft-file-id'] ? '/editor-files/' + attrs['data-draft-file-id'] + '/thumbnail?width=' + width
                     : attrs['data-attachment-id'] ? '/attachments/' + attrs['data-attachment-id'] + '/thumbnail?width=' + width : attrs.src}));
             selectImage(richEditor.view.nodeDOM(pos)?.querySelector('img') || null);
@@ -460,8 +491,8 @@ if (editorRoot) {
         setMode(markdownEditor.value ? 'markdown' : 'visual');
         markDirty();
     });
-    form.addEventListener('input', (event) => { if (!visualEditor.contains(event.target)) markDirty(); });
-    form.addEventListener('change', (event) => { if (!visualEditor.contains(event.target)) markDirty(); });
+    form.addEventListener('input', (event) => { if (!visualEditor.contains(event.target) && event.target.name) markDirty(); });
+    form.addEventListener('change', (event) => { if (!visualEditor.contains(event.target) && event.target.name) markDirty(); });
 
     const acquireLock = async () => {
         if (!isEdit || accountChanged || saving || authStopped || document.hidden || !navigator.onLine) return;
@@ -528,6 +559,8 @@ if (editorRoot) {
     }, true);
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
+        const replayingPage = Boolean(pageAttempt), submissionGeneration = generation;
+        let publishLatestAfterReplay = false;
         if (saving || converting || pendingImages > 0 || accountChanged || authStopped || conflict || modelPending) return;
         persistLocalRecovery();
         saving = true;
@@ -538,6 +571,7 @@ if (editorRoot) {
             if (!pageAttempt) { const captured = snapshot(); pageAttempt = {captured, body: {...fields(captured), operation_id: uuid()}}; }
             const captured = pageAttempt.captured;
             const data = await requestJson(form.action, pageAttempt.body);
+            const unchangedDuringReplay = generation === submissionGeneration;
             pageAttempt = null;
             baseVersionField.value = String(data.page.version);
             lastSaveError = '';
@@ -551,10 +585,7 @@ if (editorRoot) {
                 window.clearTimeout(localSaveTimer);
                 try {
                     await localRecovery.remove(recoveryKey, captured.sequence);
-                    if (recoveredSource?.localKey) {
-                        const latest = JSON.parse(localStorage.getItem(recoveredSource.localKey) || 'null');
-                        if (latest && Number(latest.sequence) <= Number(recoveredSource.sequence)) await localRecovery.remove(recoveredSource.localKey, recoveredSource.sequence);
-                    }
+                    if (recoveredSource?.localKey) await localRecovery.remove(recoveredSource.localKey, recoveredSource.sequence);
                 } catch { /* A retained copy is harmless when deletion is unavailable. */ }
                 window.location.assign(data.url);
             } else {
@@ -580,17 +611,29 @@ if (editorRoot) {
                 const sentImages = Array.from(sentHtml.querySelectorAll('img'));
                 const storedImages = Array.from(storedHtml.querySelectorAll('img'));
                 const replacements = new Map(sentImages.map((image, index) => [image.getAttribute('src'), storedImages[index]]));
+                const sentLinks = [...sentHtml.querySelectorAll('a')], storedLinks = [...storedHtml.querySelectorAll('a')];
+                const fileLinks = new Map(sentLinks.map((link, index) => [link.getAttribute('href'), storedLinks[index]]));
                 let tr = richEditor.state.tr;
                 richEditor.state.doc.descendants((node, pos) => {
                     const stored = node.type.name === 'imageFigure' && replacements.get(node.attrs.src);
                     if (stored && /^(data:image\/|\/editor-files\/)/i.test(node.attrs.src)) tr = tr.setNodeMarkup(pos, undefined, {...node.attrs, src: stored.getAttribute('src'), 'data-attachment-id': stored.dataset.attachmentId, 'data-draft-file-id': null});
+                    if (node.isText) for (const mark of node.marks) {
+                        const link = mark.type.name === 'link' && fileLinks.get(mark.attrs.href);
+                        if (link && /^\/editor-files\//.test(mark.attrs.href)) {
+                            tr = tr.removeMark(pos, pos + node.nodeSize, mark).addMark(pos, pos + node.nodeSize, mark.type.create({...mark.attrs, href: link.getAttribute('href'), 'data-attachment-id': link.dataset.attachmentId, 'data-draft-file-id': null}));
+                        }
+                    }
                 });
-                if (tr.docChanged) richEditor.view.dispatch(tr);
+                for (const [oldUrl, link] of fileLinks) if (link && /^\/editor-files\//.test(oldUrl)) markdownEditor.value = markdownEditor.value.split(oldUrl).join(link.getAttribute('href'));
+                for (const [oldUrl, image] of replacements) if (image && /^\/editor-files\//.test(oldUrl)) markdownEditor.value = markdownEditor.value.split(oldUrl).join(image.getAttribute('src'));
+                if (tr.docChanged) richEditor.view.dispatch(tr.setMeta('addToHistory', false));
                 markDirty();
+                const afterTransitionGeneration = generation;
                 if (await persistLocalRecovery() && oldKey !== recoveryKey) {
                     await localRecovery.remove(oldKey, captured.sequence);
                 }
                 saveState.textContent = t('The submitted version was saved. Your later changes are still in this editor and need another save.');
+                publishLatestAfterReplay = replayingPage && captured.sequence !== submissionGeneration && unchangedDuringReplay && generation === afterTransitionGeneration;
             }
         } catch (error) {
             if (error.status && error.status < 500) pageAttempt = null;
@@ -601,6 +644,7 @@ if (editorRoot) {
             saveState.dataset.state = error.conflict ? 'conflict' : 'error';
             saveState.textContent = error.message + t(' Your document and its original base version are retained.');
         } finally { saving = false; updateSaveButton(); }
+        if (publishLatestAfterReplay && !saveButton.disabled) form.requestSubmit();
     });
     requestJson(editorRoot.dataset.draftsUrl + '?document_key=' + encodeURIComponent(documentKey)).then((data) => {
         for (const draft of data.drafts) {
@@ -653,4 +697,8 @@ if (editorRoot) {
     setMode(formatInput.value);
     refreshTools = setupEditorTools(editorRoot, richEditor, requestJson, snapshot, fields,
         () => formatInput.value === 'visual' && !accountChanged && !modelPending && sourceOverride === null);
+    const refreshBasic = refreshTools;
+    const refreshWorkspace = setupWorkspace(editorRoot, richEditor,
+        () => formatInput.value === 'visual' && !accountChanged && !modelPending && sourceOverride === null, requestJson, snapshot);
+    refreshTools = () => { refreshBasic(); refreshWorkspace(); };
 }

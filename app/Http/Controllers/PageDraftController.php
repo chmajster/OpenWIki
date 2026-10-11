@@ -109,14 +109,13 @@ final class PageDraftController extends Controller
             if ($base === false || ($context['page'] !== null ? $base < 1 : $base !== 0)) {
                 throw new \InvalidArgumentException('Invalid base version.');
             }
-            $content = (new ContentService())->normalize(
-                (string) $request->input('content_format', 'visual'),
-                (string) $request->input('content_html', ''), (string) $request->input('content_markdown', '')
-            );
             if ($request->input('document') !== null) {
                 if (!is_array($request->input('document'))) throw new \InvalidArgumentException('Invalid document source.');
                 $content = (new ContentService())->document($request->input('document'));
-            }
+            } else $content = (new ContentService())->normalize(
+                (string) $request->input('content_format', 'visual'),
+                (string) $request->input('content_html', ''), (string) $request->input('content_markdown', '')
+            );
             (new \OpenWiki\Attachments\DraftFileService($this->app->database(), $this->app->basePath()))->touch($content['html'],
                 (int) $context['space']['id'], (int) $this->app->auth()->user()['id'], $context['document_key']);
             $payload = ['format' => $content['format'], 'html' => $content['html'],
@@ -179,6 +178,7 @@ final class PageDraftController extends Controller
         $user = $this->app->auth()->user();
         $file = $user === null ? null : $this->app->database()->fetchOne('SELECT * FROM editor_draft_files WHERE id = :id AND user_id = :user', ['id' => (int) $id, 'user' => $user['id']]);
         if ($file === null || !in_array($mode, ['download', 'preview', 'thumbnail'], true)) return Response::html('File not found.', 404);
+        if ($file['attachment_id'] !== null) return Response::redirect('/attachments/' . (int) $file['attachment_id'] . '/' . $mode . ($mode === 'thumbnail' ? '?width=' . (int) $request->query('width', 640) : ''));
         $space = $this->app->database()->fetchOne('SELECT space_key FROM spaces WHERE id = :id AND deleted_at IS NULL', ['id' => $file['space_id']]);
         if ($space === null || $this->draftContext($request, $space['space_key'], $file['document_key']) instanceof Response) return Response::html('File not found.', 404);
         try {
@@ -225,6 +225,20 @@ final class PageDraftController extends Controller
             if (count($results) === 20) break;
         }
         return Response::json(['data' => ['pages' => $results, 'user_id' => (int) $this->app->auth()->user()['id']]]);
+    }
+
+    public function users(Request $request, string $spaceKey): Response
+    {
+        $context = $this->draftContext($request, $spaceKey, (string) $request->query('document_key', ''));
+        if ($context instanceof Response) return $context;
+        $query = $request->query('q', '');
+        if (!is_string($query) || mb_strlen($query) > 100) return Response::json(['error' => ['message' => 'Search is limited to 100 characters.']], 422);
+        $user = $this->app->auth()->user();
+        // Directory access is a server permission; ordinary editors may mention themselves.
+        $rows = $this->app->auth()->can('user.view')
+            ? $this->app->database()->fetchAll('SELECT id, username FROM users WHERE status = "active" AND deleted_at IS NULL AND username LIKE :query ORDER BY username LIMIT 20', ['query' => '%' . $query . '%'])
+            : (stripos($user['username'], $query) !== false ? [['id' => $user['id'], 'username' => $user['username']]] : []);
+        return Response::json(['data' => ['users' => $rows, 'user_id' => (int) $user['id']]]);
     }
 
     private function validateContentFields(Request $request): void
