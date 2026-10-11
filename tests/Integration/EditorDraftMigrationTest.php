@@ -34,7 +34,7 @@ final class EditorDraftMigrationTest extends TestCase
             $page = $db->insert('INSERT INTO pages (space_id, title, slug, content_html, content_format, author_id, owner_id, status, version, created_at, updated_at) VALUES (?, "Legacy page", "legacy", "<p>Server</p>", "visual", ?, ?, "draft", 4, UTC_TIMESTAMP(), UTC_TIMESTAMP())', [$space, $user, $user]);
             $db->execute('INSERT INTO draft_autosaves (page_id, user_id, content_html, content_markdown, content_format, base_version, updated_at) VALUES (?, ?, "<p><strong>Zażółć</strong></p>", NULL, "visual", 1, UTC_TIMESTAMP())', [$page, $user]);
             $runner = new MigrationRunner($db, dirname(__DIR__, 2) . '/database/migrations');
-            self::assertSame(['005_editor_drafts_and_revision_metadata'], $runner->migrate());
+            self::assertSame(['005_editor_drafts_and_revision_metadata', '006_durable_editor'], $runner->migrate());
             self::assertSame([], $runner->migrate());
             $service = new EditSessionService($db);
             $drafts = $service->editorDrafts($space, $user, 'page:' . $page);

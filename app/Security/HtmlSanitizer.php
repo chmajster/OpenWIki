@@ -23,10 +23,11 @@ final class HtmlSanitizer
         'ul' => ['data-type'],
         'ol' => ['start'],
         'li' => ['data-type', 'data-checked'],
-        'a' => ['href', 'target', 'rel'],
+        'a' => ['href', 'target', 'rel', 'data-draft-file-id', 'data-attachment-id', 'data-file-size', 'data-file-type'],
         'img' => [
             'src', 'alt', 'width', 'height', 'loading',
             'data-attachment-id', 'data-original-width', 'data-original-height',
+            'data-draft-file-id',
         ],
         'td' => ['colspan', 'rowspan'],
         'th' => ['colspan', 'rowspan', 'scope'],

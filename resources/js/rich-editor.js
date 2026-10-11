@@ -9,7 +9,8 @@ const globalAttributes = Extension.create({
     name: 'legacyAttributes',
     addGlobalAttributes() {
         return [{types: ['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'listItem', 'taskList', 'taskItem', 'callout', 'table', 'tableRow', 'tableCell', 'tableHeader', 'horizontalRule', 'link', 'bold', 'italic', 'underline', 'strike', 'code'],
-            attributes: Object.fromEntries(globals.map((name) => [name, {default: null, parseHTML: (element) => element.getAttribute(name)}]))}];
+            attributes: Object.fromEntries(globals.map((name) => [name, {default: null, parseHTML: (element) => element.getAttribute(name)}]))},
+            {types: ['link'], attributes: Object.fromEntries(['data-draft-file-id', 'data-attachment-id', 'data-file-size', 'data-file-type'].map((name) => [name, {default: null}]))}];
     }
 });
 
@@ -36,12 +37,12 @@ const Span = Mark.create({
 });
 const ImageFigure = Node.create({
     name: 'imageFigure', group: 'block', atom: true, draggable: true,
-    addAttributes() { return Object.fromEntries(['src', 'alt', 'width', 'height', 'loading', 'data-attachment-id', 'data-original-width', 'data-original-height', 'caption', 'figureId', 'figureClass'].map((name) => [name, {default: null, rendered: false}])); },
+    addAttributes() { return Object.fromEntries(['src', 'alt', 'width', 'height', 'loading', 'data-attachment-id', 'data-draft-file-id', 'data-original-width', 'data-original-height', 'caption', 'figureId', 'figureClass'].map((name) => [name, {default: null, rendered: false}])); },
     parseHTML() {
         const attrs = (element) => {
             const image = element.tagName === 'IMG' ? element : element.querySelector('img');
             if (!image) return false;
-            return {...Object.fromEntries(['src', 'alt', 'width', 'height', 'loading', 'data-attachment-id', 'data-original-width', 'data-original-height'].map((name) => [name, image.getAttribute(name)])),
+            return {...Object.fromEntries(['src', 'alt', 'width', 'height', 'loading', 'data-attachment-id', 'data-draft-file-id', 'data-original-width', 'data-original-height'].map((name) => [name, image.getAttribute(name)])),
                 caption: element.querySelector('figcaption')?.textContent || null,
                 figureId: element.tagName === 'FIGURE' ? element.getAttribute('id') : null,
                 figureClass: element.tagName === 'FIGURE' ? element.getAttribute('class') : null};
@@ -50,7 +51,7 @@ const ImageFigure = Node.create({
     },
     renderHTML({node}) {
         const attrs = node.attrs;
-        const image = Object.fromEntries(['src', 'alt', 'width', 'height', 'loading', 'data-attachment-id', 'data-original-width', 'data-original-height'].filter((key) => attrs[key] !== null).map((key) => [key, attrs[key]]));
+        const image = Object.fromEntries(['src', 'alt', 'width', 'height', 'loading', 'data-attachment-id', 'data-draft-file-id', 'data-original-width', 'data-original-height'].filter((key) => attrs[key] !== null).map((key) => [key, attrs[key]]));
         return ['figure', mergeAttributes(attrs.figureId ? {id: attrs.figureId} : {}, attrs.figureClass ? {class: attrs.figureClass} : {}),
             ['img', image], ...(attrs.caption ? [['figcaption', {}, attrs.caption]] : [])];
     }

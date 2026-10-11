@@ -80,6 +80,8 @@ $router->post('/spaces/{spaceKey}/editor-drafts', [PageDraftController::class, '
 $router->post('/spaces/{spaceKey}/editor-convert', [PageDraftController::class, 'convert']);
 $router->post('/spaces/{spaceKey}/editor-preview', [PageDraftController::class, 'preview']);
 $router->get('/spaces/{spaceKey}/editor-pages', [PageDraftController::class, 'pages']);
+$router->post('/spaces/{spaceKey}/editor-files', [PageDraftController::class, 'uploadFile']);
+$router->get('/editor-files/{id}/{mode}', [PageDraftController::class, 'file']);
 
 $router->post('/spaces/{spaceKey}/watch', [PageEngagementController::class, 'watchSpace']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/favorite', [PageEngagementController::class, 'favorite']);

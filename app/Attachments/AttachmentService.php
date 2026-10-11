@@ -80,6 +80,25 @@ final class AttachmentService
         );
     }
 
+    public function stage(array $file): array
+    {
+        $source = $this->uploadedSource($file);
+        return $this->persist($source['path'], $source['name'], true);
+    }
+
+    public function adopt(int $pageId, int $uploaderId, array $stored): int
+    {
+        $id = $this->database->insert('INSERT INTO attachments (page_id, uploader_id, name, storage_key, mime_type, size_bytes, current_version, created_at, updated_at)
+            VALUES (:page, :user, :name, :key, :mime, :size, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())',
+            ['page' => $pageId, 'user' => $uploaderId, 'name' => $stored['name'], 'key' => $stored['storage_key'], 'mime' => $stored['mime_type'], 'size' => $stored['size_bytes']]);
+        $this->database->execute('INSERT INTO attachment_versions (attachment_id, version_number, storage_key, mime_type, size_bytes, sha256, uploader_id, created_at)
+            VALUES (:id, 1, :key, :mime, :size, :sha, :user, UTC_TIMESTAMP())',
+            ['id' => $id, 'key' => $stored['storage_key'], 'mime' => $stored['mime_type'], 'size' => $stored['size_bytes'], 'sha' => $stored['sha256'], 'user' => $uploaderId]);
+        return $id;
+    }
+
+    public function stagedPath(string $key): string { return $this->safeStoredPath($key); }
+
     public function addVersion(int $attachmentId, int $uploaderId, array $file): int
     {
         $source = $this->uploadedSource($file);

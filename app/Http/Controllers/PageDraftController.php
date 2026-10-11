@@ -66,10 +66,18 @@ final class PageDraftController extends Controller
     {
         $context = $this->draftContext($request, $spaceKey, (string) $request->query('document_key', ''));
         if ($context instanceof Response) return $context;
+        $sessions = new EditSessionService($this->app->database());
+        $userId = (int) $this->app->auth()->user()['id'];
+        if ($request->query('checkpoint') !== null) {
+            $point = $sessions->recoveryPoint((int) $context['space']['id'], $userId, $context['document_key'], (int) $request->query('checkpoint'));
+            return $point === null ? Response::json(['error' => ['message' => 'Recovery point not found.']], 404)
+                : Response::json(['data' => ['draft' => $point, 'user_id' => $userId]]);
+        }
         return Response::json(['data' => [
             'drafts' => (new EditSessionService($this->app->database()))->editorDrafts(
                 (int) $context['space']['id'], (int) $this->app->auth()->user()['id'], $context['document_key']
-            ), 'user_id' => (int) $this->app->auth()->user()['id'],
+            ), 'checkpoints' => $sessions->recoveryPoints((int) $context['space']['id'], $userId, $context['document_key']),
+            'current_version' => (int) ($context['page']['version'] ?? 0), 'user_id' => $userId,
         ]]);
     }
 
@@ -105,8 +113,14 @@ final class PageDraftController extends Controller
                 (string) $request->input('content_format', 'visual'),
                 (string) $request->input('content_html', ''), (string) $request->input('content_markdown', '')
             );
+            if ($request->input('document') !== null) {
+                if (!is_array($request->input('document'))) throw new \InvalidArgumentException('Invalid document source.');
+                $content = (new ContentService())->document($request->input('document'));
+            }
+            (new \OpenWiki\Attachments\DraftFileService($this->app->database(), $this->app->basePath()))->touch($content['html'],
+                (int) $context['space']['id'], (int) $this->app->auth()->user()['id'], $context['document_key']);
             $payload = ['format' => $content['format'], 'html' => $content['html'],
-                'markdown' => $content['markdown'] ?? '', 'baseVersion' => $base];
+                'markdown' => $content['markdown'] ?? '', 'document' => $content['document'], 'baseVersion' => $base];
             foreach (['title' => 255, 'slug' => 255, 'parent_id' => 20, 'status' => 20, 'tags' => 4000, 'change_summary' => 500] as $field => $limit) {
                 $value = $request->input($field, '');
                 if (!is_string($value) || mb_strlen($value) > $limit) throw new \InvalidArgumentException('Invalid draft field: ' . $field);
@@ -116,17 +130,66 @@ final class PageDraftController extends Controller
             $payload['conversionBackup'] = (new ContentService())->recoveryCopy($request->input('conversion_backup'));
             $sequence = filter_var($request->input('draft_sequence'), FILTER_VALIDATE_INT);
             if ($sequence === false || $sequence < 1) throw new \InvalidArgumentException('Invalid draft sequence.');
+            $expected = $request->input('draft_version') === null ? null : filter_var($request->input('draft_version'), FILTER_VALIDATE_INT);
+            if ($expected === false || ($expected !== null && $expected < 0)) throw new \InvalidArgumentException('Invalid draft version.');
+            if ($request->input('operation_id') !== null && !is_string($request->input('operation_id'))) throw new \InvalidArgumentException('Invalid operation identity.');
             $result = (new EditSessionService($this->app->database()))->saveEditorDraft(
                 (int) $context['space']['id'], (int) $this->app->auth()->user()['id'],
-                $context['document_key'], (string) $request->input('editor_id', ''), $sequence, $base, $payload
+                $context['document_key'], (string) $request->input('editor_id', ''), $sequence, $base, $payload,
+                $expected, $request->input('operation_id')
             );
             $result['stale'] = $context['page'] !== null && (int) $context['page']['version'] !== $base;
             $result['current_version'] = (int) ($context['page']['version'] ?? 0);
             $result['user_id'] = (int) $this->app->auth()->user()['id'];
             return Response::json(['data' => $result]);
+        } catch (\OpenWiki\Wiki\DraftConflict $exception) {
+            return Response::json(['error' => ['message' => $exception->getMessage(), 'draft_conflict' => $exception->current]], 409);
+        } catch (\DomainException $exception) {
+            return Response::json(['error' => ['message' => $exception->getMessage()]], 403);
         } catch (\InvalidArgumentException $exception) {
             return Response::json(['error' => ['message' => $exception->getMessage()]], 422);
         }
+    }
+
+    public function uploadFile(Request $request, string $spaceKey): Response
+    {
+        $context = $this->draftContext($request, $spaceKey, (string) $request->input('document_key', ''));
+        if ($context instanceof Response) return $context;
+        if (($failure = $this->authorize($request, 'attachment.upload')) !== null) return $failure;
+        if (($failure = $this->verifyCsrf($request)) !== null) return $failure;
+        try {
+            $operation = $request->input('operation_id');
+            if (!is_string($operation)) throw new \InvalidArgumentException('Invalid upload operation.');
+            $file = (new \OpenWiki\Attachments\DraftFileService($this->app->database(), $this->app->basePath()))->upload(
+                (int) $context['space']['id'], (int) $this->app->auth()->user()['id'], $context['document_key'], $operation, $request->file('file') ?? []);
+            return Response::json(['data' => ['id' => (int) $file['id'], 'name' => $file['name'], 'mime_type' => $file['mime_type'],
+                'size_bytes' => (int) $file['size_bytes'], 'width' => $file['width'] === null ? null : (int) $file['width'], 'height' => $file['height'] === null ? null : (int) $file['height'],
+                'preview_url' => '/editor-files/' . $file['id'] . '/preview', 'thumbnail_url' => '/editor-files/' . $file['id'] . '/thumbnail?width=640',
+                'download_url' => '/editor-files/' . $file['id'] . '/download', 'operation_id' => $operation, 'user_id' => (int) $this->app->auth()->user()['id']]], 201);
+        } catch (\InvalidArgumentException $exception) {
+            return Response::json(['error' => ['message' => $exception->getMessage()]], 422);
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki private upload] ' . $exception->getMessage());
+            return Response::json(['error' => ['message' => 'Upload failed. Your document is retained; retry the file.']], 500);
+        }
+    }
+
+    public function file(Request $request, string $id, string $mode): Response
+    {
+        $user = $this->app->auth()->user();
+        $file = $user === null ? null : $this->app->database()->fetchOne('SELECT * FROM editor_draft_files WHERE id = :id AND user_id = :user', ['id' => (int) $id, 'user' => $user['id']]);
+        if ($file === null || !in_array($mode, ['download', 'preview', 'thumbnail'], true)) return Response::html('File not found.', 404);
+        $space = $this->app->database()->fetchOne('SELECT space_key FROM spaces WHERE id = :id AND deleted_at IS NULL', ['id' => $file['space_id']]);
+        if ($space === null || $this->draftContext($request, $space['space_key'], $file['document_key']) instanceof Response) return Response::html('File not found.', 404);
+        try {
+            $attachments = new \OpenWiki\Attachments\AttachmentService($this->app->database(), $this->app->basePath());
+            if ($mode === 'thumbnail') {
+                $thumbnail = (new \OpenWiki\Images\ImageService($attachments, $this->app->basePath()))->thumbnail($file, (int) $request->query('width', 640));
+                return Response::file($thumbnail['path'], $thumbnail['mime_type'], 'thumbnail', true);
+            }
+            if ($mode === 'preview' && $file['width'] === null) return Response::html('Image not found.', 404);
+            return Response::file($attachments->stagedPath($file['storage_key']), $file['mime_type'], $file['name'], $mode === 'preview');
+        } catch (\Throwable) { return Response::html('File not found.', 404); }
     }
 
     public function preview(Request $request, string $spaceKey): Response

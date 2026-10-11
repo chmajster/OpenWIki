@@ -8,6 +8,17 @@ use OpenWiki\Security\HtmlSanitizer;
 
 final class ContentService
 {
+    public const SCHEMA_VERSION = 1;
+
+    public function document(array $input): array
+    {
+        if (($input['version'] ?? null) !== self::SCHEMA_VERSION || !is_string($input['format'] ?? null)
+            || !is_string($input['source'] ?? null) || array_diff(array_keys($input), ['version', 'format', 'source'])) {
+            throw new \InvalidArgumentException('Invalid document schema or unsupported version.');
+        }
+        return $this->normalize($input['format'], $input['format'] === 'visual' ? $input['source'] : '',
+            $input['format'] === 'markdown' ? $input['source'] : '');
+    }
     public function __construct(
         private readonly HtmlSanitizer $sanitizer = new HtmlSanitizer(),
         private readonly MarkdownRenderer $markdown = new MarkdownRenderer()
@@ -42,6 +53,8 @@ final class ContentService
             'markdown' => $storedMarkdown,
             'text' => trim($text),
             'format' => $format,
+            'document' => ['version' => self::SCHEMA_VERSION, 'format' => $format,
+                'source' => $format === 'visual' ? $cleanHtml : $storedMarkdown],
         ];
     }
 
