@@ -77,7 +77,7 @@ final class PageDraftController extends Controller
             'drafts' => (new EditSessionService($this->app->database()))->editorDrafts(
                 (int) $context['space']['id'], (int) $this->app->auth()->user()['id'], $context['document_key']
             ), 'checkpoints' => $sessions->recoveryPoints((int) $context['space']['id'], $userId, $context['document_key']),
-            'current_version' => (int) ($context['page']['version'] ?? 0), 'user_id' => $userId,
+            'current_version' => (int) ($context['page']['version'] ?? 0), 'user_id' => $userId, 'csrf_token' => \OpenWiki\Security\Csrf::token(),
         ]]);
     }
 

@@ -59,9 +59,11 @@ $preserveParent = $isEdit && (int) $parentValue > 0
     data-wiki-editor
     data-is-edit="<?= $isEdit ? '1' : '0' ?>"
     data-user-id="<?= (int) $currentUser['id'] ?>"
+    data-instance-id="<?= substr(hash('sha256', $app->basePath() . \OpenWiki\Core\Env::get('APP_URL', '')), 0, 16) ?>"
     data-space-id="<?= (int) $space['id'] ?>"
     data-page-id="<?= (int) ($page['id'] ?? 0) ?>"
     data-drafts-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-drafts"
+    data-files-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-files"
     data-preview-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-preview"
     data-pages-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-pages"
     data-convert-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-convert"
@@ -222,6 +224,9 @@ $preserveParent = $isEdit && (int) $parentValue > 0
                 <button type="button" class="editor-tab" role="tab" aria-controls="markdown-pane" data-editor-mode="markdown">Markdown</button>
             </div>
 
+            <?php if ($canUploadImage): ?>
+            <div class="upload-area"><button type="button" class="button" data-attachment-picker>Dodaj plik</button><input type="file" multiple hidden data-attachment-file><span>Obrazy i pliki mo?na te? przeci?gn?? do edytora.</span><ul data-upload-list aria-live="polite"></ul></div>
+            <?php endif; ?>
             <div class="editor-pane" id="visual-pane" data-pane="visual">
                 <div class="editor-toolbar" role="toolbar" aria-label="<?= $e($t('Formatting')) ?>">
                     <label class="sr-only" for="heading-level"><?= $e($t('Heading')) ?></label>
@@ -289,9 +294,14 @@ $preserveParent = $isEdit && (int) $parentValue > 0
             <?php endif; ?>
 
             <p class="field-help"><?= $e($t('Ctrl/Cmd+S: save ? Ctrl/Cmd+Z: undo ? Ctrl/Cmd+Shift+Z: redo ? Tab/Shift+Tab: indent list ? Ctrl/Cmd+K: link ? Ctrl/Cmd+Enter: exit code')) ?></p>
-            <button class="button button--primary button--block" type="submit" data-save-button><?= $e($t($isEdit ? 'Save page' : 'Create page')) ?></button>
+            <button class="button button--secondary button--block" type="button" data-save-draft>Zapisz szkic teraz (Ctrl/Cmd+S)</button>
+            <button class="button button--primary button--block" type="submit" data-save-button><?= $isEdit ? 'Zastosuj zmiany do strony' : 'Utwórz stronę ze szkicu' ?></button>
             <button class="button button--secondary" type="button" data-undo-conversion hidden><?= $e($t('Return to content before conversion')) ?></button>
             <div class="editor-save-state" data-save-state role="status" aria-live="polite"><?= $e($t('Recovery copy enabled.')) ?></div>
+            <div class="field-help" data-local-state role="status">Autozapis włączony: po 2 s bezczynności, najpóźniej po 10 s pisania.</div>
+            <button type="button" class="button button--secondary" data-resume-save hidden>Sprawdź konto i wznów zapis</button>
+            <a href="/login" target="_blank" rel="noopener" class="field-help">Zaloguj się ponownie w osobnej karcie</a>
+            <div data-draft-conflict hidden role="alert"><p>Serwerowy szkic tego kontekstu zmienił się. Oryginalna wersja bazowa pozostaje zachowana.</p><pre data-draft-conflict-current></pre><button type="button" class="button" data-draft-fork>Zachowaj pracę jako osobny szkic</button></div>
         </aside>
     </form>
 </section>

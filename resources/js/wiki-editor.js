@@ -2,6 +2,8 @@ const t = (text) => window.wikiTranslate(text);
 import {createRichEditor, selectModelImage} from './rich-editor.js';
 import {sanitizeHtml, contentSignature} from './html.js';
 import {setupEditorTools} from './editor-tools.js';
+import {LocalRecovery} from './local-recovery.js';
+import {setupUploads} from './upload-queue.js';
 'use strict';
 
 const editorRoot = document.querySelector('[data-wiki-editor]');
@@ -16,6 +18,8 @@ if (editorRoot) {
     const form = editorRoot.querySelector('[data-editor-form]');
     const saveButton = editorRoot.querySelector('[data-save-button]');
     const saveState = editorRoot.querySelector('[data-save-state]');
+    const localState = editorRoot.querySelector('[data-local-state]');
+    const localRecovery = new LocalRecovery();
     const lockWarning = editorRoot.querySelector('[data-edit-lock-warning]');
     const recoveryBanner = editorRoot.querySelector('[data-recovery-banner]');
     const recoveryText = editorRoot.querySelector('[data-recovery-text]');
@@ -23,13 +27,13 @@ if (editorRoot) {
     const tabs = Array.from(editorRoot.querySelectorAll('[data-editor-mode]'));
     const panes = Array.from(editorRoot.querySelectorAll('[data-pane]'));
     let isEdit = editorRoot.dataset.isEdit === '1';
-    const csrfToken = form.elements._token.value;
+    let csrfToken = form.elements._token.value;
     const baseVersionField = form.elements.base_version;
     const userId = editorRoot.dataset.userId;
     const uuid = () => typeof crypto.randomUUID === 'function' ? crypto.randomUUID()
         : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (character) =>
             (Number(character) ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(character) / 4).toString(16));
-    const editorId = uuid();
+    let editorId = uuid();
     const url = new URL(window.location.href);
     let documentId = url.searchParams.get('document');
     if (!isEdit && !/^[a-f0-9-]{36}$/.test(documentId || '')) {
@@ -40,8 +44,16 @@ if (editorRoot) {
     let documentKey = isEdit ? 'page:' + editorRoot.dataset.pageId : 'new:' + documentId;
     let recoveryPrefix = 'openwiki:draft:v2:' + userId + ':' + editorRoot.dataset.spaceId + ':' + documentKey + ':';
     let recoveryKey = recoveryPrefix + editorId;
+    const instance = editorRoot.dataset.instanceId;
+    recoveryPrefix += instance + ':';
+    recoveryKey = recoveryPrefix + editorId;
     let generation = 1;
     let draftGeneration = 0;
+    let draftVersion = 0;
+    let draftAttempt = null;
+    let pageAttempt = null;
+    let authStopped = false;
+    let maximumSaveTimer = null;
     let dirty = false;
     let saving = false;
     let converting = false;
@@ -96,7 +108,7 @@ if (editorRoot) {
         refreshTools();
     };
     const updateSaveButton = () => {
-        saveButton.disabled = saving || converting || pendingImages > 0 || accountChanged || Boolean(conflict) || Boolean(modelPending);
+        saveButton.disabled = saving || converting || pendingImages > 0 || accountChanged || authStopped || Boolean(conflict) || Boolean(modelPending);
         refreshTools();
     };
     const snapshot = () => ({
@@ -106,23 +118,30 @@ if (editorRoot) {
         status: form.elements.status.value, tags: form.elements.tags.value,
         changeSummary: form.elements.change_summary.value, format: formatInput.value,
         html: getVisualHtml(), markdown: markdownEditor.value, conversionBackup,
+        draftVersion, document: {version: 1, format: formatInput.value, source: formatInput.value === 'visual' ? getVisualHtml() : markdownEditor.value},
         originalMarkdown
     });
     const persistLocalRecovery = () => {
-        try { localStorage.setItem(recoveryKey, JSON.stringify(snapshot())); return true; }
-        catch { return false; }
+        const captured = snapshot();
+        return localRecovery.save(recoveryKey, captured).then((ok) => {
+            localState.textContent = ok ? 'Zapisano lokalnie o ' + new Date().toLocaleTimeString() : 'Lokalny magazyn jest niedostępny lub pełny. Brak lokalnej kopii tej zmiany.';
+            localState.dataset.protected = String(ok);
+            return ok;
+        });
     };
     const markDirty = () => {
         generation++;
         dirty = true;
         lastSaveError = '';
         saveState.textContent = t('Unsaved changes. Recovery copy pending.');
+        saveState.dataset.state = 'unsaved';
         window.clearTimeout(localSaveTimer);
         localSaveTimer = window.setTimeout(() => {
-            if (!persistLocalRecovery()) saveState.textContent = t('Local storage is unavailable. Keep this editor open until saving succeeds.');
+            persistLocalRecovery();
         }, 350);
         window.clearTimeout(autosaveTimer);
-        autosaveTimer = window.setTimeout(autosave, 1500);
+        autosaveTimer = window.setTimeout(autosave, 2000);
+        if (maximumSaveTimer === null) maximumSaveTimer = window.setTimeout(() => { maximumSaveTimer = null; autosave(); }, 10000);
         if (conflict) editorRoot.querySelector('[data-conflict-local]').textContent = describe(snapshot());
     };
     const initialHtml = visualEditor.innerHTML;
@@ -199,9 +218,20 @@ if (editorRoot) {
         }
     } catch { saveState.textContent = t('Local recovery storage is unavailable.'); }
     showRecovery();
-    editorRoot.querySelector('[data-restore-recovery]').addEventListener('click', () => {
-        const data = recoveryCopies.get(recoverySelect.value);
+    localRecovery.list(recoveryPrefix).then((copies) => {
+        for (const data of copies) if (String(data.userId) === userId && data.documentKey === documentKey) {
+            const existing = recoveryCopies.get(data.editorId);
+            if (!existing || data.sequence > existing.sequence) recoveryCopies.set(data.editorId, data);
+        }
+        showRecovery();
+    });
+    editorRoot.querySelector('[data-restore-recovery]').addEventListener('click', async () => {
+        let data = recoveryCopies.get(recoverySelect.value);
         if (!data) return;
+        if (data.checkpoint) {
+            try { data = (await requestJson(editorRoot.dataset.draftsUrl + '?document_key=' + encodeURIComponent(documentKey) + '&checkpoint=' + data.checkpoint)).draft; }
+            catch (error) { saveState.textContent = error.message; return; }
+        }
         recoveredSource = data;
         restoreSnapshot(data);
         recoveryBanner.hidden = true;
@@ -212,6 +242,7 @@ if (editorRoot) {
     const fields = (data) => ({
         _token: csrfToken, editor_user_id: userId, document_key: documentKey, editor_id: editorId,
         draft_sequence: data.sequence, base_version: data.baseVersion,
+        document: data.document,
         title: data.title, slug: data.slug, parent_id: data.parentId, status: data.status,
         tags: data.tags, change_summary: data.changeSummary, content_format: data.format,
         content_html: data.html, content_markdown: data.markdown, conversion_backup: data.conversionBackup,
@@ -230,6 +261,12 @@ if (editorRoot) {
             if (!response.ok) {
                 const error = new Error(t(payload?.error?.message) || t('Request failed (') + response.status + ').');
                 error.conflict = payload?.error?.conflict;
+                error.draftConflict = payload?.error?.draft_conflict;
+                error.status = response.status;
+                if ([401, 403, 419].includes(response.status)) {
+                    authStopped = true;
+                    editorRoot.querySelector('[data-resume-save]').hidden = false;
+                }
                 throw error;
             }
             if (payload.data?.user_id && String(payload.data.user_id) !== userId) throw new Error(t('The signed-in account changed. Reopen the editor.'));
@@ -324,8 +361,6 @@ if (editorRoot) {
         originalMarkdown = null;
         markDirty();
     });
-    const imagePicker = editorRoot.querySelector('[data-image-picker]');
-    const imageFileInput = editorRoot.querySelector('[data-image-file]');
     const imageInspector = editorRoot.querySelector('[data-image-inspector]');
     const imageAltInput = editorRoot.querySelector('[data-image-alt]');
     const imageCaptionInput = editorRoot.querySelector('[data-image-caption]');
@@ -333,7 +368,6 @@ if (editorRoot) {
     const imageApplyButton = editorRoot.querySelector('[data-image-apply]');
     const imageRemoveButton = editorRoot.querySelector('[data-image-remove]');
     const canUploadImage = editorRoot.dataset.canUploadImage === '1';
-    const imageUploadUrl = editorRoot.dataset.imageUploadUrl || '';
     let selectedImage = null;
 
     const clampImageWidth = (value, fallback = 640) => {
@@ -367,119 +401,12 @@ if (editorRoot) {
         imageInspector.hidden = false;
     };
 
-    const createImageFigure = (data) => {
-        richEditor.view.focus();
-        richEditor.chain().insertContent({type: 'imageFigure', attrs: {src: data.src,
-            'data-attachment-id': data.id ? String(data.id) : null, 'data-original-width': String(data.width),
-            'data-original-height': String(data.height), width: String(clampImageWidth(data.width)), alt: '', loading: 'lazy', figureClass: 'wiki-image'}}).run();
-    };
-
-    const readImageFile = (file) => new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error(t('Unable to read image.')));
-        reader.onload = () => {
-            const src = typeof reader.result === 'string' ? reader.result : '';
-            if (!src) {
-                reject(new Error(t('Unable to read image.')));
-                return;
-            }
-
-            const probe = new Image();
-            probe.onload = () => resolve({
-                src,
-                width: probe.naturalWidth,
-                height: probe.naturalHeight
-            });
-            probe.onerror = () => reject(new Error(t('Unable to decode image.')));
-            probe.src = src;
-        };
-        reader.readAsDataURL(file);
-    });
-
-    const uploadImage = async (file) => {
-        if (!imageUploadUrl) {
-            return readImageFile(file);
-        }
-
-        const body = new FormData();
-        body.append('_token', csrfToken);
-        body.append('image', file, file.name || 'clipboard-image.png');
-
-        const response = await fetch(imageUploadUrl, {
-            method: 'POST',
-            headers: {'Accept': 'application/json'},
-            body,
-            credentials: 'same-origin'
+    if (canUploadImage) setupUploads(editorRoot, richEditor, localRecovery,
+        () => ({documentKey, csrfToken, canSend: !accountChanged && !authStopped && !modelPending && sourceOverride === null && formatInput.value === 'visual'}),
+        uuid, markDirty, (count) => { pendingImages = count; updateSaveButton(); }, (error) => {
+            saveState.textContent = error.message;
+            if ([401, 403, 419].includes(error.status)) { authStopped = true; editorRoot.querySelector('[data-resume-save]').hidden = false; }
         });
-        const payload = await response.json();
-
-        if (!response.ok) {
-            throw new Error(t(payload?.error?.message) || t('Image upload failed.'));
-        }
-
-        return {
-            id: payload.data.id,
-            src: payload.data.thumbnail_url,
-            width: payload.data.width,
-            height: payload.data.height
-        };
-    };
-
-    const handleImageFile = async (file) => {
-        if (!canUploadImage || !file) return;
-
-        const allowed = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
-        if (!allowed.includes(file.type)) {
-            saveState.textContent = t('Only PNG, JPEG, GIF and WebP images are supported.');
-            return;
-        }
-
-        if (file.size > 10 * 1024 * 1024) {
-            saveState.textContent = t('Image exceeds the 10 MiB editor upload limit.');
-            return;
-        }
-
-        saveState.textContent = imageUploadUrl
-            ? t('Uploading image…')
-            : t('Preparing pasted image for first save…');
-
-        pendingImages++;
-        updateSaveButton();
-        try {
-            const data = await uploadImage(file);
-            createImageFigure(data);
-            saveState.textContent = imageUploadUrl
-                ? t('Image uploaded. Save the page to reference it in this revision.')
-                : t('Image prepared. It will be stored as an attachment when the page is created.');
-        } catch (error) {
-            saveState.textContent = error instanceof Error
-                ? error.message
-                : t('Unable to add image.');
-        } finally { pendingImages--; updateSaveButton(); }
-    };
-
-    if (imagePicker && imageFileInput && canUploadImage) {
-        imagePicker.addEventListener('click', () => imageFileInput.click());
-        imageFileInput.addEventListener('change', async () => {
-            const file = imageFileInput.files && imageFileInput.files[0]
-                ? imageFileInput.files[0]
-                : null;
-            imageFileInput.value = '';
-            await handleImageFile(file);
-        });
-
-        visualEditor.addEventListener('paste', async (event) => {
-            const items = Array.from(event.clipboardData?.items || []);
-            const imageItem = items.find((item) => item.kind === 'file' && item.type.startsWith('image/'));
-            if (!imageItem) return;
-
-            const file = imageItem.getAsFile();
-            if (!file) return;
-
-            event.preventDefault();
-            await handleImageFile(file);
-        });
-    }
 
     visualEditor.addEventListener('click', (event) => {
         const target = event.target;
@@ -503,7 +430,8 @@ if (editorRoot) {
             const attrs = richEditor.state.doc.nodeAt(pos).attrs;
             const width = Math.min(Number(values.width), Number(attrs['data-original-width']) || 1600);
             richEditor.view.dispatch(richEditor.state.tr.setNodeMarkup(pos, undefined, {...attrs, ...values, width: String(width), height: null,
-                src: attrs['data-attachment-id'] ? '/attachments/' + attrs['data-attachment-id'] + '/thumbnail?width=' + width : attrs.src}));
+                src: attrs['data-draft-file-id'] ? '/editor-files/' + attrs['data-draft-file-id'] + '/thumbnail?width=' + width
+                    : attrs['data-attachment-id'] ? '/attachments/' + attrs['data-attachment-id'] + '/thumbnail?width=' + width : attrs.src}));
             selectImage(richEditor.view.nodeDOM(pos)?.querySelector('img') || null);
         });
     }
@@ -536,7 +464,7 @@ if (editorRoot) {
     form.addEventListener('change', (event) => { if (!visualEditor.contains(event.target)) markDirty(); });
 
     const acquireLock = async () => {
-        if (!isEdit || accountChanged || saving) return;
+        if (!isEdit || accountChanged || saving || authStopped || document.hidden || !navigator.onLine) return;
         try {
             const data = await requestJson(editorRoot.dataset.lockUrl, {_token: csrfToken});
             lockToken = data.token || lockToken;
@@ -548,36 +476,69 @@ if (editorRoot) {
         }
     };
     const autosave = async () => {
-        if (!dirty || generation === draftGeneration || pendingAutosave || saving || converting || accountChanged) return;
-        const captured = snapshot();
+        if (!dirty || generation === draftGeneration || pendingAutosave || saving || converting || accountChanged || authStopped) return;
+        if (!navigator.onLine) { saveState.dataset.state = 'offline'; saveState.textContent = 'Brak połączenia. Pisanie i lokalne odzyskiwanie pozostają dostępne.'; persistLocalRecovery(); return; }
+        window.clearTimeout(maximumSaveTimer); maximumSaveTimer = null;
+        if (!draftAttempt) { const captured = snapshot(); draftAttempt = {captured, body: {...fields(captured), draft_version: draftVersion, operation_id: uuid()}}; }
+        const captured = draftAttempt.captured;
         persistLocalRecovery();
-        pendingAutosave = requestJson(editorRoot.dataset.draftsUrl, fields(captured));
+        saveState.textContent = 'Zapisywanie szkicu…';
+        saveState.dataset.state = 'saving';
+        pendingAutosave = requestJson(editorRoot.dataset.draftsUrl, draftAttempt.body);
         try {
             const data = await pendingAutosave;
-            if (data.sequence !== captured.sequence) throw new Error(t('The server did not acknowledge this draft snapshot.'));
+            if (data.sequence !== captured.sequence || data.operation_id !== draftAttempt.body.operation_id) throw new Error(t('The server did not acknowledge this draft snapshot.'));
+            draftVersion = data.draft_version;
             draftGeneration = captured.sequence;
+            draftAttempt = null;
+            saveState.dataset.state = generation === captured.sequence ? 'server' : 'unsaved';
             if (generation === captured.sequence) saveState.textContent = data.stale
                 ? t('Recovery copy saved with its original base version. The server page has changed; saving will require conflict resolution.')
-                : t('Draft saved at ') + data.saved_at + t('. Save the page to create a revision.');
+                : 'Zapisano na serwerze o ' + data.saved_at + '. Szkic nie zmienia strony widocznej czytelnikom.';
             else saveState.textContent = t('An earlier draft was saved. Newer changes are still pending.');
             if (lastSaveError) saveState.textContent += t(' The page save failed: ') + lastSaveError;
-        } catch (error) { saveState.textContent = error.message + t(' Server autosave failed; your document remains recoverable locally.'); }
+        } catch (error) {
+            if (error.status && error.status < 500) draftAttempt = null;
+            if (error.draftConflict) {
+                authStopped = true;
+                editorRoot.querySelector('[data-resume-save]').hidden = false;
+                editorRoot.querySelector('[data-draft-conflict]').hidden = false;
+                editorRoot.querySelector('[data-draft-conflict-current]').textContent = describe(error.draftConflict);
+                editorRoot.querySelector('[data-draft-fork]').onclick = () => {
+                    // A separate editing context retains the original page base, never rebases it.
+                    editorId = uuid(); recoveryKey = recoveryPrefix + editorId; draftVersion = 0; draftAttempt = null;
+                    authStopped = false; editorRoot.querySelector('[data-draft-conflict]').hidden = true; markDirty(); autosave();
+                };
+            }
+            saveState.dataset.state = error.status === 409 ? 'conflict' : 'error';
+            saveState.textContent = (error.status === 409 ? 'Konflikt szkicu. ' : error.status === 401 || error.status === 419 ? 'Sesja wygasła. ' : error.status === 403 ? 'Utrata uprawnień. ' : 'Błąd zapisu. ') + error.message;
+        }
         finally {
             pendingAutosave = null;
             if (generation !== captured.sequence && !saving) autosaveTimer = window.setTimeout(autosave, 250);
+            else if (draftAttempt && !authStopped) autosaveTimer = window.setTimeout(autosave, 5000);
         }
     };
+    editorRoot.querySelector('[data-save-draft]').addEventListener('click', () => autosave());
+    editorRoot.addEventListener('keydown', (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+            event.preventDefault(); event.stopPropagation();
+            if (pendingAutosave) pendingAutosave.finally(() => autosave()).catch(() => {}); else autosave();
+        }
+    }, true);
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
-        if (saving || converting || pendingImages > 0 || accountChanged || conflict || modelPending) return;
+        if (saving || converting || pendingImages > 0 || accountChanged || authStopped || conflict || modelPending) return;
         persistLocalRecovery();
         saving = true;
         updateSaveButton();
         window.clearTimeout(autosaveTimer);
         try {
             if (pendingAutosave) await pendingAutosave.catch(() => {});
-            const captured = snapshot();
-            const data = await requestJson(form.action, fields(captured));
+            if (!pageAttempt) { const captured = snapshot(); pageAttempt = {captured, body: {...fields(captured), operation_id: uuid()}}; }
+            const captured = pageAttempt.captured;
+            const data = await requestJson(form.action, pageAttempt.body);
+            pageAttempt = null;
             baseVersionField.value = String(data.page.version);
             lastSaveError = '';
             if (accountChanged) {
@@ -589,10 +550,10 @@ if (editorRoot) {
                 dirty = false;
                 window.clearTimeout(localSaveTimer);
                 try {
-                    localStorage.removeItem(recoveryKey);
+                    await localRecovery.remove(recoveryKey, captured.sequence);
                     if (recoveredSource?.localKey) {
                         const latest = JSON.parse(localStorage.getItem(recoveredSource.localKey) || 'null');
-                        if (latest && Number(latest.sequence) <= Number(recoveredSource.sequence)) localStorage.removeItem(recoveredSource.localKey);
+                        if (latest && Number(latest.sequence) <= Number(recoveredSource.sequence)) await localRecovery.remove(recoveredSource.localKey, recoveredSource.sequence);
                     }
                 } catch { /* A retained copy is harmless when deletion is unavailable. */ }
                 window.location.assign(data.url);
@@ -608,8 +569,9 @@ if (editorRoot) {
                 editorRoot.querySelector('[data-editor-cancel]').href = data.url;
                 saveButton.textContent = t('Save page');
                 documentKey = 'page:' + data.page.id;
-                recoveryPrefix = 'openwiki:draft:v2:' + userId + ':' + editorRoot.dataset.spaceId + ':' + documentKey + ':';
+                recoveryPrefix = 'openwiki:draft:v2:' + userId + ':' + editorRoot.dataset.spaceId + ':' + documentKey + ':' + instance + ':';
                 recoveryKey = recoveryPrefix + editorId;
+                draftVersion = 0; draftGeneration = 0; draftAttempt = null;
                 editorRoot.dataset.lockUrl = data.url + '/edit-lock';
                 editorRoot.dataset.unlockUrl = data.url + '/edit-unlock';
                 history.replaceState(null, '', data.url + '/edit');
@@ -621,20 +583,22 @@ if (editorRoot) {
                 let tr = richEditor.state.tr;
                 richEditor.state.doc.descendants((node, pos) => {
                     const stored = node.type.name === 'imageFigure' && replacements.get(node.attrs.src);
-                    if (stored && /^data:image\//i.test(node.attrs.src)) tr = tr.setNodeMarkup(pos, undefined, {...node.attrs, src: stored.getAttribute('src'), 'data-attachment-id': stored.dataset.attachmentId});
+                    if (stored && /^(data:image\/|\/editor-files\/)/i.test(node.attrs.src)) tr = tr.setNodeMarkup(pos, undefined, {...node.attrs, src: stored.getAttribute('src'), 'data-attachment-id': stored.dataset.attachmentId, 'data-draft-file-id': null});
                 });
                 if (tr.docChanged) richEditor.view.dispatch(tr);
                 markDirty();
-                if (persistLocalRecovery() && oldKey !== recoveryKey) {
-                    try { localStorage.removeItem(oldKey); } catch {}
+                if (await persistLocalRecovery() && oldKey !== recoveryKey) {
+                    await localRecovery.remove(oldKey, captured.sequence);
                 }
                 saveState.textContent = t('The submitted version was saved. Your later changes are still in this editor and need another save.');
             }
         } catch (error) {
+            if (error.status && error.status < 500) pageAttempt = null;
             dirty = true;
             lastSaveError = error.message;
             persistLocalRecovery();
             if (error.conflict) showConflict(error.conflict);
+            saveState.dataset.state = error.conflict ? 'conflict' : 'error';
             saveState.textContent = error.message + t(' Your document and its original base version are retained.');
         } finally { saving = false; updateSaveButton(); }
     });
@@ -643,8 +607,24 @@ if (editorRoot) {
             const local = recoveryCopies.get(draft.editorId);
             if (!local || Number(local.sequence) < draft.sequence) recoveryCopies.set(draft.editorId, {...draft, localKey: local?.localKey});
         }
+        for (const point of data.checkpoints || []) recoveryCopies.set('checkpoint:' + point.id, {...point, checkpoint: point.id, title: 'Punkt odzyskiwania'});
         showRecovery();
     }).catch(() => { /* Local recovery remains usable without the server. */ });
+    const resume = async () => {
+        if (accountChanged || !navigator.onLine) return;
+        try {
+            // Check account and current document before any queued content is sent again.
+            const checked = await requestJson(editorRoot.dataset.draftsUrl + '?document_key=' + encodeURIComponent(documentKey));
+            csrfToken = checked.csrf_token;
+            if (draftAttempt) draftAttempt.body._token = csrfToken;
+            if (pageAttempt) pageAttempt.body._token = csrfToken;
+            authStopped = false; editorRoot.querySelector('[data-resume-save]').hidden = true;
+            autosave();
+        } catch (error) { saveState.textContent = error.message; }
+    };
+    editorRoot.querySelector('[data-resume-save]').addEventListener('click', resume);
+    window.addEventListener('online', resume);
+    window.addEventListener('offline', () => { persistLocalRecovery(); saveState.textContent = 'Brak połączenia. Dokument pozostaje w edytorze.'; });
     window.addEventListener('storage', (event) => {
         if (event.key === 'openwiki:active-user' && event.newValue !== userId) {
             accountChanged = true;
@@ -656,7 +636,7 @@ if (editorRoot) {
         }
     });
     window.addEventListener('beforeunload', (event) => {
-        if (!dirty) return;
+        if (!dirty || generation === draftGeneration) return;
         persistLocalRecovery();
         event.preventDefault();
         event.returnValue = '';
@@ -664,6 +644,7 @@ if (editorRoot) {
     window.addEventListener('pagehide', () => {
         window.clearTimeout(autosaveTimer);
         window.clearTimeout(localSaveTimer);
+        window.clearTimeout(maximumSaveTimer);
         if (dirty) persistLocalRecovery();
         if (lockToken && editorRoot.dataset.unlockUrl) navigator.sendBeacon(editorRoot.dataset.unlockUrl,
             new URLSearchParams({_token: csrfToken, lock_token: lockToken}));
