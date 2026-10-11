@@ -18,7 +18,7 @@
     "mermaid": "11.17.2"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "overrides": {
     "katex": "0.18.2"

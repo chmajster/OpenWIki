@@ -40,13 +40,14 @@ final class InstallService
             }
             $writable[$path] = is_writable($path);
         }
+        $compiled = true;
+        foreach (['wiki-editor.js', 'diagram.js', 'document-reader.js', 'diagram.html'] as $asset) {
+            $path = $this->basePath . '/public/assets/' . $asset;
+            $compiled = $compiled && is_file($path) && is_readable($path) && filesize($path) > 0;
+        }
         $assets = [
             'Composer runtime dependencies' => class_exists(\League\CommonMark\MarkdownConverter::class),
-            'Compiled editor assets' => is_readable($this->basePath . '/public/assets/wiki-editor.js')
-                && filesize($this->basePath . '/public/assets/wiki-editor.js') > 0
-                && is_readable($this->basePath . '/public/assets/diagram.js')
-                && is_readable($this->basePath . '/public/assets/document-reader.js')
-                && is_readable($this->basePath . '/public/assets/diagram.html'),
+            'Compiled editor assets' => $compiled,
         ];
 
         return [

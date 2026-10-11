@@ -66,7 +66,9 @@ jobs:
         run: npm run check:js
 
       - name: Bash installer syntax
-        run: bash -n install.sh
+        run: |
+          bash -n install.sh
+          bash -n scripts/build-editor.sh
 
       - name: Bash installer help
         run: NO_COLOR=1 bash install.sh --help
@@ -132,6 +134,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Verify pinned build toolchain for hosts with older Node.js
+        run: bash scripts/build-editor.sh --pinned-node
 
       - name: Fresh host install
         shell: bash

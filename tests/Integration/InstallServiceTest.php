@@ -59,6 +59,13 @@ final class InstallServiceTest extends TestCase
         (new InstallService($this->basePath))->install([]);
     }
 
+    public function testAnEmptySecondaryBundleBlocksInstallation(): void
+    {
+        file_put_contents($this->basePath . '/public/assets/diagram.js', '');
+        clearstatcache();
+        self::assertFalse((new InstallService($this->basePath))->requirements()['assets']['Compiled editor assets']);
+    }
+
     public function testFreshInstallCreatesSchemaAdminRolesAndLock(): void
     {
         (new InstallService($this->basePath))->install([

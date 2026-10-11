@@ -200,10 +200,11 @@ deploy_code() {
 
   cd "$INSTALL_DIR"
   composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
-  node -e 'if (Number(process.versions.node.split(".")[0]) < 18) process.exit(1)' ||
-    fail "Budowanie edytora wymaga Node.js 18 lub nowszego."
-  npm ci --include=dev --no-audit --no-fund
-  npm run build
+  if [[ ! -d .git && -s public/assets/wiki-editor.js && -s public/assets/diagram.js && -s public/assets/document-reader.js && -s public/assets/diagram.html ]]; then
+    ok "Używam gotowych zasobów z wydania."
+  else
+    bash scripts/build-editor.sh
+  fi
   mkdir -p storage/{attachments,backups,cache,temp,logs}
   chown -R root:"$WEB_USER" "$INSTALL_DIR"
   find "$INSTALL_DIR" -type d -exec chmod 0755 {} \;
