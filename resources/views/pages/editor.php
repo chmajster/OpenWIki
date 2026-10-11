@@ -1,7 +1,7 @@
 <?php
-$e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$text = static fn (mixed $value): string => is_scalar($value) ? (string) $value : '';
+$e = static fn (mixed $value): string => htmlspecialchars($text($value), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $old = $old ?? [];
-$serverDraft = $serverDraft ?? null;
 $isEdit = $page !== null;
 $field = static function (string $key, mixed $fallback = '') use ($old): mixed {
     return array_key_exists($key, $old) ? $old[$key] : $fallback;
@@ -13,10 +13,10 @@ $parentValue = $field('parent_id', $page['parent_id'] ?? '');
 $statusValue = $field('status', $page['status'] ?? 'draft');
 $formatValue = $field('content_format', $page['content_format'] ?? 'visual');
 $markdownValue = $field('content_markdown', $page['content_markdown'] ?? '');
-$trustedVisual = !array_key_exists('content_html', $old);
-$visualValue = $field('content_html', $page['content_html'] ?? '<p></p>');
+$visualValue = (new \OpenWiki\Security\HtmlSanitizer())->sanitize($text($field('content_html', $page['content_html'] ?? '<p></p>')));
 $changeSummary = $field('change_summary', '');
 $tagValue = $field('tags', isset($tags) ? implode(', ', array_column($tags, 'name')) : '');
+if (is_array($tagValue)) $tagValue = implode(', ', array_filter($tagValue, 'is_string'));
 $canUploadImage = (bool) ($canUploadImage ?? false);
 $imageUploadUrl = $imageUploadUrl ?? null;
 
@@ -54,6 +54,11 @@ $walk(0, 0);
     class="editor-shell"
     data-wiki-editor
     data-is-edit="<?= $isEdit ? '1' : '0' ?>"
+    data-user-id="<?= (int) $currentUser['id'] ?>"
+    data-space-id="<?= (int) $space['id'] ?>"
+    data-page-id="<?= (int) ($page['id'] ?? 0) ?>"
+    data-drafts-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-drafts"
+    data-convert-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-convert"
     data-can-upload-image="<?= $canUploadImage ? '1' : '0' ?>"
     <?php if ($imageUploadUrl !== null): ?>
         data-image-upload-url="<?= $e($imageUploadUrl) ?>"
@@ -61,7 +66,6 @@ $walk(0, 0);
     <?php if ($isEdit): ?>
         data-lock-url="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit-lock"
         data-unlock-url="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit-unlock"
-        data-autosave-url="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/autosave"
     <?php endif; ?>
 >
     <div class="editor-heading">
@@ -69,14 +73,14 @@ $walk(0, 0);
             <div class="breadcrumbs">
                 <a href="/spaces/<?= rawurlencode($space['space_key']) ?>"><?= $e($space['name']) ?></a>
                 <span>/</span>
-                <span><?= $isEdit ? 'Edit page' : 'Create page' ?></span>
+                <span data-editor-heading><?= $isEdit ? 'Edit page' : 'Create page' ?></span>
             </div>
-            <h1><?= $isEdit ? 'Edit page' : 'Create page' ?></h1>
+            <h1 data-editor-heading><?= $isEdit ? 'Edit page' : 'Create page' ?></h1>
         </div>
         <?php if ($isEdit): ?>
-            <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>">Cancel</a>
+            <a class="button button--ghost" data-editor-cancel href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>">Cancel</a>
         <?php else: ?>
-            <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>">Cancel</a>
+            <a class="button button--ghost" data-editor-cancel href="/spaces/<?= rawurlencode($space['space_key']) ?>">Cancel</a>
         <?php endif; ?>
     </div>
 
@@ -87,23 +91,42 @@ $walk(0, 0);
     <div class="alert alert--warning" data-edit-lock-warning role="alert" hidden></div>
     <div class="alert alert--warning editor-recovery" data-recovery-banner hidden>
         <span data-recovery-text>Recovered content is available.</span>
+        <label>Recovery copy <select data-recovery-select></select></label>
         <div class="recovery-actions">
             <button class="button button--secondary" type="button" data-restore-recovery>Restore recovered content</button>
             <button class="button button--ghost" type="button" data-hide-recovery>Ignore</button>
         </div>
     </div>
-    <?php if ($serverDraft !== null): ?>
-        <div hidden data-server-draft data-format="<?= $e($serverDraft['content_format']) ?>" data-saved-at="<?= $e($serverDraft['updated_at']) ?>" data-base-version="<?= (int) $serverDraft['base_version'] ?>">
-            <textarea data-server-draft-html><?= $e($serverDraft['content_html']) ?></textarea>
-            <textarea data-server-draft-markdown><?= $e($serverDraft['content_markdown'] ?? '') ?></textarea>
+    <section class="card panel editor-conflict" data-conflict-panel hidden aria-label="Resolve edit conflict">
+        <h2>Resolve edit conflict</h2>
+        <p>Your original base version is retained. Compare the base, your document and the server version, then edit your document to resolve the differences.</p>
+        <div class="editor-comparison">
+            <div><h3>Base version</h3><pre data-conflict-base></pre></div>
+            <div><h3>Your document</h3><pre data-conflict-local></pre></div>
+            <div><h3>Current server version</h3><pre data-conflict-server></pre></div>
         </div>
+        <button type="button" class="button button--secondary" data-resolve-conflict>I reviewed and resolved the differences; prepare my document for saving</button>
+    </section>
+    <?php if (!empty($conflict)): ?>
+        <textarea hidden data-initial-conflict><?= $e(json_encode($conflict, JSON_THROW_ON_ERROR)) ?></textarea>
     <?php endif; ?>
+    <dialog data-conversion-dialog class="editor-conversion" aria-labelledby="conversion-heading">
+        <h2 id="conversion-heading">Review conversion differences</h2>
+        <p>Markdown supports headings, emphasis, lists, quotes, code and links. Other HTML formatting and image metadata may be lost. The original document remains recoverable after conversion.</p>
+        <div class="editor-comparison">
+            <div><h3>Before</h3><div data-conversion-before class="document-content"></div></div>
+            <div><h3>After</h3><div data-conversion-after class="document-content"></div></div>
+        </div>
+        <h3>Source differences</h3><pre data-conversion-diff></pre>
+        <div class="form-actions">
+            <button type="button" class="button button--secondary" data-conversion-cancel>Keep original</button>
+            <button type="button" class="button button--primary" data-conversion-accept>Convert and keep recovery copy</button>
+        </div>
+    </dialog>
 
     <form method="post" action="<?= $e($formAction) ?>" class="editor-form" data-editor-form>
         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-        <?php if ($isEdit): ?>
-            <input type="hidden" name="base_version" value="<?= (int) $page['version'] ?>">
-        <?php endif; ?>
+        <input type="hidden" name="base_version" value="<?= $e($field('base_version', $page['version'] ?? 0)) ?>">
         <input type="hidden" name="content_format" value="<?= $e($formatValue) ?>" data-content-format>
 
         <div class="editor-main card">
@@ -139,7 +162,7 @@ $walk(0, 0);
                 </div>
 
                 <label>Tags
-                    <input name="tags" maxlength="1500" value="<?= $e($tagValue) ?>" placeholder="linux, network, procedure">
+                    <input name="tags" maxlength="4000" value="<?= $e($tagValue) ?>" placeholder="linux, network, procedure">
                     <span class="field-help">Separate tags with commas. Maximum 30 tags.</span>
                 </label>
 
@@ -160,11 +183,11 @@ $walk(0, 0);
             </div>
 
             <div class="editor-tabs" role="tablist" aria-label="Editor mode">
-                <button type="button" class="editor-tab" data-editor-mode="visual">Visual</button>
-                <button type="button" class="editor-tab" data-editor-mode="markdown">Markdown</button>
+                <button type="button" class="editor-tab" role="tab" aria-controls="visual-pane" data-editor-mode="visual">Visual</button>
+                <button type="button" class="editor-tab" role="tab" aria-controls="markdown-pane" data-editor-mode="markdown">Markdown</button>
             </div>
 
-            <div class="editor-pane" data-pane="visual">
+            <div class="editor-pane" id="visual-pane" data-pane="visual">
                 <div class="editor-toolbar" aria-label="Formatting">
                     <button type="button" data-command="bold"><strong>B</strong></button>
                     <button type="button" data-command="italic"><em>I</em></button>
@@ -179,18 +202,12 @@ $walk(0, 0);
                         <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" data-image-file hidden>
                     <?php endif; ?>
                 </div>
-                <div class="visual-editor" contenteditable="true" data-visual-editor role="textbox" aria-multiline="true"><?php
-                    if ($trustedVisual) {
-                        echo $visualValue;
-                    } else {
-                        echo $e($visualValue);
-                    }
-                ?></div>
+                <div class="visual-editor" contenteditable="true" data-visual-editor role="textbox" aria-label="Page content (Visual)" aria-multiline="true"><?= $visualValue ?></div>
                 <textarea name="content_html" class="hidden-field" data-html-field><?= $e($visualValue) ?></textarea>
             </div>
 
-            <div class="editor-pane" data-pane="markdown">
-                <textarea name="content_markdown" class="markdown-editor" rows="24" data-markdown-editor spellcheck="false"><?= $e($markdownValue) ?></textarea>
+            <div class="editor-pane" id="markdown-pane" data-pane="markdown">
+                <textarea name="content_markdown" class="markdown-editor" aria-label="Page content (Markdown)" rows="24" data-markdown-editor spellcheck="false"><?= $e($markdownValue) ?></textarea>
                 <p class="field-help">Supports headings, lists, blockquotes, links, emphasis, inline code, fenced code blocks and wiki links such as [[Linux]].</p>
             </div>
         </div>
@@ -201,9 +218,9 @@ $walk(0, 0);
                 <textarea name="change_summary" rows="3" maxlength="500" placeholder="Describe this change"><?= $e($changeSummary) ?></textarea>
             </label>
             <?php if ($isEdit): ?>
-                <p class="field-help">Saving creates revision <?= (int) $page['version'] + 1 ?>. Concurrent changes are protected by optimistic locking.</p>
+                <p class="field-help" data-version-hint>Based on version <?= (int) $field('base_version', $page['version']) ?>. Concurrent changes are protected by optimistic locking.</p>
             <?php else: ?>
-                <p class="field-help">The initial save creates revision 1.</p>
+                <p class="field-help" data-version-hint>The initial save creates revision 1.</p>
             <?php endif; ?>
             <?php if ($canUploadImage): ?>
                 <div class="image-inspector" data-image-inspector hidden>
@@ -240,8 +257,11 @@ $walk(0, 0);
                 <code>{{note:Note}}</code>
                 <code>{{code:echo "hello";}}</code>
             </details>
-            <div class="editor-save-state" data-save-state>Recovery copy enabled.</div>
             <button class="button button--primary button--block" type="submit" data-save-button><?= $isEdit ? 'Save page' : 'Create page' ?></button>
+            <button class="button button--secondary" type="button" data-undo-conversion hidden>Return to content before conversion</button>
+            <div class="editor-save-state" data-save-state role="status" aria-live="polite">Recovery copy enabled.</div>
         </aside>
     </form>
 </section>
+
+<script src="/assets/wiki-editor.js" defer></script>

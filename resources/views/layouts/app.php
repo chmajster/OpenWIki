@@ -14,7 +14,7 @@ $notificationCount = $currentUser === null
     <link rel="stylesheet" href="/assets/app.css">
     <script src="/assets/app.js" defer></script>
 </head>
-<body>
+<body data-user-id="<?= (int) ($currentUser['id'] ?? 0) ?>">
 <header class="topbar">
     <div class="topbar__inner">
         <a class="brand" href="/"><?= $e($app->name()) ?></a>
