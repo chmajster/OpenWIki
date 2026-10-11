@@ -5,19 +5,19 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
     <div class="page-heading">
         <div>
             <div class="eyebrow">Wiki</div>
-            <h1>Trash</h1>
-            <p class="muted">Deleted pages remain recoverable until permanently removed.</p>
+            <h1><?= $e($t('Trash')) ?></h1>
+            <p class="muted"><?= $e($t('Deleted pages remain recoverable until permanently removed.')) ?></p>
         </div>
     </div>
 
     <section class="card panel">
-        <div class="panel__header"><h2>Deleted pages</h2><span class="count"><?= count($pages) ?></span></div>
+        <div class="panel__header"><h2><?= $e($t('Deleted pages')) ?></h2><span class="count"><?= count($pages) ?></span></div>
         <?php if ($pages === []): ?>
-            <div class="empty-state">Trash is empty.</div>
+            <div class="empty-state"><?= $e($t('Trash is empty.')) ?></div>
         <?php else: ?>
             <div class="table-scroll">
                 <table>
-                    <thead><tr><th>Page</th><th>Space</th><th>Deleted</th><th>Actions</th></tr></thead>
+                    <thead><tr><th><?= $e($t('Page')) ?></th><th><?= $e($t('Space')) ?></th><th><?= $e($t('Deleted')) ?></th><th><?= $e($t('Actions')) ?></th></tr></thead>
                     <tbody>
                     <?php foreach ($pages as $page): ?>
                         <tr>
@@ -28,11 +28,11 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                                 <div class="page-actions">
                                     <form method="post" action="/trash/<?= (int) $page['id'] ?>/restore">
                                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                                        <button class="button button--secondary" type="submit">Restore</button>
+                                        <button class="button button--secondary" type="submit"><?= $e($t('Restore')) ?></button>
                                     </form>
-                                    <form method="post" action="/trash/<?= (int) $page['id'] ?>/delete" onsubmit="return confirm('Permanently delete this page and its attachments? This cannot be undone.')">
+                                    <form method="post" action="/trash/<?= (int) $page['id'] ?>/delete" data-confirm="<?= $e($t('Permanently delete this page and its attachments? This cannot be undone.')) ?>">
                                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                                        <button class="button button--ghost" type="submit">Delete permanently</button>
+                                        <button class="button button--ghost" type="submit"><?= $e($t('Delete permanently')) ?></button>
                                     </form>
                                 </div>
                             </td>

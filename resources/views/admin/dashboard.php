@@ -18,9 +18,9 @@ $sections = [
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">System</div>
-            <h1>Administration</h1>
-            <p class="muted">Identity, access, Wiki integrity and system backup management.</p>
+            <div class="eyebrow"><?= $e($t('System')) ?></div>
+            <h1><?= $e($t('Administration')) ?></h1>
+            <p class="muted"><?= $e($t('Identity, access, Wiki integrity and system backup management.')) ?></p>
         </div>
     </div>
     <div class="stat-grid">

@@ -4,21 +4,21 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Administration</div>
-            <h1>Broken links</h1>
-            <p class="muted">Wiki references that currently do not resolve to an existing page.</p>
+            <div class="eyebrow"><?= $e($t('Administration')) ?></div>
+            <h1><?= $e($t('Broken links')) ?></h1>
+            <p class="muted"><?= $e($t('Wiki references that currently do not resolve to an existing page.')) ?></p>
         </div>
     </div>
 
     <section class="card panel">
-        <div class="panel__header"><h2>Unresolved references</h2><span class="count"><?= count($links) ?></span></div>
+        <div class="panel__header"><h2><?= $e($t('Unresolved references')) ?></h2><span class="count"><?= count($links) ?></span></div>
         <?php if ($links === []): ?>
-            <div class="empty-state">No broken wiki links.</div>
+            <div class="empty-state"><?= $e($t('No broken wiki links.')) ?></div>
         <?php else: ?>
             <div class="table-scroll">
                 <table>
                     <thead>
-                        <tr><th>Space</th><th>Source page</th><th>Missing target</th><th>Detected</th></tr>
+                        <tr><th><?= $e($t('Space')) ?></th><th><?= $e($t('Source page')) ?></th><th><?= $e($t('Missing target')) ?></th><th><?= $e($t('Detected')) ?></th></tr>
                     </thead>
                     <tbody>
                     <?php foreach ($links as $link): ?>

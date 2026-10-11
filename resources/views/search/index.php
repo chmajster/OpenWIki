@@ -25,60 +25,60 @@ $typeLabels = [
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Search</div>
-            <h1>Search knowledge</h1>
-            <p class="muted">Search pages, Spaces, users, comments, tags and attachment names.</p>
+            <div class="eyebrow"><?= $e($t('Search')) ?></div>
+            <h1><?= $e($t('Search knowledge')) ?></h1>
+            <p class="muted"><?= $e($t('Search pages, Spaces, users, comments, tags and attachment names.')) ?></p>
         </div>
     </div>
 
     <form class="card form-card form-stack" method="get" action="/search">
         <div class="search-page-form">
-            <input type="search" name="q" value="<?= $e($query) ?>" placeholder="Search knowledge…" autofocus required>
-            <button class="button button--primary" type="submit">Search</button>
+            <input type="search" name="q" value="<?= $e($query) ?>" placeholder="<?= $e($t('Search knowledge…')) ?>" autofocus required>
+            <button class="button button--primary" type="submit"><?= $e($t('Search')) ?></button>
         </div>
 
         <div class="form-grid">
-            <label>Type
+            <label><?= $e($t('Type')) ?>
                 <select name="type">
                     <?php foreach ($types as $searchType): ?>
                         <option value="<?= $e($searchType) ?>" <?= $type === $searchType ? 'selected' : '' ?>>
-                            <?= $e($typeLabels[$searchType] ?? ucfirst($searchType)) ?>
+                            <?= $e($t($typeLabels[$searchType] ?? ucfirst($searchType))) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
             </label>
 
-            <label>Space
-                <input name="space" maxlength="191" value="<?= $e($filters['space'] ?? '') ?>" placeholder="Key or name">
+            <label><?= $e($t('Space')) ?>
+                <input name="space" maxlength="191" value="<?= $e($filters['space'] ?? '') ?>" placeholder="<?= $e($t('Key or name')) ?>">
             </label>
 
-            <label>Author
-                <input name="author" maxlength="100" value="<?= $e($filters['author'] ?? '') ?>" placeholder="Username">
+            <label><?= $e($t('Author')) ?>
+                <input name="author" maxlength="100" value="<?= $e($filters['author'] ?? '') ?>" placeholder="<?= $e($t('Username')) ?>">
             </label>
 
-            <label>Tag
-                <input name="tag" maxlength="100" value="<?= $e($filters['tag'] ?? '') ?>" placeholder="Tag name or slug">
+            <label><?= $e($t('Tag')) ?>
+                <input name="tag" maxlength="100" value="<?= $e($filters['tag'] ?? '') ?>" placeholder="<?= $e($t('Tag name or slug')) ?>">
             </label>
         </div>
 
         <div class="form-grid">
-            <label>Created from
+            <label><?= $e($t('Created from')) ?>
                 <input type="date" name="created_from" value="<?= $e($filters['created_from'] ?? '') ?>">
             </label>
-            <label>Created to
+            <label><?= $e($t('Created to')) ?>
                 <input type="date" name="created_to" value="<?= $e($filters['created_to'] ?? '') ?>">
             </label>
-            <label>Updated from
+            <label><?= $e($t('Updated from')) ?>
                 <input type="date" name="updated_from" value="<?= $e($filters['updated_from'] ?? '') ?>">
             </label>
-            <label>Updated to
+            <label><?= $e($t('Updated to')) ?>
                 <input type="date" name="updated_to" value="<?= $e($filters['updated_to'] ?? '') ?>">
             </label>
         </div>
 
         <div class="form-actions">
-            <button class="button button--secondary" type="submit">Apply filters</button>
-            <a class="button button--ghost" href="/search<?= $query !== '' ? '?q=' . rawurlencode($query) : '' ?>">Reset filters</a>
+            <button class="button button--secondary" type="submit"><?= $e($t('Apply filters')) ?></button>
+            <a class="button button--ghost" href="/search<?= $query !== '' ? '?q=' . rawurlencode($query) : '' ?>"><?= $e($t('Reset filters')) ?></a>
         </div>
     </form>
 
@@ -94,8 +94,8 @@ $typeLabels = [
 
         <?php if ($results === []): ?>
             <div class="card empty-hero">
-                <h2>No matching results</h2>
-                <p>Change the query or remove one of the filters.</p>
+                <h2><?= $e($t('No matching results')) ?></h2>
+                <p><?= $e($t('Change the query or remove one of the filters.')) ?></p>
             </div>
         <?php else: ?>
             <div class="search-results">

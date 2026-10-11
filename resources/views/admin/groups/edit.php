@@ -10,31 +10,31 @@ $isLdap = $isEdit && $record['source'] === 'ldap';
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Administration · Groups</div>
+            <div class="eyebrow"><?= $e($t('Administration · Groups')) ?></div>
             <h1><?= $isEdit ? 'Edit ' . $e($record['name']) : 'Create group' ?></h1>
         </div>
-        <a class="button button--ghost" href="/admin/groups">Back to groups</a>
+        <a class="button button--ghost" href="/admin/groups"><?= $e($t('Back to groups')) ?></a>
     </div>
 
     <?php if (!empty($formError)): ?><div class="alert alert--error"><?= $e($formError) ?></div><?php endif; ?>
-    <?php if ($isLdap): ?><div class="alert">LDAP groups are read-only locally. Membership is managed by directory synchronization.</div><?php endif; ?>
+    <?php if ($isLdap): ?><div class="alert"><?= $e($t('LDAP groups are read-only locally. Membership is managed by directory synchronization.')) ?></div><?php endif; ?>
 
     <section class="card form-card">
         <form method="post" action="<?= $e($formAction) ?>" class="form-stack">
             <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-            <label>Name
+            <label><?= $e($t('Name')) ?>
                 <input name="name" maxlength="150" value="<?= $e($field('name')) ?>" required <?= $isLdap ? 'disabled' : '' ?>>
             </label>
-            <label>Slug
+            <label><?= $e($t('Slug')) ?>
                 <input name="slug" maxlength="150" value="<?= $e($field('slug')) ?>" <?= $isLdap ? 'disabled' : '' ?>>
             </label>
-            <label>Description
+            <label><?= $e($t('Description')) ?>
                 <textarea name="description" maxlength="500" rows="3" <?= $isLdap ? 'disabled' : '' ?>><?= $e($field('description')) ?></textarea>
             </label>
 
             <?php if (!$isLdap): ?>
                 <fieldset>
-                    <legend>Members</legend>
+                    <legend><?= $e($t('Members')) ?></legend>
                     <div class="scope-grid directory-selection">
                         <?php foreach ($users as $user): ?>
                             <label class="check-row">
@@ -51,9 +51,9 @@ $isLdap = $isEdit && $record['source'] === 'ldap';
 
     <?php if ($isEdit && !$isLdap): ?>
         <section class="card panel danger-zone">
-            <form method="post" action="/admin/groups/<?= (int) $record['id'] ?>/delete" onsubmit="return confirm('Delete this group?')">
+            <form method="post" action="/admin/groups/<?= (int) $record['id'] ?>/delete" data-confirm="<?= $e($t('Delete this group?')) ?>">
                 <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                <button class="button button--ghost" type="submit">Delete group</button>
+                <button class="button button--ghost" type="submit"><?= $e($t('Delete group')) ?></button>
             </form>
         </section>
     <?php endif; ?>

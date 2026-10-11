@@ -5,10 +5,10 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
     <div class="page-heading">
         <div>
             <div class="eyebrow"><?= $e($space['name']) ?></div>
-            <h1>Import documentation</h1>
-            <p class="muted">Import Markdown, HTML or a ZIP documentation tree. Imported pages start as drafts.</p>
+            <h1><?= $e($t('Import documentation')) ?></h1>
+            <p class="muted"><?= $e($t('Import Markdown, HTML or a ZIP documentation tree. Imported pages start as drafts.')) ?></p>
         </div>
-        <a class="button button--ghost" href="/spaces/<?= rawurlencode((string) $space['space_key']) ?>">Back to Space</a>
+        <a class="button button--ghost" href="/spaces/<?= rawurlencode((string) $space['space_key']) ?>"><?= $e($t('Back to Space')) ?></a>
     </div>
 
     <?php if (!empty($formError)): ?>
@@ -18,13 +18,13 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
     <form class="card form-card form-stack" method="post" enctype="multipart/form-data" action="/spaces/<?= rawurlencode((string) $space['space_key']) ?>/import">
         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
 
-        <label>Documentation file
+        <label><?= $e($t('Documentation file')) ?>
             <input type="file" name="document" accept=".md,.markdown,.html,.htm,.zip,text/markdown,text/html,application/zip" required>
         </label>
 
-        <label>Parent page
+        <label><?= $e($t('Parent page')) ?>
             <select name="parent_id">
-                <option value="">Space root</option>
+                <option value=""><?= $e($t('Space root')) ?></option>
                 <?php foreach ($parents as $parent): ?>
                     <option value="<?= (int) $parent['id'] ?>"><?= $e($parent['title']) ?></option>
                 <?php endforeach; ?>
@@ -32,16 +32,16 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
         </label>
 
         <div class="card panel">
-            <h2>ZIP safety limits</h2>
-            <p class="muted">ZIP archives are read entry-by-entry without filesystem extraction. Absolute paths, path traversal and symlink entries are rejected.</p>
+            <h2><?= $e($t('ZIP safety limits')) ?></h2>
+            <p class="muted"><?= $e($t('ZIP archives are read entry-by-entry without filesystem extraction. Absolute paths, path traversal and symlink entries are rejected.')) ?></p>
             <ul>
-                <li>Maximum 500 archive entries.</li>
-                <li>Maximum 10 MiB per documentation entry.</li>
-                <li>Maximum 100 MiB total uncompressed size by default.</li>
-                <li>Only Markdown and HTML files become pages; unsupported files are counted as skipped.</li>
+                <li><?= $e($t('Maximum 500 archive entries.')) ?></li>
+                <li><?= $e($t('Maximum 10 MiB per documentation entry.')) ?></li>
+                <li><?= $e($t('Maximum 100 MiB total uncompressed size by default.')) ?></li>
+                <li><?= $e($t('Only Markdown and HTML files become pages; unsupported files are counted as skipped.')) ?></li>
             </ul>
         </div>
 
-        <button class="button button--primary" type="submit">Import documentation</button>
+        <button class="button button--primary" type="submit"><?= $e($t('Import documentation')) ?></button>
     </form>
 </section>

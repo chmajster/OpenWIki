@@ -1,13 +1,14 @@
 <?php
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $children = [];
+$visibleIds = array_fill_keys(array_map(static fn (array $row): int => (int) $row['id'], $pages), true);
 foreach ($pages as $treePage) {
-    $parentKey = $treePage['parent_id'] === null ? 0 : (int) $treePage['parent_id'];
+    $parentKey = isset($visibleIds[(int) ($treePage['parent_id'] ?? 0)]) ? (int) $treePage['parent_id'] : 0;
     $children[$parentKey][] = $treePage;
 }
 $activePageId = $activePageId ?? null;
 
-$renderTree = function (int $parentId) use (&$renderTree, $children, $space, $activePageId, $e): void {
+$renderTree = function (int $parentId) use (&$renderTree, $children, $space, $activePageId, $e, $t): void {
     if (empty($children[$parentId])) {
         return;
     }
@@ -19,7 +20,7 @@ $renderTree = function (int $parentId) use (&$renderTree, $children, $space, $ac
             . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($treePage['slug']) . '">';
         echo '<span>' . $e($treePage['title']) . '</span>';
         if ($treePage['status'] !== 'published') {
-            echo '<small>' . $e($treePage['status']) . '</small>';
+            echo '<small>' . $e($t($treePage['status'])) . '</small>';
         }
         echo '</a>';
         $renderTree((int) $treePage['id']);
