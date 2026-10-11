@@ -41,12 +41,13 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                 <?php endif; ?>
             </div>
             <div class="page-actions">
+                <?php if ($canEdit): ?>
+                    <a class="button button--primary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit"><?= $e($t('Edit')) ?></a>
+                <?php endif; ?>
+
                 <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/history"><?= $e($t('History')) ?></a>
                 <?php if (!empty($canManagePermissions)): ?>
                     <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/permissions"><?= $e($t('Permissions')) ?></a>
-                <?php endif; ?>
-                <?php if ($canEdit): ?>
-                    <a class="button button--primary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit"><?= $e($t('Edit')) ?></a>
                 <?php endif; ?>
                 <details class="page-menu" data-close-on-escape><summary class="button button--ghost"><?= $e($t('More actions')) ?></summary><div class="menu-items">
                 <?php if ($currentUser !== null): ?>

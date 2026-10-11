@@ -574,6 +574,9 @@ test('page link search, macro results and editor endpoints enforce actual ACL', 
     await page.locator('[name=effect]').selectOption('deny');
     await page.getByRole('button', {name: 'Save ACL rule', exact: true}).click();
     await api(request, 'patch', 'pages/' + parent.id, {base_version: 1, content_html: '<p>{{child-pages}}</p>'});
+    const visibleChild = await create(request, unique('Visible child'), {parent_id: hidden.id});
+    const ownerCsrf = await page.locator('[name=_token]').first().inputValue();
+    await page.request.post(pathFor(visibleChild) + '/permissions/inheritance', {form: {_token: ownerCsrf, inherit_acl: '0'}});
     const context = await browser.newContext();
     const limited = await context.newPage();
     await login(limited, 2);
@@ -589,6 +592,15 @@ test('page link search, macro results and editor endpoints enforce actual ACL', 
     expect(denied.status()).toBe(403);
     const unauthenticated = await request.get('/spaces/' + fixture().spaceKey + '/editor-pages?document_key=page:' + parent.id, {headers: {Accept: 'application/json'}});
     expect(unauthenticated.status()).toBe(401);
+    await limited.goto(pathFor(visibleChild));
+    await expect(limited.locator('[data-page-panel]')).toContainText(visibleChild.title);
+    await expect(limited.locator('[data-page-panel]')).not.toContainText(hidden.title);
+    await limited.goto(pathFor(visibleChild) + '/edit');
+    await expect(limited.locator('[name=parent_id]')).toHaveValue(String(hidden.id));
+    await editor(limited).fill('Edited without moving out of the restricted parent');
+    await limited.getByRole('button', {name: 'Save page', exact: true}).click();
+    await expect(limited.locator('[data-document-content]')).toContainText('Edited without moving');
+    expect((await api(request, 'get', 'pages/' + visibleChild.id)).parent_id).toBe(hidden.id);
     await context.close();
 });
 
@@ -599,6 +611,13 @@ test('Polish interface, mobile tree, account menu and keyboard form work togethe
     await page.locator('[name=identifier]').fill(fixture().users[0].username);
     await page.locator('[name=password]').fill(fixture().users[0].password);
     await page.getByRole('button', {name: 'Zaloguj', exact: true}).click();
+    await page.locator('#interface-language').selectOption('en');
+    await page.locator('.language-form').getByRole('button').click();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await page.locator('#interface-language').selectOption('pl');
+    await page.locator('.language-form').getByRole('button').click();
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'pl');
     const document = await create(request, 'Polski dokument');
     await page.setViewportSize({width: 390, height: 844});
     await page.goto(pathFor(document));
@@ -621,8 +640,34 @@ test('Polish interface, mobile tree, account menu and keyboard form work togethe
     await editor(page).press('ControlOrMeta+K');
     await expect(page.getByRole('dialog', {name: 'Wstaw odnośnik', exact: true})).toBeVisible();
     await page.keyboard.press('Escape');
+    await page.screenshot({path: 'storage/temp/daily-editor-mobile-editor-pl.png', fullPage: true});
     await editor(page).press('ControlOrMeta+S');
     await expect(page.locator('[data-document-content]')).toHaveText('Polska treść po zapisaniu');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
     await page.screenshot({path: 'storage/temp/daily-editor-mobile-pl.png', fullPage: true});
+});
+
+test('legacy merged tables, numbered lists and code remain editable and restorable', async ({page, request}) => {
+    const legacy = '<h3>Legacy structure</h3><table><thead><tr><th colspan="2">Shared heading</th></tr></thead><tbody><tr><td>A</td><td>B</td></tr></tbody></table>'
+        + '<ol start="3"><li>Third<ul><li>Nested legacy</li></ul></li></ol><pre><code data-language="php">echo 42;</code></pre>';
+    const document = await create(request, unique('Legacy structure'), {content_html: legacy});
+    await page.goto(pathFor(document) + '/edit');
+    await expect(page.locator('[data-model-review]')).toBeHidden();
+    await editor(page).locator('th').click();
+    await page.getByRole('button', {name: 'Split cell', exact: true}).click();
+    await expect(editor(page).locator('tr').first().locator('th')).toHaveCount(2);
+    await editor(page).locator('th').first().click();
+    await editor(page).locator('th').nth(1).click({modifiers: ['Shift']});
+    await page.getByRole('button', {name: 'Merge cells', exact: true}).click();
+    await expect(editor(page).locator('th')).toHaveAttribute('colspan', '2');
+    await page.getByRole('button', {name: 'Header row', exact: true}).click();
+    await expect(editor(page).locator('th')).toHaveCount(0);
+    await page.getByRole('button', {name: 'Save page', exact: true}).click();
+    await expect(page.locator('[data-document-content] ol')).toHaveAttribute('start', '3');
+    await expect(page.locator('[data-document-content] ol ul li')).toHaveText('Nested legacy');
+    await expect(page.locator('[data-document-content] code')).toHaveAttribute('data-language', 'php');
+    await page.getByRole('link', {name: 'History', exact: true}).click();
+    await page.getByRole('button', {name: 'Restore', exact: true}).click();
+    await expect(page.locator('[data-document-content] th')).toHaveAttribute('colspan', '2');
+    await expect(page.locator('[data-document-content] code')).toHaveText('echo 42;');
 });

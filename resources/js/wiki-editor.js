@@ -241,7 +241,7 @@ if (editorRoot) {
         } finally { window.clearTimeout(timer); }
     };
     const describe = (data) => {
-        if (!data) return 'This base revision is unavailable.';
+        if (!data) return t('This base revision is unavailable.');
         const metadata = {
             title: data.title, slug: data.slug, parent: data.parentId ?? data.parent_id,
             status: data.status, tags: data.tags ?? data.tags_json,
@@ -454,7 +454,7 @@ if (editorRoot) {
         } catch (error) {
             saveState.textContent = error instanceof Error
                 ? error.message
-                : 'Unable to add image.';
+                : t('Unable to add image.');
         } finally { pendingImages--; updateSaveButton(); }
     };
 
@@ -541,7 +541,7 @@ if (editorRoot) {
             const data = await requestJson(editorRoot.dataset.lockUrl, {_token: csrfToken});
             lockToken = data.token || lockToken;
             lockWarning.hidden = data.acquired;
-            lockWarning.textContent = (data.holder || t('Another editor')) + ' is editing this page. Every save still checks your original base version.';
+            lockWarning.textContent = (data.holder || t('Another editor')) + t(' is editing this page. Every save still checks your original base version.');
         } catch {
             lockWarning.hidden = false;
             lockWarning.textContent = t('Editor presence could not be verified. Version checks still protect every save.');
@@ -558,7 +558,7 @@ if (editorRoot) {
             draftGeneration = captured.sequence;
             if (generation === captured.sequence) saveState.textContent = data.stale
                 ? t('Recovery copy saved with its original base version. The server page has changed; saving will require conflict resolution.')
-                : t('Draft saved at ') + data.saved_at + '. Save the page to create a revision.';
+                : t('Draft saved at ') + data.saved_at + t('. Save the page to create a revision.');
             else saveState.textContent = t('An earlier draft was saved. Newer changes are still pending.');
             if (lastSaveError) saveState.textContent += t(' The page save failed: ') + lastSaveError;
         } catch (error) { saveState.textContent = error.message + t(' Server autosave failed; your document remains recoverable locally.'); }

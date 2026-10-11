@@ -21,8 +21,9 @@ $canUploadImage = (bool) ($canUploadImage ?? false);
 $imageUploadUrl = $imageUploadUrl ?? null;
 
 $children = [];
+$visibleIds = array_fill_keys(array_map(static fn (array $row): int => (int) $row['id'], $pages), true);
 foreach ($pages as $candidate) {
-    $parentKey = $candidate['parent_id'] === null ? 0 : (int) $candidate['parent_id'];
+    $parentKey = isset($visibleIds[(int) ($candidate['parent_id'] ?? 0)]) ? (int) $candidate['parent_id'] : 0;
     $children[$parentKey][] = $candidate;
 }
 
@@ -49,6 +50,9 @@ $walk = function (int $parentId, int $depth) use (&$walk, &$options, $children, 
     }
 };
 $walk(0, 0);
+$preserveParent = $isEdit && (int) $parentValue > 0
+    && (string) $parentValue === (string) $page['parent_id']
+    && !in_array((int) $parentValue, array_map(static fn (array $row): int => (int) $row['id'], $options), true);
 ?>
 <section
     class="editor-shell"
@@ -171,6 +175,7 @@ $walk(0, 0);
                     <label><?= $e($t('Parent page')) ?>
                         <select name="parent_id">
                             <option value=""><?= $e($t('No parent')) ?></option>
+                            <?php if ($preserveParent): ?><option value="<?= (int) $parentValue ?>" selected><?= $e($t('Current parent (restricted)')) ?></option><?php endif; ?>
                             <?php foreach ($options as $option): ?>
                                 <option value="<?= (int) $option['id'] ?>" <?= (string) $parentValue === (string) $option['id'] ? 'selected' : '' ?>>
                                     <?= $e(str_repeat('— ', (int) $option['_depth']) . $option['title']) ?>
