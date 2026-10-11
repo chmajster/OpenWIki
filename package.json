@@ -1,11 +1,21 @@
 {
-  "name": "openwiki-browser-tests",
+  "name": "openwiki-assets",
   "private": true,
   "scripts": {
     "test:browser": "playwright test",
-    "check:js": "node --check public/assets/app.js && node --check public/assets/wiki-editor.js"
+    "check:js": "node --check public/assets/app.js && node --check resources/js/wiki-editor.js && node --check resources/js/rich-editor.js && node --check resources/js/editor-tools.js && node --check resources/js/html.js",
+    "build": "node scripts/build-assets.cjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.64.0"
+    "@playwright/test": "1.64.0",
+    "@tiptap/core": "3.31.4",
+    "@tiptap/extension-list": "3.31.4",
+    "@tiptap/extension-table": "3.31.4",
+    "@tiptap/pm": "3.31.4",
+    "@tiptap/starter-kit": "3.31.4",
+    "esbuild": "0.28.2"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

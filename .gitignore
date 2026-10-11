@@ -16,3 +16,4 @@
 /.phpunit.cache/
 .phpunit.result.cache
 /storage/installed.lock
+/public/assets/wiki-editor.js

@@ -24,6 +24,9 @@ final class View
         $data['app'] = $this->app;
         $data['csrfToken'] = Csrf::token();
         $data['currentUser'] = $this->app->auth()->user();
+        $data['locale'] = I18n::locale();
+        $data['t'] = static fn (string $text): string => I18n::text($text);
+        $data['e'] = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $data['flashSuccess'] = Session::pullFlash('success');
         $data['flashError'] = Session::pullFlash('error');
 

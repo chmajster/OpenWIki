@@ -983,6 +983,7 @@ textarea { resize: vertical; }
     gap: 4px;
 }
 @media (max-width: 860px) {
+ .topbar { position: static; }
     .install-wizard {
         grid-template-columns: 1fr;
     }
@@ -1035,4 +1036,56 @@ textarea { resize: vertical; }
     .database-test__actions .button {
         width: 100%;
     }
+}
+
+/* Structured editor and navigation; styles are static to preserve CSP. */
+dialog { width: min(680px, calc(100% - 24px)); max-height: 85dvh; overflow: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); padding: 24px; }
+dialog::backdrop { background: rgba(0,0,0,.65); }
+dialog label { display: grid; gap: 6px; margin: 14px 0; }
+dialog .button { margin: 8px 8px 0 0; }
+.editor-toolbar, .editor-table-tools { display: flex; flex-wrap: wrap; gap: 5px; padding: 10px; border-bottom: 1px solid var(--border); }
+.editor-toolbar button, .editor-table-tools button, .link-results button { cursor: pointer; padding: 7px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-2); color: var(--text); }
+.editor-toolbar [aria-pressed=true] { border-color: var(--accent); background: var(--bg); }
+.editor-toolbar select { width: auto; }
+.editor-toolbar button:disabled, .editor-table-tools button:disabled { opacity: .45; cursor: default; }
+.link-results { display: grid; gap: 6px; max-height: 230px; overflow: auto; }
+.link-results button { text-align: left; }
+.ProseMirror { position: relative; white-space: pre-wrap; overflow-wrap: anywhere; outline: none; }
+.ProseMirror:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ProseMirror .ProseMirror-selectednode { outline: 2px solid var(--accent); }
+.ProseMirror .selectedCell { background: var(--surface-2); outline: 2px solid var(--accent); }
+.ProseMirror table { table-layout: fixed; width: 100%; }
+.document-content ul[data-type=taskList], .document ul[data-type=taskList] { list-style: none; padding-left: 24px; }
+.ProseMirror li[data-type=taskItem] { display: flex; gap: 8px; align-items: flex-start; }
+.ProseMirror li[data-type=taskItem] > div { flex: 1; }
+.ProseMirror li[data-type=taskItem] input { width: auto; margin-top: 8px; }
+.document li[data-type=taskItem]::marker { content: ''; }
+.document li[data-type=taskItem]::before { content: '\2610'; margin-right: 8px; }
+.document li[data-type=taskItem][data-checked=true]::before { content: '\2611'; }
+[data-callout] { border-left: 4px solid var(--accent); background: var(--surface-2); padding: 12px 18px; margin: 16px 0; }
+[data-callout=warning] { border-color: #e9b85d; }
+[data-callout=note] { border-color: #b799ed; }
+.markdown-preview { border-top: 1px solid var(--border); padding: 24px; }
+.account-menu, .page-menu { position: relative; }
+.menu-items { position: absolute; right: 0; z-index: 30; min-width: 220px; max-width: calc(100vw - 32px); display: grid; gap: 5px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: 0 12px 30px #0005; }
+.menu-items .button { justify-content: flex-start; width: 100%; }
+.menu-items .export-menu__items { position: static; box-shadow: none; }
+.language-form { display: flex; gap: 4px; align-items: center; }
+.language-form select { width: auto; padding: 6px; }
+.sidebar-toggle { cursor: pointer; font-weight: 600; padding-bottom: 14px; }
+.sidebar-body { display: grid; gap: 14px; }
+@media (min-width: 861px) { .sidebar-toggle { display: none; } }
+@media (max-width: 860px) {
+ .wiki-sidebar { max-height: none; margin-bottom: 18px; width: 100%; }
+ .wiki-sidebar:not([open]) .sidebar-toggle { padding-bottom: 0; }
+ .sidebar-body { max-height: 65dvh; overflow: auto; }
+ .topbar__inner { flex-wrap: wrap; gap: 10px; }
+ .top-search { order: 3; flex: 1 1 100%; }
+ .top-actions { margin-left: auto; gap: 4px; flex: 0 1 auto; }
+ .account-menu > summary { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ .editor-toolbar button, .editor-table-tools button { min-height: 38px; }
+ .editor-toolbar { position: static; }
+ .page-actions { flex-wrap: wrap; }
+ .page-actions > .button, .page-actions > .page-menu { flex: 0 0 auto; white-space: nowrap; }
+ .visual-editor { min-height: 360px; padding: 16px; }
 }

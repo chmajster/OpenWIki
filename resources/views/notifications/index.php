@@ -4,21 +4,21 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Account</div>
-            <h1>Notifications</h1>
+            <div class="eyebrow"><?= $e($t('Account')) ?></div>
+            <h1><?= $e($t('Notifications')) ?></h1>
             <p class="muted"><?= (int) $unreadCount ?> unread notification<?= (int) $unreadCount === 1 ? '' : 's' ?>.</p>
         </div>
         <?php if ((int) $unreadCount > 0): ?>
             <form method="post" action="/notifications/read-all">
                 <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                <button class="button button--secondary" type="submit">Mark all as read</button>
+                <button class="button button--secondary" type="submit"><?= $e($t('Mark all as read')) ?></button>
             </form>
         <?php endif; ?>
     </div>
 
     <section class="card panel">
         <?php if ($notifications === []): ?>
-            <div class="empty-state">No notifications.</div>
+            <div class="empty-state"><?= $e($t('No notifications.')) ?></div>
         <?php else: ?>
             <ul class="notification-list">
                 <?php foreach ($notifications as $notification): ?>
@@ -34,10 +34,10 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                             <form method="post" action="/notifications/<?= (int) $notification['id'] ?>/read">
                                 <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                                 <input type="hidden" name="target_url" value="<?= $e($notification['target_url'] ?: '/notifications') ?>">
-                                <button class="button button--ghost" type="submit">Open</button>
+                                <button class="button button--ghost" type="submit"><?= $e($t('Open')) ?></button>
                             </form>
                         <?php elseif ($notification['target_url']): ?>
-                            <a class="button button--ghost" href="<?= $e($notification['target_url']) ?>">Open</a>
+                            <a class="button button--ghost" href="<?= $e($notification['target_url']) ?>"><?= $e($t('Open')) ?></a>
                         <?php endif; ?>
                     </li>
                 <?php endforeach; ?>

@@ -4,35 +4,35 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Administration</div>
-            <h1>Webhooks</h1>
-            <p class="muted">Signed outbound events with retry and delivery history.</p>
+            <div class="eyebrow"><?= $e($t('Administration')) ?></div>
+            <h1><?= $e($t('Webhooks')) ?></h1>
+            <p class="muted"><?= $e($t('Signed outbound events with retry and delivery history.')) ?></p>
         </div>
     </div>
 
     <?php if (is_array($newSecret)): ?>
         <div class="alert alert--success">
-            Signing secret for webhook #<?= (int) $newSecret['id'] ?>:
+            <?= $e($t('Signing secret for webhook #')) ?><?= (int) $newSecret['id'] ?>:
             <code><?= $e($newSecret['secret']) ?></code>
-            <strong>It will not be shown again.</strong>
+            <strong><?= $e($t('It will not be shown again.')) ?></strong>
         </div>
     <?php endif; ?>
 
     <form class="card form-card form-stack" method="post" action="/admin/webhooks">
         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-        <h2>Create webhook</h2>
-        <label>Name
+        <h2><?= $e($t('Create webhook')) ?></h2>
+        <label><?= $e($t('Name')) ?>
             <input name="name" maxlength="191" required>
         </label>
-        <label>Target URL
+        <label><?= $e($t('Target URL')) ?>
             <input name="target_url" type="url" placeholder="https://example.com/openwiki-hook" required>
         </label>
-        <label>Signing secret
+        <label><?= $e($t('Signing secret')) ?>
             <input name="secret" type="password" minlength="16" maxlength="512" autocomplete="new-password">
-            <span class="field-help">Leave empty to generate a strong secret automatically.</span>
+            <span class="field-help"><?= $e($t('Leave empty to generate a strong secret automatically.')) ?></span>
         </label>
         <fieldset>
-            <legend>Events</legend>
+            <legend><?= $e($t('Events')) ?></legend>
             <div class="checkbox-grid">
                 <?php foreach ($events as $event): ?>
                     <label><input type="checkbox" name="events[]" value="<?= $e($event) ?>"> <?= $e($event) ?></label>
@@ -40,17 +40,17 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             </div>
         </fieldset>
         <div class="form-actions">
-            <button class="button button--primary" type="submit">Create webhook</button>
+            <button class="button button--primary" type="submit"><?= $e($t('Create webhook')) ?></button>
         </div>
     </form>
 
     <section class="card panel">
         <div class="panel__header">
-            <h2>Configured webhooks</h2>
+            <h2><?= $e($t('Configured webhooks')) ?></h2>
             <span class="count"><?= count($webhooks) ?></span>
         </div>
         <?php if ($webhooks === []): ?>
-            <div class="empty-state">No webhooks configured.</div>
+            <div class="empty-state"><?= $e($t('No webhooks configured.')) ?></div>
         <?php else: ?>
             <div class="item-list">
                 <?php foreach ($webhooks as $webhook): ?>
@@ -67,9 +67,9 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                                 <input type="hidden" name="status" value="<?= $webhook['status'] === 'active' ? 'disabled' : 'active' ?>">
                                 <button class="button button--ghost" type="submit"><?= $webhook['status'] === 'active' ? 'Disable' : 'Enable' ?></button>
                             </form>
-                            <form method="post" action="/admin/webhooks/<?= (int) $webhook['id'] ?>/delete" onsubmit="return confirm('Delete this webhook and its delivery history?')">
+                            <form method="post" action="/admin/webhooks/<?= (int) $webhook['id'] ?>/delete" data-confirm="<?= $e($t('Delete this webhook and its delivery history?')) ?>">
                                 <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                                <button class="button button--ghost" type="submit">Delete</button>
+                                <button class="button button--ghost" type="submit"><?= $e($t('Delete')) ?></button>
                             </form>
                         </div>
                     </div>
@@ -80,11 +80,11 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
 
     <section class="card panel">
         <div class="panel__header">
-            <h2>Delivery history</h2>
+            <h2><?= $e($t('Delivery history')) ?></h2>
             <span class="count"><?= count($deliveries) ?></span>
         </div>
         <?php if ($deliveries === []): ?>
-            <div class="empty-state">No deliveries yet.</div>
+            <div class="empty-state"><?= $e($t('No deliveries yet.')) ?></div>
         <?php else: ?>
             <div class="item-list">
                 <?php foreach ($deliveries as $delivery): ?>
@@ -92,7 +92,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                         <div>
                             <strong><?= $e($delivery['webhook_name']) ?> · <?= $e($delivery['event_type']) ?></strong>
                             <div>
-                                attempt <?= (int) $delivery['attempt_number'] ?>
+                                <?= $e($t('attempt')) ?> <?= (int) $delivery['attempt_number'] ?>
                                 · HTTP <?= $delivery['response_status'] === null ? '—' : (int) $delivery['response_status'] ?>
                             </div>
                             <small>

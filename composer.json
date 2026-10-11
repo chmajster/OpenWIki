@@ -5,16 +5,17 @@
   "license": "MIT",
   "require": {
     "php": "^8.2",
-    "ext-pdo": "*",
+    "ext-curl": "*",
+    "ext-dom": "*",
+    "ext-gd": "*",
     "ext-json": "*",
+    "ext-ldap": "*",
     "ext-mbstring": "*",
     "ext-openssl": "*",
-    "ext-dom": "*",
+    "ext-pdo": "*",
     "ext-phar": "*",
-    "ext-curl": "*",
-    "ext-ldap": "*",
     "ext-zip": "*",
-    "ext-gd": "*"
+    "league/commonmark": "^2.10"
   },
   "autoload": {
     "psr-4": {

@@ -5,9 +5,9 @@ $old = $old ?? [];
 <section class="narrow-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Spaces</div>
-            <h1>Create space</h1>
-            <p class="muted">A space groups related documentation and controls its visibility.</p>
+            <div class="eyebrow"><?= $e($t('Spaces')) ?></div>
+            <h1><?= $e($t('Create space')) ?></h1>
+            <p class="muted"><?= $e($t('A space groups related documentation and controls its visibility.')) ?></p>
         </div>
     </div>
 
@@ -18,17 +18,17 @@ $old = $old ?? [];
 
         <form method="post" action="/spaces" class="form-stack">
             <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-            <label>Name
+            <label><?= $e($t('Name')) ?>
                 <input name="name" required maxlength="191" value="<?= $e($old['name'] ?? '') ?>">
             </label>
-            <label>Key
+            <label><?= $e($t('Key')) ?>
                 <input name="space_key" maxlength="50" pattern="[A-Za-z0-9_-]+" value="<?= $e($old['space_key'] ?? '') ?>">
-                <span class="field-help">Leave empty to derive a key from the name.</span>
+                <span class="field-help"><?= $e($t('Leave empty to derive a key from the name.')) ?></span>
             </label>
-            <label>Description
+            <label><?= $e($t('Description')) ?>
                 <textarea name="description" rows="4" maxlength="5000"><?= $e($old['description'] ?? '') ?></textarea>
             </label>
-            <label>Visibility
+            <label><?= $e($t('Visibility')) ?>
                 <select name="visibility">
                     <?php foreach (['private' => 'Private', 'restricted' => 'Restricted', 'public' => 'Public'] as $value => $label): ?>
                         <option value="<?= $e($value) ?>" <?= ($old['visibility'] ?? 'private') === $value ? 'selected' : '' ?>><?= $e($label) ?></option>
@@ -36,8 +36,8 @@ $old = $old ?? [];
                 </select>
             </label>
             <div class="form-actions">
-                <a class="button button--ghost" href="/">Cancel</a>
-                <button class="button button--primary" type="submit">Create space</button>
+                <a class="button button--ghost" href="/"><?= $e($t('Cancel')) ?></a>
+                <button class="button button--primary" type="submit"><?= $e($t('Create space')) ?></button>
             </div>
         </form>
     </div>

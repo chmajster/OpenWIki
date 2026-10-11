@@ -14,20 +14,24 @@ final class InstallServiceTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->basePath = dirname(__DIR__, 2);
-
         if (!getenv('OPENWIKI_TEST_DB_HOST')) {
             self::markTestSkipped('MySQL integration environment is not configured.');
         }
 
-        @unlink($this->basePath . '/.env');
-        @unlink($this->basePath . '/storage/installed.lock');
+        $this->basePath = sys_get_temp_dir() . '/openwiki-install-test-' . bin2hex(random_bytes(8));
+        mkdir($this->basePath . '/database/migrations', 0770, true);
+        mkdir($this->basePath . '/public/assets', 0770, true);
+        foreach (glob(dirname(__DIR__, 2) . '/database/migrations/*.php') as $file) copy($file, $this->basePath . '/database/migrations/' . basename($file));
+        copy(dirname(__DIR__, 2) . '/public/assets/wiki-editor.js', $this->basePath . '/public/assets/wiki-editor.js');
     }
 
     protected function tearDown(): void
     {
-        @unlink($this->basePath . '/.env');
-        @unlink($this->basePath . '/storage/installed.lock');
+        if (!isset($this->basePath)) return;
+        if (!str_starts_with($this->basePath, sys_get_temp_dir() . '/openwiki-install-test-')) throw new \RuntimeException('Unexpected test directory.');
+        $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($this->basePath, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
+        foreach ($files as $file) $file->isDir() ? rmdir($file->getPathname()) : unlink($file->getPathname());
+        rmdir($this->basePath);
     }
 
     public function testDatabaseConnectionSucceedsForConfiguredDatabase(): void
@@ -43,6 +47,16 @@ final class InstallServiceTest extends TestCase
 
         self::assertTrue($result['ok']);
         self::assertTrue($result['database_exists']);
+    }
+
+    public function testMissingBuiltEditorBlocksInstallationBeforeDatabaseChanges(): void
+    {
+        unlink($this->basePath . '/public/assets/wiki-editor.js');
+        $requirements = (new InstallService($this->basePath))->requirements();
+        self::assertFalse($requirements['ok']);
+        self::assertFalse($requirements['assets']['Compiled editor assets']);
+        $this->expectExceptionMessage('Server requirements are not satisfied.');
+        (new InstallService($this->basePath))->install([]);
     }
 
     public function testFreshInstallCreatesSchemaAdminRolesAndLock(): void

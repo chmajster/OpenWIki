@@ -4,7 +4,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Tag</div>
+            <div class="eyebrow"><?= $e($t('Tag')) ?></div>
             <h1>#<?= $e($tag['name']) ?></h1>
             <p class="muted"><?= count($pages) ?> accessible page<?= count($pages) === 1 ? '' : 's' ?>.</p>
         </div>
@@ -12,7 +12,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
 
     <section class="card panel">
         <?php if ($pages === []): ?>
-            <div class="empty-state">No accessible pages use this tag.</div>
+            <div class="empty-state"><?= $e($t('No accessible pages use this tag.')) ?></div>
         <?php else: ?>
             <ul class="item-list">
                 <?php foreach ($pages as $page): ?>

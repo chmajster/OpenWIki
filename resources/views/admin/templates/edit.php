@@ -11,11 +11,11 @@ $format = (string) ($old['content_format'] ?? ($markdown !== '' ? 'markdown' : '
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Administration</div>
+            <div class="eyebrow"><?= $e($t('Administration')) ?></div>
             <h1><?= $e($record === null ? 'Create template' : $record['name']) ?></h1>
-            <?php if ($isSystem): ?><p class="muted">System template · read-only</p><?php endif; ?>
+            <?php if ($isSystem): ?><p class="muted"><?= $e($t('System template · read-only')) ?></p><?php endif; ?>
         </div>
-        <a class="button button--ghost" href="/admin/templates">Back to templates</a>
+        <a class="button button--ghost" href="/admin/templates"><?= $e($t('Back to templates')) ?></a>
     </div>
 
     <?php if (!empty($formError)): ?>
@@ -25,42 +25,42 @@ $format = (string) ($old['content_format'] ?? ($markdown !== '' ? 'markdown' : '
     <form class="card form-card form-stack" method="post" action="<?= $e($formAction) ?>">
         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
 
-        <label>Name
+        <label><?= $e($t('Name')) ?>
             <input name="name" maxlength="191" required value="<?= $e($value('name')) ?>" <?= $isSystem ? 'readonly' : '' ?>>
         </label>
 
-        <label>Description
+        <label><?= $e($t('Description')) ?>
             <textarea name="description" rows="3" maxlength="500" <?= $isSystem ? 'readonly' : '' ?>><?= $e($value('description')) ?></textarea>
         </label>
 
-        <label>Content format
+        <label><?= $e($t('Content format')) ?>
             <select name="content_format" <?= $isSystem ? 'disabled' : '' ?>>
-                <option value="visual" <?= $format === 'visual' ? 'selected' : '' ?>>HTML / Visual</option>
+                <option value="visual" <?= $format === 'visual' ? 'selected' : '' ?>><?= $e($t('HTML / Visual')) ?></option>
                 <option value="markdown" <?= $format === 'markdown' ? 'selected' : '' ?>>Markdown</option>
             </select>
         </label>
 
-        <label>HTML content
+        <label><?= $e($t('HTML content')) ?>
             <textarea name="content_html" rows="14" <?= $isSystem ? 'readonly' : '' ?>><?= $e($value('content_html', '<p></p>')) ?></textarea>
         </label>
 
-        <label>Markdown content
+        <label><?= $e($t('Markdown content')) ?>
             <textarea name="content_markdown" rows="14" <?= $isSystem ? 'readonly' : '' ?>><?= $e($value('content_markdown')) ?></textarea>
         </label>
 
         <?php if (!$isSystem): ?>
             <div class="form-actions">
-                <button class="button button--primary" type="submit">Save template</button>
+                <button class="button button--primary" type="submit"><?= $e($t('Save template')) ?></button>
             </div>
         <?php endif; ?>
     </form>
 
     <?php if ($record !== null && !$isSystem): ?>
         <div class="card panel danger-zone">
-            <h2>Delete template</h2>
-            <form method="post" action="/admin/templates/<?= (int) $record['id'] ?>/delete" onsubmit="return confirm('Delete this custom template?')">
+            <h2><?= $e($t('Delete template')) ?></h2>
+            <form method="post" action="/admin/templates/<?= (int) $record['id'] ?>/delete" data-confirm="<?= $e($t('Delete this custom template?')) ?>">
                 <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                <button class="button button--ghost" type="submit">Delete template</button>
+                <button class="button button--ghost" type="submit"><?= $e($t('Delete template')) ?></button>
             </form>
         </div>
     <?php endif; ?>

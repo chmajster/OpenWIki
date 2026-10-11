@@ -4,28 +4,28 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Knowledge base</div>
-            <h1>Dashboard</h1>
-            <p class="muted">Spaces and documentation available to your account.</p>
+            <div class="eyebrow"><?= $e($t('Knowledge base')) ?></div>
+            <h1><?= $e($t('Dashboard')) ?></h1>
+            <p class="muted"><?= $e($t('Spaces and documentation available to your account.')) ?></p>
         </div>
         <?php if ($canCreateSpace): ?>
-            <a class="button button--primary" href="/spaces/create">Create space</a>
+            <a class="button button--primary" href="/spaces/create"><?= $e($t('Create space')) ?></a>
         <?php endif; ?>
     </div>
 
     <div class="dashboard-grid">
         <section class="card panel panel--wide">
-            <div class="panel__header"><h2>Spaces</h2><span class="count"><?= count($spaces) ?></span></div>
+            <div class="panel__header"><h2><?= $e($t('Spaces')) ?></h2><span class="count"><?= count($spaces) ?></span></div>
             <?php if ($spaces === []): ?>
-                <div class="empty-state">No spaces are available.</div>
+                <div class="empty-state"><?= $e($t('No spaces are available.')) ?></div>
             <?php else: ?>
                 <div class="space-grid">
                     <?php foreach ($spaces as $space): ?>
                         <a class="space-card" href="/spaces/<?= rawurlencode($space['space_key']) ?>">
                             <span class="space-key"><?= $e($space['space_key']) ?></span>
                             <strong><?= $e($space['name']) ?></strong>
-                            <span><?= $e($space['description'] ?: 'No description') ?></span>
-                            <small><?= $e(ucfirst($space['visibility'])) ?></small>
+                            <span><?= $e($space['description'] ?: $t('No description')) ?></span>
+                            <small><?= $e($t(ucfirst($space['visibility']))) ?></small>
                         </a>
                     <?php endforeach; ?>
                 </div>
@@ -33,9 +33,9 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
         </section>
 
         <section class="card panel">
-            <div class="panel__header"><h2>Recently updated</h2></div>
+            <div class="panel__header"><h2><?= $e($t('Recently updated')) ?></h2></div>
             <?php if ($recentUpdated === []): ?>
-                <div class="empty-state">No recent updates.</div>
+                <div class="empty-state"><?= $e($t('No recent updates.')) ?></div>
             <?php else: ?>
                 <ul class="item-list">
                     <?php foreach ($recentUpdated as $page): ?>
@@ -52,9 +52,9 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
 
         <?php if ($currentUser !== null): ?>
             <section class="card panel">
-                <div class="panel__header"><h2>Recently viewed</h2></div>
+                <div class="panel__header"><h2><?= $e($t('Recently viewed')) ?></h2></div>
                 <?php if ($recentViewed === []): ?>
-                    <div class="empty-state">Pages you open will appear here.</div>
+                    <div class="empty-state"><?= $e($t('Pages you open will appear here.')) ?></div>
                 <?php else: ?>
                     <ul class="item-list">
                         <?php foreach ($recentViewed as $page): ?>
@@ -70,9 +70,9 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             </section>
 
             <section class="card panel">
-                <div class="panel__header"><h2>Favorites</h2></div>
+                <div class="panel__header"><h2><?= $e($t('Favorites')) ?></h2></div>
                 <?php if ($favorites === []): ?>
-                    <div class="empty-state">No favorite pages.</div>
+                    <div class="empty-state"><?= $e($t('No favorite pages.')) ?></div>
                 <?php else: ?>
                     <ul class="item-list">
                         <?php foreach ($favorites as $page): ?>
@@ -88,9 +88,9 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             </section>
 
             <section class="card panel">
-                <div class="panel__header"><h2>My drafts</h2></div>
+                <div class="panel__header"><h2><?= $e($t('My drafts')) ?></h2></div>
                 <?php if ($drafts === []): ?>
-                    <div class="empty-state">No drafts.</div>
+                    <div class="empty-state"><?= $e($t('No drafts.')) ?></div>
                 <?php else: ?>
                     <ul class="item-list">
                         <?php foreach ($drafts as $page): ?>

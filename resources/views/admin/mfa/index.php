@@ -5,9 +5,9 @@ $selected = array_map('intval', $policy['role_ids'] ?? []);
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Administration</div>
-            <h1>MFA policy</h1>
-            <p class="muted">Require TOTP MFA globally or for selected roles.</p>
+            <div class="eyebrow"><?= $e($t('Administration')) ?></div>
+            <h1><?= $e($t('MFA policy')) ?></h1>
+            <p class="muted"><?= $e($t('Require TOTP MFA globally or for selected roles.')) ?></p>
         </div>
     </div>
 
@@ -16,11 +16,11 @@ $selected = array_map('intval', $policy['role_ids'] ?? []);
 
         <label>
             <input type="checkbox" name="enforce_global" value="1" <?= !empty($policy['enforce_global']) ? 'checked' : '' ?>>
-            Require MFA for every user
+            <?= $e($t('Require MFA for every user')) ?>
         </label>
 
         <fieldset>
-            <legend>Require MFA for roles</legend>
+            <legend><?= $e($t('Require MFA for roles')) ?></legend>
             <div class="checkbox-grid">
                 <?php foreach ($roles as $role): ?>
                     <label>
@@ -32,7 +32,7 @@ $selected = array_map('intval', $policy['role_ids'] ?? []);
         </fieldset>
 
         <div class="form-actions">
-            <button class="button button--primary" type="submit">Save MFA policy</button>
+            <button class="button button--primary" type="submit"><?= $e($t('Save MFA policy')) ?></button>
         </div>
     </form>
 </section>

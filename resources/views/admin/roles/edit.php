@@ -10,10 +10,10 @@ $isSystem = $isEdit && (int) $record['is_system'] === 1;
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Administration · Roles</div>
+            <div class="eyebrow"><?= $e($t('Administration · Roles')) ?></div>
             <h1><?= $isEdit ? 'Edit ' . $e($record['name']) : 'Create role' ?></h1>
         </div>
-        <a class="button button--ghost" href="/admin/roles">Back to roles</a>
+        <a class="button button--ghost" href="/admin/roles"><?= $e($t('Back to roles')) ?></a>
     </div>
 
     <?php if (!empty($formError)): ?><div class="alert alert--error"><?= $e($formError) ?></div><?php endif; ?>
@@ -21,18 +21,18 @@ $isSystem = $isEdit && (int) $record['is_system'] === 1;
     <section class="card form-card">
         <form method="post" action="<?= $e($formAction) ?>" class="form-stack">
             <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-            <label>Name
+            <label><?= $e($t('Name')) ?>
                 <input name="name" maxlength="100" value="<?= $e($field('name')) ?>" required <?= $isSystem ? 'readonly' : '' ?>>
             </label>
-            <label>Slug
+            <label><?= $e($t('Slug')) ?>
                 <input name="slug" maxlength="100" value="<?= $e($field('slug')) ?>" <?= $isSystem ? 'readonly' : '' ?>>
             </label>
-            <label>Description
+            <label><?= $e($t('Description')) ?>
                 <textarea name="description" maxlength="500" rows="3"><?= $e($field('description')) ?></textarea>
             </label>
 
             <fieldset>
-                <legend>Permissions</legend>
+                <legend><?= $e($t('Permissions')) ?></legend>
                 <div class="scope-grid permission-grid">
                     <?php foreach ($permissions as $permission): ?>
                         <?php $lockedWildcard = $isSystem && $record['slug'] === 'super-admin' && $permission['name'] === '*'; ?>
@@ -48,15 +48,15 @@ $isSystem = $isEdit && (int) $record['is_system'] === 1;
                     <?php endforeach; ?>
                 </div>
             </fieldset>
-            <button class="button button--primary" type="submit">Save role</button>
+            <button class="button button--primary" type="submit"><?= $e($t('Save role')) ?></button>
         </form>
     </section>
 
     <?php if ($isEdit && !$isSystem): ?>
         <section class="card panel danger-zone">
-            <form method="post" action="/admin/roles/<?= (int) $record['id'] ?>/delete" onsubmit="return confirm('Delete this role?')">
+            <form method="post" action="/admin/roles/<?= (int) $record['id'] ?>/delete" data-confirm="<?= $e($t('Delete this role?')) ?>">
                 <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                <button class="button button--ghost" type="submit">Delete role</button>
+                <button class="button button--ghost" type="submit"><?= $e($t('Delete role')) ?></button>
             </form>
         </section>
     <?php endif; ?>

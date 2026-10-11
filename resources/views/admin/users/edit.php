@@ -15,10 +15,10 @@ $isEdit = $record !== null;
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Administration · Users</div>
+            <div class="eyebrow"><?= $e($t('Administration · Users')) ?></div>
             <h1><?= $isEdit ? 'Edit ' . $e($record['username']) : 'Create user' ?></h1>
         </div>
-        <a class="button button--ghost" href="/admin/users">Back to users</a>
+        <a class="button button--ghost" href="/admin/users"><?= $e($t('Back to users')) ?></a>
     </div>
 
     <?php if (!empty($formError)): ?>
@@ -29,19 +29,19 @@ $isEdit = $record !== null;
         <form method="post" action="<?= $e($formAction) ?>" class="form-stack">
             <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
             <div class="form-grid">
-                <label>Username
+                <label><?= $e($t('Username')) ?>
                     <input name="username" value="<?= $e($field('username')) ?>" pattern="[A-Za-z0-9._-]{3,100}" required>
                 </label>
-                <label>Email
+                <label><?= $e($t('Email')) ?>
                     <input type="email" name="email" value="<?= $e($field('email')) ?>" required>
                 </label>
-                <label>First name
+                <label><?= $e($t('First name')) ?>
                     <input name="first_name" maxlength="100" value="<?= $e($field('first_name')) ?>">
                 </label>
-                <label>Last name
+                <label><?= $e($t('Last name')) ?>
                     <input name="last_name" maxlength="100" value="<?= $e($field('last_name')) ?>">
                 </label>
-                <label>Status
+                <label><?= $e($t('Status')) ?>
                     <select name="status">
                         <?php foreach (['active','disabled','locked'] as $status): ?>
                             <option value="<?= $status ?>" <?= $field('status', 'active') === $status ? 'selected' : '' ?>><?= ucfirst($status) ?></option>
@@ -49,11 +49,11 @@ $isEdit = $record !== null;
                     </select>
                 </label>
                 <?php if (!$isEdit): ?>
-                    <label>Initial password
+                    <label><?= $e($t('Initial password')) ?>
                         <input type="password" name="password" minlength="12" autocomplete="new-password" required>
                     </label>
                 <?php else: ?>
-                    <label>Authentication source
+                    <label><?= $e($t('Authentication source')) ?>
                         <input value="<?= $e($record['auth_source']) ?>" disabled>
                     </label>
                 <?php endif; ?>
@@ -61,11 +61,11 @@ $isEdit = $record !== null;
 
             <label class="check-row">
                 <input type="checkbox" name="force_password_change" value="1" <?= !empty($field('force_password_change')) ? 'checked' : '' ?>>
-                <span>Require password change on next sign-in</span>
+                <span><?= $e($t('Require password change on next sign-in')) ?></span>
             </label>
 
             <fieldset>
-                <legend>Roles</legend>
+                <legend><?= $e($t('Roles')) ?></legend>
                 <div class="scope-grid">
                     <?php foreach ($roles as $role): ?>
                         <label class="check-row">
@@ -77,7 +77,7 @@ $isEdit = $record !== null;
             </fieldset>
 
             <fieldset>
-                <legend>Groups</legend>
+                <legend><?= $e($t('Groups')) ?></legend>
                 <div class="scope-grid">
                     <?php foreach ($groups as $group): ?>
                         <label class="check-row">
@@ -94,19 +94,19 @@ $isEdit = $record !== null;
 
     <?php if ($isEdit): ?>
         <section class="card panel danger-zone">
-            <div class="panel__header"><h2>Account actions</h2></div>
+            <div class="panel__header"><h2><?= $e($t('Account actions')) ?></h2></div>
             <div class="page-actions">
-                <form method="post" action="/admin/users/<?= (int) $record['id'] ?>/reset-password" onsubmit="return confirm('Reset this user password?')">
+                <form method="post" action="/admin/users/<?= (int) $record['id'] ?>/reset-password" data-confirm="<?= $e($t('Reset this user password?')) ?>">
                     <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                    <button class="button button--secondary" type="submit">Reset password</button>
+                    <button class="button button--secondary" type="submit"><?= $e($t('Reset password')) ?></button>
                 </form>
-                <form method="post" action="/admin/users/<?= (int) $record['id'] ?>/reset-mfa" onsubmit="return confirm('Reset MFA for this user?')">
+                <form method="post" action="/admin/users/<?= (int) $record['id'] ?>/reset-mfa" data-confirm="<?= $e($t('Reset MFA for this user?')) ?>">
                     <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                    <button class="button button--secondary" type="submit">Reset MFA</button>
+                    <button class="button button--secondary" type="submit"><?= $e($t('Reset MFA')) ?></button>
                 </form>
-                <form method="post" action="/admin/users/<?= (int) $record['id'] ?>/delete" onsubmit="return confirm('Delete this user account?')">
+                <form method="post" action="/admin/users/<?= (int) $record['id'] ?>/delete" data-confirm="<?= $e($t('Delete this user account?')) ?>">
                     <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                    <button class="button button--ghost" type="submit">Delete user</button>
+                    <button class="button button--ghost" type="submit"><?= $e($t('Delete user')) ?></button>
                 </form>
             </div>
         </section>

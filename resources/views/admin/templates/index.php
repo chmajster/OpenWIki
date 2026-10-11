@@ -4,16 +4,16 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Administration</div>
-            <h1>Page templates</h1>
-            <p class="muted">System templates are read-only. Custom templates are immediately available when creating a page.</p>
+            <div class="eyebrow"><?= $e($t('Administration')) ?></div>
+            <h1><?= $e($t('Page templates')) ?></h1>
+            <p class="muted"><?= $e($t('System templates are read-only. Custom templates are immediately available when creating a page.')) ?></p>
         </div>
-        <a class="button button--primary" href="/admin/templates/create">Create template</a>
+        <a class="button button--primary" href="/admin/templates/create"><?= $e($t('Create template')) ?></a>
     </div>
 
     <div class="card panel">
         <div class="panel__header">
-            <h2>Templates</h2>
+            <h2><?= $e($t('Templates')) ?></h2>
             <span class="count"><?= count($templates) ?></span>
         </div>
         <div class="item-list">

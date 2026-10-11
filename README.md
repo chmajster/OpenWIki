@@ -10,13 +10,16 @@ OpenWiki is a self-hosted knowledge base and enterprise wiki written for PHP 8.2
 - Apache with `mod_rewrite` (repository-root deployment) or a web server whose document root points to `public/`
 - writable `storage/` directories
 
-Composer is used for development/test dependencies. Production runtime does not require Node.js.
+Composer installs PHP runtime dependencies and development/test tools. Node.js 18+ (22 recommended) is needed only when building assets from source. Production HTTP requests are handled entirely by PHP.
 
 ## Install from Git
 
 ```bash
 git clone https://github.com/chmajster/OpenWIki.git
 cd OpenWIki
+composer install --no-dev --prefer-dist
+npm ci --include=dev
+npm run build
 ```
 
 For Apache, the repository can be extracted directly into the virtual host web root. The included root `index.php` and `.htaccess` route requests into the application while blocking direct access to internal directories. The Apache virtual host must allow `.htaccess` overrides and `mod_rewrite` must be enabled. Nginx and hardened production deployments should still point the document root directly to `public/`.
@@ -33,7 +36,21 @@ For a fresh Debian/Ubuntu or RHEL/Rocky/Alma/Fedora host, run:
 sudo ./install.sh
 ```
 
-The script installs and starts Nginx, MariaDB and PHP-FPM, installs Composer dependencies, provisions the OpenWiki database account, runs the shared CLI installer, configures cron, Nginx and SELinux where applicable, and performs application/database/HTTP health checks.
+The script installs and starts Nginx, MariaDB and PHP-FPM, installs Composer dependencies, builds static editor assets with npm, provisions the OpenWiki database account, runs the shared CLI installer, configures cron, Nginx and SELinux where applicable, and performs application/database/HTTP health checks. No Node.js service runs after installation.
+
+## Daily documentation editor
+
+The Visual editor uses [Tiptap/ProseMirror](https://tiptap.dev/docs/editor/getting-started/overview). Its maintained document schema, table/list commands and transaction history replace `execCommand` and manual DOM mutations. HTML remains the storage and revision format: existing sanitized documents remain readable without a bulk data migration. This keeps compatibility with PHP rendering, protected attachments, wiki links, macros, import/export and the shared page write service while avoiding a separate JSON content format to maintain.
+
+Visual tools include six heading levels, tables (insert/delete rows and columns, headers, merge/split cells), nested ordered/bullet lists, checklists, links, language-labelled code blocks, callouts, undo/redo and parameterized macros. The page finder checks current Space and page ACL; macro output applies the existing ACL checks. Images may be pasted or uploaded and retain protected attachment URLs, alternative text, captions, dimensions and thumbnails. External HTML is cleaned with the server's allowlist before entering the editor; the backend always sanitizes again.
+
+Serialization changes such as `b`/`strong`, `i`/`em`, table section wrappers, a single paragraph wrapper in a cell/list item and insignificant block whitespace are equivalent. Changes to unsupported structure or metadata display the original and editor documents for review. Keeping the original allows metadata-only saves with the original HTML; accepting the transformation keeps the sanitized original in draft/revision recovery. For example, a formatted image caption is shown before conversion to the editor's plain caption field. No transformation silently rewrites old pages or revisions.
+
+Markdown preview, save, API and import all use [League CommonMark/GFM](https://commonmark.thephpleague.com/2.x/) through `ContentService`, with raw HTML escaped, unsafe links disabled and bounded parsing. Tables, nested lists, fenced code languages and task states are supported. Checkbox state is stored as passive `data-type`/`data-checked` attributes; editor controls are never stored in document HTML. Mixed bullet/task lists are split into contiguous runs so bullets are not silently converted into tasks. The Visual-to-Markdown conversion retains its explicit loss review and recovery rules from the safe-save model; richer HTML may require review.
+
+Polish is the default interface language; the top bar offers English as well. The preference changes interface messages without translating document content, titles, tags or change descriptions. Account and secondary page actions use keyboard-accessible menus, and the page tree collapses on phones. Keyboard shortcuts: Ctrl/Cmd+S saves, Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z redoes, Ctrl/Cmd+K opens the link picker, Tab/Shift+Tab indents/outdents list items, Ctrl/Cmd+Enter exits a code block. Arrow keys change editor tabs; Escape closes dialogs and navigation menus.
+
+Editor sources live in `resources/js/`. `npm run build` produces `public/assets/wiki-editor.js`; generated bundles are not committed. CI builds assets before browser tests, and the installer rebuilds them on installation/repair. Tags matching `v*` produce a release archive containing Composer runtime dependencies and compiled static assets, ready for PHP hosting without Node.js. Source deployments must run both Composer and the asset build before use.
 
 Re-running the installer repairs the deployment without rotating credentials of an already installed database account:
 

@@ -33,6 +33,8 @@ use OpenWiki\Http\Controllers\WebhookAdminController;
 
 $router = $app->router();
 
+$router->post('/language', [\OpenWiki\Http\Controllers\LanguageController::class, 'store']);
+
 $router->get('/install', [InstallerController::class, 'index']);
 $router->post('/install/test-database', [InstallerController::class, 'testDatabase']);
 $router->post('/install', [InstallerController::class, 'store']);
@@ -76,6 +78,8 @@ $router->post('/spaces/{spaceKey}/pages/{slug}/autosave', [PageDraftController::
 $router->get('/spaces/{spaceKey}/editor-drafts', [PageDraftController::class, 'drafts']);
 $router->post('/spaces/{spaceKey}/editor-drafts', [PageDraftController::class, 'saveEditorDraft']);
 $router->post('/spaces/{spaceKey}/editor-convert', [PageDraftController::class, 'convert']);
+$router->post('/spaces/{spaceKey}/editor-preview', [PageDraftController::class, 'preview']);
+$router->get('/spaces/{spaceKey}/editor-pages', [PageDraftController::class, 'pages']);
 
 $router->post('/spaces/{spaceKey}/watch', [PageEngagementController::class, 'watchSpace']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/favorite', [PageEngagementController::class, 'favorite']);

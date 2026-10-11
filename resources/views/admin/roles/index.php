@@ -4,15 +4,15 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
 <section class="content-container">
     <div class="page-heading">
         <div>
-            <div class="eyebrow">Administration</div>
-            <h1>Roles and RBAC</h1>
+            <div class="eyebrow"><?= $e($t('Administration')) ?></div>
+            <h1><?= $e($t('Roles and RBAC')) ?></h1>
         </div>
-        <a class="button button--primary" href="/admin/roles/create">Create role</a>
+        <a class="button button--primary" href="/admin/roles/create"><?= $e($t('Create role')) ?></a>
     </div>
     <section class="card panel">
         <div class="table-scroll">
             <table>
-                <thead><tr><th>Role</th><th>Type</th><th>Users</th><th>Permissions</th><th></th></tr></thead>
+                <thead><tr><th><?= $e($t('Role')) ?></th><th><?= $e($t('Type')) ?></th><th><?= $e($t('Users')) ?></th><th><?= $e($t('Permissions')) ?></th><th></th></tr></thead>
                 <tbody>
                 <?php foreach ($roles as $role): ?>
                     <tr>
@@ -20,7 +20,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                         <td><?= (int) $role['is_system'] === 1 ? 'System' : 'Custom' ?></td>
                         <td><?= (int) $role['user_count'] ?></td>
                         <td><?= (int) $role['permission_count'] ?></td>
-                        <td><a class="button button--ghost" href="/admin/roles/<?= (int) $role['id'] ?>/edit">Edit</a></td>
+                        <td><a class="button button--ghost" href="/admin/roles/<?= (int) $role['id'] ?>/edit"><?= $e($t('Edit')) ?></a></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>
