@@ -157,7 +157,7 @@ final class PageWriteService
                     throw new \DomainException('You do not have permission to save this page.');
                 }
                 $data = $this->validate($space, $current, $input, $can);
-                $hasInlineImages = str_contains($data['content_html'], 'data:image/') || str_contains($data['conversion_backup']['html'] ?? '', 'data:image/');
+                $hasInlineImages = stripos($data['content_html'], 'data:image/') !== false || stripos($data['conversion_backup']['html'] ?? '', 'data:image/') !== false;
                 if ($hasInlineImages && !$allowInlineImages) {
                     throw new \DomainException('Inline images require attachment.upload permission and, for API tokens, attachments:write scope.');
                 }
@@ -184,7 +184,7 @@ final class PageWriteService
                         if ($table === 'page_revisions') $params['version'] = $version;
                         $this->database->execute('UPDATE ' . $table . ' SET content_html = :html, content_text = :text WHERE ' . $where, $params);
                     }
-                    if ($data['conversion_backup'] !== null && str_contains($data['conversion_backup']['html'], 'data:image/')) {
+                    if ($data['conversion_backup'] !== null && stripos($data['conversion_backup']['html'], 'data:image/') !== false) {
                         $backupImages = $inlineImages->materializeDataImages($data['conversion_backup']['html'], $id, $userId);
                         $data['conversion_backup']['html'] = $backupImages['html'];
                         $this->database->execute('UPDATE page_revisions SET conversion_backup_json = :backup WHERE page_id = :id AND revision_number = :version',

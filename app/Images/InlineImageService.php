@@ -26,7 +26,7 @@ final class InlineImageService
 
     public function materializeDataImages(string $html, int $pageId, int $userId): array
     {
-        if (!str_contains($html, 'data:image/')) {
+        if (stripos($html, 'data:image/') === false) {
             return [
                 'html' => $html,
                 'text' => $this->plainText($html),
@@ -50,7 +50,7 @@ final class InlineImageService
 
         $images = [];
         foreach ($root->getElementsByTagName('img') as $image) {
-            if ($image instanceof DOMElement && str_starts_with(trim($image->getAttribute('src')), 'data:image/')) {
+            if ($image instanceof DOMElement && stripos(trim($image->getAttribute('src')), 'data:image/') === 0) {
                 $images[] = $image;
             }
         }

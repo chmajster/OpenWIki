@@ -660,7 +660,7 @@ if (editorRoot) {
                 const sentImages = Array.from(sentHtml.querySelectorAll('img'));
                 const storedImages = Array.from(storedHtml.querySelectorAll('img'));
                 sentImages.forEach((image, index) => {
-                    if (!image.getAttribute('src')?.startsWith('data:image/') || !storedImages[index]) return;
+                    if (!/^data:image\//i.test(image.getAttribute('src') || '') || !storedImages[index]) return;
                     visualEditor.querySelectorAll('img').forEach((live) => {
                         if (live.getAttribute('src') !== image.getAttribute('src')) return;
                         live.setAttribute('src', storedImages[index].getAttribute('src'));

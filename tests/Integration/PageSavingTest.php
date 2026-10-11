@@ -224,11 +224,13 @@ final class PageSavingTest extends TestCase
         $page = $writer->save($this->space, null, ['title' => 'Recovery', 'content_format' => 'markdown', 'content_markdown' => 'Original', 'conversion_backup' => $backup], $this->userId);
         $revision = (new PageRepository($this->app->database()))->revision((int) $page['id'], 1);
         self::assertSame(['format' => 'visual', 'html' => '<p><u>Original</u></p>', 'markdown' => ''], json_decode($revision['conversion_backup_json'], true));
-        try {
-            $writer->save($this->space, $page, ['base_version' => 1, 'conversion_backup' => ['format' => 'visual', 'html' => '<img src="data:image/png;base64,bG9s">']], $this->userId);
-            self::fail('Images in recovery copies require the same permissions.');
-        } catch (\DomainException) {
-            self::assertSame(1, (int) (new PageRepository($this->app->database()))->findById((int) $page['id'])['version']);
+        foreach (['data:image/png;base64,bG9s', 'DATA:IMAGE/PNG;BASE64,bG9s'] as $source) {
+            try {
+                $writer->save($this->space, $page, ['base_version' => 1, 'conversion_backup' => ['format' => 'visual', 'html' => '<img src="' . $source . '">']], $this->userId);
+                self::fail('Images in recovery copies require the same permissions.');
+            } catch (\DomainException) {
+                self::assertSame(1, (int) (new PageRepository($this->app->database()))->findById((int) $page['id'])['version']);
+            }
         }
     }
 

@@ -97,7 +97,7 @@ final class ImageServiceTest extends TestCase
 
         $inline = new InlineImageService($this->database, $this->basePath);
         $result = $inline->materializeDataImages(
-            '<figure><img src="data:image/png;base64,' . base64_encode($png)
+            '<figure><img src="DATA:IMAGE/PNG;BASE64,' . base64_encode($png)
             . '" alt="Pixel" width="300"><figcaption>Caption</figcaption></figure>',
             $pageId,
             $userId
