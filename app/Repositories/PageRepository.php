@@ -84,10 +84,10 @@ final class PageRepository
             $db->execute(
                 'INSERT INTO page_revisions
                  (page_id, revision_number, title, content_html, content_markdown, content_text, content_format,
-                  status, author_id, change_summary, created_at)
+                  status, author_id, change_summary, slug, parent_id, tags_json, created_at)
                  VALUES
                  (:page_id, 1, :title, :content_html, :content_markdown, :content_text, :content_format,
-                  :status, :author_id, :change_summary, UTC_TIMESTAMP())',
+                  :status, :author_id, :change_summary, :revision_slug, :revision_parent_id, :tags_json, UTC_TIMESTAMP())',
                 [
                     'page_id' => $pageId,
                     'title' => $data['title'],
@@ -98,6 +98,9 @@ final class PageRepository
                     'status' => $data['status'],
                     'author_id' => $data['author_id'],
                     'change_summary' => $data['change_summary'] ?: 'Initial version',
+                    'revision_slug' => $data['slug'],
+                    'revision_parent_id' => $data['parent_id'],
+                    'tags_json' => json_encode($data['tags'] ?? [], JSON_THROW_ON_ERROR),
                 ]
             );
 
@@ -164,10 +167,10 @@ final class PageRepository
             $db->execute(
                 'INSERT INTO page_revisions
                  (page_id, revision_number, title, content_html, content_markdown, content_text, content_format,
-                  status, author_id, change_summary, created_at)
+                  status, author_id, change_summary, slug, parent_id, tags_json, created_at)
                  VALUES
                  (:page_id, :revision_number, :title, :content_html, :content_markdown, :content_text, :content_format,
-                  :status, :author_id, :change_summary, UTC_TIMESTAMP())',
+                  :status, :author_id, :change_summary, :revision_slug, :revision_parent_id, :tags_json, UTC_TIMESTAMP())',
                 [
                     'page_id' => (int) $current['id'],
                     'revision_number' => $newVersion,
@@ -179,12 +182,10 @@ final class PageRepository
                     'status' => $data['status'],
                     'author_id' => $data['author_id'],
                     'change_summary' => $data['change_summary'] ?: null,
+                    'revision_slug' => $data['slug'],
+                    'revision_parent_id' => $data['parent_id'],
+                    'tags_json' => json_encode($data['tags'] ?? [], JSON_THROW_ON_ERROR),
                 ]
-            );
-
-            $db->execute(
-                'DELETE FROM draft_autosaves WHERE page_id = :page_id AND user_id = :user_id',
-                ['page_id' => (int) $current['id'], 'user_id' => $data['author_id']]
             );
 
             return ['version' => $newVersion, 'published_at' => $publishedAt];
@@ -211,25 +212,6 @@ final class PageRepository
              LIMIT 1',
             ['page_id' => $pageId, 'revision_number' => $revisionNumber]
         );
-    }
-
-    public function restore(array $current, array $revision, int $userId): int
-    {
-        $data = [
-            'parent_id' => $current['parent_id'],
-            'title' => $revision['title'],
-            'slug' => $current['slug'],
-            'content_html' => $revision['content_html'],
-            'content_markdown' => $revision['content_markdown'],
-            'content_text' => $revision['content_text'],
-            'content_format' => $revision['content_format'],
-            'status' => $revision['status'],
-            'base_version' => (int) $current['version'],
-            'author_id' => $userId,
-            'change_summary' => 'Restored revision ' . (int) $revision['revision_number'],
-        ];
-
-        return $this->update($current, $data)['version'];
     }
 
     public function wouldCreateCycle(int $pageId, ?int $parentId): bool

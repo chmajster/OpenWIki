@@ -44,4 +44,13 @@ final class ContentService
             'format' => $format,
         ];
     }
+
+    public function convert(string $format, string $target, string $html, string $markdown): array
+    {
+        $source = $this->normalize($format, $html, $markdown);
+        if (!in_array($target, ['visual', 'markdown'], true)) throw new \InvalidArgumentException('Unsupported target format.');
+        if ($target === 'visual') return ['format' => 'visual', 'html' => $source['html'], 'markdown' => $source['markdown'], 'lossy' => false];
+        if ($format === 'markdown') return $source + ['lossy' => false];
+        return (new HtmlMarkdownConverter())->convert($source['html']) + ['format' => 'markdown', 'before_html' => $source['html']];
+    }
 }

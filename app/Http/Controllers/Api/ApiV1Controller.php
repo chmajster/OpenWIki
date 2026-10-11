@@ -12,7 +12,6 @@ use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Http\Controller;
 use OpenWiki\Images\ImageService;
-use OpenWiki\Images\InlineImageService;
 use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
@@ -415,106 +414,15 @@ final class ApiV1Controller extends Controller
         }
 
         try {
-            $data = $this->validatedPageData($request, $context, $space, null);
-            $data['space_id'] = (int) $space['id'];
-            $data['author_id'] = (int) $context['user']['id'];
-            $data['owner_id'] = (int) $context['user']['id'];
-
-            $metadata = new WikiMetadataService($this->app->database());
-            $tagInput = $request->input('tags', []);
-            if (!is_string($tagInput) && !is_array($tagInput) && $tagInput !== null) {
-                throw new \InvalidArgumentException('tags must be a string or array.');
-            }
-            $metadata->normalizeTags($tagInput);
-            $decorated = $metadata->decorateWikiLinks(
-                (int) $space['id'],
-                (string) $space['space_key'],
-                (string) $data['content_html']
+            $tokens = new ApiTokenService($this->app->database());
+            $saved = (new \OpenWiki\Wiki\PageWriteService($this->app->database(), $this->app->basePath()))->save(
+                $space, null, (array) $request->input(), (int) $context['user']['id'], $request,
+                $this->pageWritePolicy($space, $context),
+                $tokens->hasScope($context, 'attachments:write') && $tokens->hasPermission($context, 'attachment.upload')
             );
-            $data['content_html'] = $decorated['html'];
-
-            $tokenService = new ApiTokenService($this->app->database());
-            if (str_contains((string) $data['content_html'], 'data:image/')) {
-                if (
-                    !$tokenService->hasScope($context, 'attachments:write')
-                    || !$tokenService->hasPermission($context, 'attachment.upload')
-                ) {
-                    throw new \InvalidArgumentException(
-                        'Inline images require attachments:write scope and attachment.upload permission.'
-                    );
-                }
-            }
-
-            $inlineImages = new InlineImageService(
-                $this->app->database(),
-                $this->app->basePath()
-            );
-
-            try {
-                $id = $this->app->database()->transaction(
-                    function () use (
-                        $data,
-                        $metadata,
-                        $tagInput,
-                        $decorated,
-                        $space,
-                        $context,
-                        $inlineImages
-                    ): int {
-                        $pageId = (new PageRepository($this->app->database()))->create($data);
-
-                        $materialized = $inlineImages->materializeDataImages(
-                            (string) $data['content_html'],
-                            $pageId,
-                            (int) $context['user']['id']
-                        );
-                        if ($materialized['attachment_ids'] !== []) {
-                            $this->app->database()->execute(
-                                'UPDATE pages
-                                 SET content_html = :content_html, content_text = :content_text
-                                 WHERE id = :id',
-                                [
-                                    'content_html' => $materialized['html'],
-                                    'content_text' => $materialized['text'],
-                                    'id' => $pageId,
-                                ]
-                            );
-                            $this->app->database()->execute(
-                                'UPDATE page_revisions
-                                 SET content_html = :content_html, content_text = :content_text
-                                 WHERE page_id = :page_id AND revision_number = 1',
-                                [
-                                    'content_html' => $materialized['html'],
-                                    'content_text' => $materialized['text'],
-                                    'page_id' => $pageId,
-                                ]
-                            );
-                        }
-
-                        $metadata->syncTags($pageId, $tagInput);
-                        $metadata->syncLinks($pageId, (int) $space['id'], $decorated['references']);
-                        $metadata->refreshSpaceLinks((int) $space['id']);
-                        return $pageId;
-                    }
-                );
-                $inlineImages->clearTracking();
-            } catch (\Throwable $inlineImageError) {
-                $inlineImages->cleanupCreatedFiles();
-                throw $inlineImageError;
-            }
-            $row = $this->pageRow($id);
-
-            (new AuditLogger($this->app->database()))->log(
-                'PAGE_CREATED',
-                'page',
-                $id,
-                (int) $context['user']['id'],
-                $request,
-                null,
-                ['title' => $data['title'], 'slug' => $data['slug'], 'status' => $data['status']]
-            );
-
-            return Response::json(['data' => $this->pageResource($row)], 201);
+            return Response::json(['data' => $this->pageResource($this->pageRow((int) $saved['id']))], 201);
+        } catch (\DomainException $exception) {
+            return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->error('validation_error', $exception->getMessage(), 422);
         } catch (\Throwable $exception) {
@@ -557,114 +465,20 @@ final class ApiV1Controller extends Controller
         }
 
         try {
-            $data = $this->validatedPageData($request, $context, $space, $row);
-            $data['author_id'] = (int) $context['user']['id'];
-            $data['base_version'] = (int) $baseVersion;
-
-            $metadata = new WikiMetadataService($this->app->database());
-            $tagInput = $request->input('tags', array_column($metadata->tagsForPage($pageId), 'name'));
-            if (!is_string($tagInput) && !is_array($tagInput) && $tagInput !== null) {
-                throw new \InvalidArgumentException('tags must be a string or array.');
-            }
-            $metadata->normalizeTags($tagInput);
-            $decorated = $metadata->decorateWikiLinks(
-                (int) $space['id'],
-                (string) $space['space_key'],
-                (string) $data['content_html']
+            $tokens = new ApiTokenService($this->app->database());
+            $saved = (new \OpenWiki\Wiki\PageWriteService($this->app->database(), $this->app->basePath()))->save(
+                $space, $row, (array) $request->input(), (int) $context['user']['id'], $request,
+                $this->pageWritePolicy($space, $context),
+                $tokens->hasScope($context, 'attachments:write') && $tokens->hasPermission($context, 'attachment.upload')
             );
-            $data['content_html'] = $decorated['html'];
-
-            $tokenService = new ApiTokenService($this->app->database());
-            if (str_contains((string) $data['content_html'], 'data:image/')) {
-                if (
-                    !$tokenService->hasScope($context, 'attachments:write')
-                    || !$tokenService->hasPermission($context, 'attachment.upload')
-                ) {
-                    throw new \InvalidArgumentException(
-                        'Inline images require attachments:write scope and attachment.upload permission.'
-                    );
-                }
-            }
-
-            $before = ['title' => $row['title'], 'slug' => $row['slug'], 'status' => $row['status'], 'version' => (int) $row['version']];
-            $inlineImages = new InlineImageService(
-                $this->app->database(),
-                $this->app->basePath()
-            );
-
-            try {
-                $result = $this->app->database()->transaction(
-                    function () use (
-                        $row,
-                        $data,
-                        $metadata,
-                        $tagInput,
-                        $decorated,
-                        $space,
-                        $pageId,
-                        $context,
-                        $inlineImages
-                    ): array {
-                        $updatedResult = (new PageRepository($this->app->database()))->update($row, $data);
-
-                        $materialized = $inlineImages->materializeDataImages(
-                            (string) $data['content_html'],
-                            $pageId,
-                            (int) $context['user']['id']
-                        );
-                        if ($materialized['attachment_ids'] !== []) {
-                            $this->app->database()->execute(
-                                'UPDATE pages
-                                 SET content_html = :content_html, content_text = :content_text
-                                 WHERE id = :id',
-                                [
-                                    'content_html' => $materialized['html'],
-                                    'content_text' => $materialized['text'],
-                                    'id' => $pageId,
-                                ]
-                            );
-                            $this->app->database()->execute(
-                                'UPDATE page_revisions
-                                 SET content_html = :content_html, content_text = :content_text
-                                 WHERE page_id = :page_id AND revision_number = :revision_number',
-                                [
-                                    'content_html' => $materialized['html'],
-                                    'content_text' => $materialized['text'],
-                                    'page_id' => $pageId,
-                                    'revision_number' => (int) $updatedResult['version'],
-                                ]
-                            );
-                        }
-
-                        $metadata->syncTags($pageId, $tagInput);
-                        $metadata->syncLinks($pageId, (int) $space['id'], $decorated['references']);
-                        $metadata->refreshSpaceLinks((int) $space['id']);
-                        return $updatedResult;
-                    }
-                );
-                $inlineImages->clearTracking();
-            } catch (\Throwable $inlineImageError) {
-                $inlineImages->cleanupCreatedFiles();
-                throw $inlineImageError;
-            }
-            $updated = $this->pageRow($pageId);
-
-            (new AuditLogger($this->app->database()))->log(
-                'PAGE_UPDATED',
-                'page',
-                $pageId,
-                (int) $context['user']['id'],
-                $request,
-                $before,
-                ['title' => $data['title'], 'slug' => $data['slug'], 'status' => $data['status'], 'version' => $result['version']]
-            );
-
-            return Response::json(['data' => $this->pageResource($updated)]);
+            return Response::json(['data' => $this->pageResource($this->pageRow((int) $saved['id']))], 200);
+        } catch (\DomainException $exception) {
+            return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->error('validation_error', $exception->getMessage(), 422);
         } catch (\RuntimeException $exception) {
             if ($exception->getMessage() === 'EDIT_CONFLICT') {
-                return $this->error('edit_conflict', 'The page has changed. Reload it and retry with the current base_version.', 409);
+                return Response::json(['error' => ['code' => 'edit_conflict', 'message' => 'The page has changed. Resolve the conflict before changing base_version.', 'conflict' => ['base_version' => (int) $baseVersion, 'base' => (new PageRepository($this->app->database()))->revision($pageId, (int) $baseVersion), 'local' => (array) $request->input(), 'server' => (new PageRepository($this->app->database()))->findById($pageId)]]], 409);
             }
             error_log('[OpenWiki API page update] ' . $exception->getMessage());
             return $this->error('server_error', 'Unable to update page.', 500);
@@ -3156,128 +2970,6 @@ final class ApiV1Controller extends Controller
             'SELECT * FROM spaces WHERE id = :id AND deleted_at IS NULL LIMIT 1',
             ['id' => (int) $id]
         ) ?? $this->error('validation_error', 'Unknown space_id.', 422);
-    }
-
-    private function validatedPageData(Request $request, array $context, array $space, ?array $current): array
-    {
-        $title = trim((string) $request->input('title', $current['title'] ?? ''));
-        if ($title === '' || mb_strlen($title) > 255) {
-            throw new \InvalidArgumentException('Page title is required and may contain at most 255 characters.');
-        }
-
-        $slugInput = trim((string) $request->input('slug', $current['slug'] ?? ''));
-        $slug = (new Slugger())->slug($slugInput === '' ? $title : $slugInput);
-
-        $status = (string) $request->input('status', $current['status'] ?? 'draft');
-        if (!in_array($status, ['draft', 'published', 'archived'], true)) {
-            throw new \InvalidArgumentException('Invalid page status.');
-        }
-
-        $tokenService = new ApiTokenService($this->app->database());
-        $pageAccess = new PageAclService($this->app);
-        $userId = (int) $context['user']['id'];
-        $superAdmin = $this->isSuperAdmin($context);
-
-        if ($status === 'published') {
-            $hasPublish = $tokenService->hasPermission($context, 'page.publish');
-            if (!$hasPublish) {
-                throw new \InvalidArgumentException('The token owner cannot publish pages.');
-            }
-            if (
-                $current !== null
-                && !$pageAccess->canFor($current, $space, 'page.publish', $userId, $superAdmin, $hasPublish)
-            ) {
-                throw new \InvalidArgumentException('Page ACL does not allow publishing this page.');
-            }
-        }
-        if ($status === 'archived') {
-            $hasArchive = $tokenService->hasPermission($context, 'page.archive');
-            if (!$hasArchive) {
-                throw new \InvalidArgumentException('The token owner cannot archive pages.');
-            }
-            if (
-                $current !== null
-                && !$pageAccess->canFor($current, $space, 'page.archive', $userId, $superAdmin, $hasArchive)
-            ) {
-                throw new \InvalidArgumentException('Page ACL does not allow archiving this page.');
-            }
-        }
-
-        $parentValue = $request->input('parent_id', $current['parent_id'] ?? null);
-        $parentId = ($parentValue === null || $parentValue === '') ? null : filter_var($parentValue, FILTER_VALIDATE_INT);
-        if ($parentId === false || (is_int($parentId) && $parentId < 1)) {
-            throw new \InvalidArgumentException('Invalid parent_id.');
-        }
-
-        $repository = new PageRepository($this->app->database());
-        if ($parentId !== null) {
-            $parent = $repository->findById((int) $parentId);
-            if ($parent === null || (int) $parent['space_id'] !== (int) $space['id']) {
-                throw new \InvalidArgumentException('Parent page must belong to the same space.');
-            }
-
-            if ($current === null) {
-                if (!$pageAccess->canFor($parent, $space, 'page.create', $userId, $superAdmin, true)) {
-                    throw new \InvalidArgumentException('Page ACL does not allow creating a child under this parent.');
-                }
-            } else {
-                $parentChanged = (int) ($current['parent_id'] ?? 0) !== (int) $parentId;
-                if ($parentChanged) {
-                    $hasMove = $tokenService->hasPermission($context, 'page.move');
-                    if (
-                        !$pageAccess->canFor($current, $space, 'page.move', $userId, $superAdmin, $hasMove)
-                        || !$pageAccess->canViewFor(
-                            $parent,
-                            $space,
-                            $userId,
-                            $superAdmin,
-                            $tokenService->hasPermission($context, 'page.view')
-                        )
-                    ) {
-                        throw new \InvalidArgumentException('The token owner cannot move this page to the selected parent.');
-                    }
-                }
-            }
-
-            if ($current !== null && $repository->wouldCreateCycle((int) $current['id'], (int) $parentId)) {
-                throw new \InvalidArgumentException('The selected parent would create a cycle.');
-            }
-        }
-
-        if (
-            $current !== null
-            && $parentId === null
-            && $current['parent_id'] !== null
-            && !$pageAccess->canFor(
-                $current,
-                $space,
-                'page.move',
-                $userId,
-                $superAdmin,
-                $tokenService->hasPermission($context, 'page.move')
-            )
-        ) {
-            throw new \InvalidArgumentException('The token owner cannot move this page to the root level.');
-        }
-
-        $format = (string) $request->input('content_format', $current['content_format'] ?? 'visual');
-        $content = (new ContentService())->normalize(
-            $format,
-            (string) $request->input('content_html', $current['content_html'] ?? ''),
-            (string) $request->input('content_markdown', $current['content_markdown'] ?? '')
-        );
-
-        return [
-            'parent_id' => $parentId,
-            'title' => $title,
-            'slug' => $slug,
-            'content_html' => $content['html'],
-            'content_markdown' => $content['markdown'],
-            'content_text' => $content['text'],
-            'content_format' => $content['format'],
-            'status' => $status,
-            'change_summary' => mb_substr(trim((string) $request->input('change_summary', '')), 0, 500),
-        ];
     }
 
     private function commentRow(int $commentId): ?array

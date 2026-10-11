@@ -83,60 +83,55 @@ final class EditSessionService
         ) === 1;
     }
 
-    public function saveDraft(
-        int $pageId,
-        int $userId,
-        int $baseVersion,
-        array $content
-    ): array {
-        $page = $this->database->fetchOne(
-            'SELECT version FROM pages WHERE id = :page_id AND deleted_at IS NULL LIMIT 1',
-            ['page_id' => $pageId]
+    public function editorDrafts(int $spaceId, int $userId, string $documentKey): array
+    {
+        $rows = $this->database->fetchAll(
+            'SELECT editor_id, sequence, base_version, payload_json, updated_at FROM page_editor_drafts
+             WHERE space_id = :space AND user_id = :user AND document_key = :document AND sequence > acknowledged_sequence ORDER BY updated_at DESC',
+            ['space' => $spaceId, 'user' => $userId, 'document' => $documentKey]
         );
-
-        if ($page === null) {
-            throw new \RuntimeException('Page not found.');
-        }
-
-        $currentVersion = (int) $page['version'];
-        $this->database->execute(
-            'INSERT INTO draft_autosaves
-             (page_id, user_id, content_html, content_markdown, content_format, base_version, updated_at)
-             VALUES
-             (:page_id, :user_id, :content_html, :content_markdown, :content_format, :base_version, UTC_TIMESTAMP())
-             ON DUPLICATE KEY UPDATE
-                content_html = VALUES(content_html),
-                content_markdown = VALUES(content_markdown),
-                content_format = VALUES(content_format),
-                base_version = VALUES(base_version),
-                updated_at = UTC_TIMESTAMP()',
-            [
-                'page_id' => $pageId,
-                'user_id' => $userId,
-                'content_html' => $content['html'],
-                'content_markdown' => $content['markdown'],
-                'content_format' => $content['format'],
-                'base_version' => $baseVersion,
-            ]
-        );
-
-        $saved = $this->draft($pageId, $userId);
-
-        return [
-            'saved_at' => $saved['updated_at'] ?? gmdate('Y-m-d H:i:s'),
-            'stale' => $currentVersion !== $baseVersion,
-            'current_version' => $currentVersion,
-        ];
+        return array_map(static fn (array $row): array => json_decode($row['payload_json'], true, 512, JSON_THROW_ON_ERROR)
+            + ['editorId' => $row['editor_id'], 'sequence' => (int) $row['sequence'], 'baseVersion' => (int) $row['base_version'], 'savedAt' => $row['updated_at']], $rows);
     }
 
-    public function draft(int $pageId, int $userId): ?array
+    public function saveEditorDraft(int $spaceId, int $userId, string $documentKey, string $editorId, int $sequence, int $baseVersion, array $payload): array
     {
-        return $this->database->fetchOne(
-            'SELECT page_id, user_id, content_html, content_markdown, content_format, base_version, updated_at
-             FROM draft_autosaves
-             WHERE page_id = :page_id AND user_id = :user_id
-             LIMIT 1',
-            ['page_id' => $pageId, 'user_id' => $userId]
+        if (!preg_match('/^(?:page:[1-9][0-9]*|new:[a-f0-9-]{36})$/D', $documentKey)
+            || !preg_match('/^[a-f0-9-]{36}$/D', $editorId) || $sequence < 1 || $baseVersion < 0) {
+            throw new \InvalidArgumentException('Invalid draft identity or sequence.');
+        }
+        $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        if (strlen($encoded) > 12_000_000) throw new \InvalidArgumentException('Draft is too large.');
+        return $this->database->transaction(function () use ($spaceId, $userId, $documentKey, $editorId, $sequence, $baseVersion, $encoded): array {
+            $this->database->execute(
+                'INSERT INTO page_editor_drafts (space_id, user_id, document_key, editor_id, sequence, base_version, payload_json, updated_at)
+                 VALUES (:space, :user, :document, :editor, :sequence, :base, :payload, UTC_TIMESTAMP())
+                 ON DUPLICATE KEY UPDATE
+                 base_version = IF(VALUES(sequence) > sequence AND VALUES(sequence) > acknowledged_sequence, VALUES(base_version), base_version),
+                 payload_json = IF(VALUES(sequence) > sequence AND VALUES(sequence) > acknowledged_sequence, VALUES(payload_json), payload_json),
+                 updated_at = IF(VALUES(sequence) > sequence, UTC_TIMESTAMP(), updated_at),
+                 sequence = GREATEST(sequence, VALUES(sequence))',
+                ['space' => $spaceId, 'user' => $userId, 'document' => $documentKey, 'editor' => $editorId,
+                    'sequence' => $sequence, 'base' => $baseVersion, 'payload' => $encoded]
+            );
+            $saved = $this->database->fetchOne(
+                'SELECT sequence, updated_at FROM page_editor_drafts WHERE space_id = :space AND user_id = :user AND document_key = :document AND editor_id = :editor',
+                ['space' => $spaceId, 'user' => $userId, 'document' => $documentKey, 'editor' => $editorId]
+            );
+            return ['sequence' => (int) $saved['sequence'], 'saved_at' => $saved['updated_at']];
+        });
+    }
+
+    public function acknowledgeDraft(int $spaceId, int $userId, string $documentKey, string $editorId, int $sequence): void
+    {
+        $this->database->execute(
+            'INSERT INTO page_editor_drafts (space_id, user_id, document_key, editor_id, sequence, base_version, payload_json, updated_at, acknowledged_sequence)
+             VALUES (:space, :user, :document, :editor, 0, 0, "{}", UTC_TIMESTAMP(), :sequence)
+             ON DUPLICATE KEY UPDATE
+             payload_json = IF(sequence <= VALUES(acknowledged_sequence), "{}", payload_json),
+             acknowledged_sequence = GREATEST(acknowledged_sequence, VALUES(acknowledged_sequence)),
+             updated_at = UTC_TIMESTAMP()',
+            ['space' => $spaceId, 'user' => $userId, 'document' => $documentKey, 'editor' => $editorId, 'sequence' => $sequence]
         );
     }
 }

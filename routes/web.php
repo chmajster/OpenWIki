@@ -73,6 +73,9 @@ $router->post('/spaces/{spaceKey}/pages/{slug}/permissions/rules/{id}/delete', [
 $router->post('/spaces/{spaceKey}/pages/{slug}/edit-lock', [PageDraftController::class, 'lock']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/edit-unlock', [PageDraftController::class, 'unlock']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/autosave', [PageDraftController::class, 'autosave']);
+$router->get('/spaces/{spaceKey}/editor-drafts', [PageDraftController::class, 'drafts']);
+$router->post('/spaces/{spaceKey}/editor-drafts', [PageDraftController::class, 'saveEditorDraft']);
+$router->post('/spaces/{spaceKey}/editor-convert', [PageDraftController::class, 'convert']);
 
 $router->post('/spaces/{spaceKey}/watch', [PageEngagementController::class, 'watchSpace']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/favorite', [PageEngagementController::class, 'favorite']);

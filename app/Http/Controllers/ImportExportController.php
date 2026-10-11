@@ -161,32 +161,14 @@ final class ImportExportController extends Controller
             $result = (new DocumentImportService(
                 $this->app->database(),
                 $this->app->basePath(),
-                $this->app->auth()->can('attachment.upload')
+                $this->app->auth()->can('attachment.upload'),
+                $this->pageWritePolicy($space)
             ))->importUploaded(
                 $space,
                 (int) $user['id'],
                 $request->file('document') ?? [],
                 $parentId
             );
-
-            foreach ($result['page_ids'] as $pageId) {
-                try {
-                    $created = (new PageRepository($this->app->database()))->findById((int) $pageId);
-                    if ($created !== null) {
-                        (new WebhookService($this->app->database()))->queue('page.created', [
-                            'id' => (int) $created['id'],
-                            'space_id' => (int) $space['id'],
-                            'title' => $created['title'],
-                            'slug' => $created['slug'],
-                            'status' => $created['status'],
-                            'author_id' => (int) $user['id'],
-                            'source' => 'import',
-                        ]);
-                    }
-                } catch (\Throwable $webhookError) {
-                    error_log('[OpenWiki import webhook] ' . $webhookError->getMessage());
-                }
-            }
 
             $this->audit(
                 'DOCUMENTATION_IMPORTED',

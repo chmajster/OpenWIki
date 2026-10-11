@@ -9,6 +9,7 @@ use PDOException;
 
 final class Database
 {
+    private int $savepointCounter = 0;
     public function __construct(private readonly PDO $pdo)
     {
     }
@@ -90,17 +91,25 @@ final class Database
         $ownsTransaction = !$this->pdo->inTransaction();
         if ($ownsTransaction) {
             $this->pdo->beginTransaction();
+        } else {
+            $savepoint = 'openwiki_transaction_' . ++$this->savepointCounter;
+            $this->pdo->exec('SAVEPOINT ' . $savepoint);
         }
 
         try {
             $result = $callback($this);
             if ($ownsTransaction) {
                 $this->pdo->commit();
+            } else {
+                $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
             }
             return $result;
         } catch (\Throwable $exception) {
             if ($ownsTransaction && $this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
+            } elseif (!$ownsTransaction && $this->pdo->inTransaction()) {
+                $this->pdo->exec('ROLLBACK TO SAVEPOINT ' . $savepoint);
+                $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
             }
             throw $exception;
         }

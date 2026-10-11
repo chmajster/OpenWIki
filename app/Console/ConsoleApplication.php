@@ -233,7 +233,7 @@ TEXT);
 
         $expiredDraftCutoff = gmdate('Y-m-d H:i:s', time() - 30 * 86400);
         $database->execute(
-            'DELETE FROM draft_autosaves WHERE updated_at < :cutoff',
+            'DELETE FROM page_editor_drafts WHERE sequence <= acknowledged_sequence AND updated_at < :cutoff',
             ['cutoff' => $expiredDraftCutoff]
         );
 

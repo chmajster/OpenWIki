@@ -12,6 +12,21 @@ use OpenWiki\Security\Csrf;
 
 abstract class Controller
 {
+    protected function pageWritePolicy(array $space, ?array $context = null): callable
+    {
+        $tokens = new \OpenWiki\Auth\ApiTokenService($this->app->database());
+        $userId = (int) ($context['user']['id'] ?? $this->app->auth()->user()['id']);
+        $permission = fn (string $name): bool => $context === null
+            ? $this->app->auth()->can($name) : $tokens->hasPermission($context, $name);
+        $superAdmin = $permission('*');
+        $acl = new \OpenWiki\Permissions\PageAclService($this->app);
+        return static function (string $name, ?array $page) use ($space, $userId, $permission, $superAdmin, $acl): bool {
+            if ($page === null) return $permission($name);
+            if ($name === 'page.view') return $acl->canViewFor($page, $space, $userId, $superAdmin, $permission($name));
+            return $acl->canFor($page, $space, $name, $userId, $superAdmin, $permission($name));
+        };
+    }
+
     public function __construct(protected readonly Application $app)
     {
     }
