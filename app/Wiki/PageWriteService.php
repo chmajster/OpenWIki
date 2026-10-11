@@ -101,6 +101,25 @@ final class PageWriteService
         if ($baseVersion === false || ($current !== null && $baseVersion < 1)) {
             throw new \InvalidArgumentException('base_version is required and must be a positive integer.');
         }
+        $backup = (new ContentService())->recoveryCopy($input['conversion_backup'] ?? null);
+        if (isset($input['document_key']) || isset($input['editor_id']) || isset($input['draft_sequence'])) {
+            $document = $input['document_key'] ?? null;
+            $editor = $input['editor_id'] ?? null;
+            $sequence = filter_var($input['draft_sequence'] ?? null, FILTER_VALIDATE_INT);
+            if (!is_string($document) || !is_string($editor) || !preg_match('/^[a-f0-9-]{36}$/D', $editor)
+                || $sequence === false || $sequence < 1
+                || ($current === null ? !preg_match('/^new:[a-f0-9-]{36}$/D', $document) : $document !== 'page:' . $current['id'])) {
+                throw new \InvalidArgumentException('Invalid editor draft acknowledgement.');
+            }
+            if (isset($input['recovery_editor_id']) || isset($input['recovery_sequence'])) {
+                $recovered = $input['recovery_editor_id'] ?? null;
+                $recoverySequence = filter_var($input['recovery_sequence'] ?? null, FILTER_VALIDATE_INT);
+                if (!is_string($recovered) || !preg_match('/^(?:legacy|[a-f0-9-]{36})$/D', $recovered)
+                    || $recoverySequence === false || $recoverySequence < 1) {
+                    throw new \InvalidArgumentException('Invalid recovered draft acknowledgement.');
+                }
+            }
+        }
         return [
             'parent_id' => $parentId, 'title' => $title,
             'slug' => (new Slugger())->slug($slugInput === '' ? $title : $slugInput),
@@ -108,19 +127,20 @@ final class PageWriteService
             'content_html' => $content['html'], 'content_markdown' => $content['markdown'],
             'content_text' => $content['text'], 'tags' => $tags,
             'change_summary' => $summary, 'base_version' => (int) $baseVersion,
+            'conversion_backup' => $backup,
         ];
     }
 
     public function save(
         array $space, ?array $current, array $input, int $userId,
         ?Request $request = null, ?callable $can = null, bool $allowInlineImages = false,
-        ?int $restoredRevision = null
+        ?int $restoredRevision = null, bool $refreshLinks = true
     ): array {
         $inlineImages = $this->inlineImages;
         $ownsTransaction = !$this->database->pdo()->inTransaction();
         try {
             $saved = $this->database->transaction(function () use (
-                $space, $current, $input, $userId, $request, $can, $allowInlineImages, $inlineImages, $restoredRevision
+                $space, $current, $input, $userId, $request, $can, $allowInlineImages, $inlineImages, $restoredRevision, $refreshLinks
             ): array {
                 // Serialize hierarchy changes as well as version checks within one space.
                 $this->database->fetchOne('SELECT id FROM spaces WHERE id = :id FOR UPDATE', ['id' => (int) $space['id']]);
@@ -137,7 +157,7 @@ final class PageWriteService
                     throw new \DomainException('You do not have permission to save this page.');
                 }
                 $data = $this->validate($space, $current, $input, $can);
-                $hasInlineImages = str_contains($data['content_html'], 'data:image/');
+                $hasInlineImages = str_contains($data['content_html'], 'data:image/') || str_contains($data['conversion_backup']['html'] ?? '', 'data:image/');
                 if ($hasInlineImages && !$allowInlineImages) {
                     throw new \DomainException('Inline images require attachment.upload permission and, for API tokens, attachments:write scope.');
                 }
@@ -164,10 +184,16 @@ final class PageWriteService
                         if ($table === 'page_revisions') $params['version'] = $version;
                         $this->database->execute('UPDATE ' . $table . ' SET content_html = :html, content_text = :text WHERE ' . $where, $params);
                     }
+                    if ($data['conversion_backup'] !== null && str_contains($data['conversion_backup']['html'], 'data:image/')) {
+                        $backupImages = $inlineImages->materializeDataImages($data['conversion_backup']['html'], $id, $userId);
+                        $data['conversion_backup']['html'] = $backupImages['html'];
+                        $this->database->execute('UPDATE page_revisions SET conversion_backup_json = :backup WHERE page_id = :id AND revision_number = :version',
+                            ['backup' => json_encode($data['conversion_backup'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 'id' => $id, 'version' => $version]);
+                    }
                 }
                 $metadata->syncTags($id, $data['tags']);
                 $metadata->syncLinks($id, (int) $space['id'], $decorated['references']);
-                $metadata->refreshSpaceLinks((int) $space['id']);
+                if ($refreshLinks) $metadata->refreshSpaceLinks((int) $space['id']);
                 $event = $current === null ? 'page.created' : 'page.updated';
                 $action = $restoredRevision !== null ? 'PAGE_REVISION_RESTORED' : ($current === null ? 'PAGE_CREATED' : 'PAGE_UPDATED');
                 $after = ['title' => $data['title'], 'slug' => $data['slug'], 'status' => $data['status'], 'version' => $version];
@@ -193,7 +219,12 @@ final class PageWriteService
                             (string) $input['document_key'], (string) $input['recovery_editor_id'], (int) $input['recovery_sequence']);
                     }
                 }
-                return $repository->findById($id) ?? throw new \RuntimeException('Saved page cannot be resolved.');
+                $saved = $this->database->fetchOne(
+                    'SELECT p.*, u.username AS author_username, s.space_key, s.name AS space_name
+                     FROM pages p INNER JOIN users u ON u.id = p.author_id
+                     INNER JOIN spaces s ON s.id = p.space_id WHERE p.id = :id', ['id' => $id]
+                ) ?? throw new \RuntimeException('Saved page cannot be resolved.');
+                return $saved + ['tags' => $metadata->tagsForPage($id)];
             });
             if ($ownsTransaction) $inlineImages?->clearTracking();
             return $saved;

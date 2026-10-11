@@ -420,7 +420,7 @@ final class ApiV1Controller extends Controller
                 $this->pageWritePolicy($space, $context),
                 $tokens->hasScope($context, 'attachments:write') && $tokens->hasPermission($context, 'attachment.upload')
             );
-            return Response::json(['data' => $this->pageResource($this->pageRow((int) $saved['id']))], 201);
+            return Response::json(['data' => $this->pageResource($saved)], 201);
         } catch (\DomainException $exception) {
             return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
@@ -471,7 +471,7 @@ final class ApiV1Controller extends Controller
                 $this->pageWritePolicy($space, $context),
                 $tokens->hasScope($context, 'attachments:write') && $tokens->hasPermission($context, 'attachment.upload')
             );
-            return Response::json(['data' => $this->pageResource($this->pageRow((int) $saved['id']))], 200);
+            return Response::json(['data' => $this->pageResource($saved)], 200);
         } catch (\DomainException $exception) {
             return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
@@ -3310,7 +3310,7 @@ final class ApiV1Controller extends Controller
             'content_format' => $page['content_format'],
             'content_html' => $page['content_html'],
             'content_markdown' => $page['content_markdown'],
-            'tags' => (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
+            'tags' => $page['tags'] ?? (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
         ];
     }
 

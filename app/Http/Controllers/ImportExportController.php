@@ -162,7 +162,8 @@ final class ImportExportController extends Controller
                 $this->app->database(),
                 $this->app->basePath(),
                 $this->app->auth()->can('attachment.upload'),
-                $this->pageWritePolicy($space)
+                $this->pageWritePolicy($space),
+                $request
             ))->importUploaded(
                 $space,
                 (int) $user['id'],

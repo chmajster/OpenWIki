@@ -9,6 +9,7 @@ use DOMElement;
 use DOMNode;
 use DOMText;
 use OpenWiki\Core\Database;
+use OpenWiki\Core\Env;
 
 final class WikiMetadataService
 {
@@ -268,7 +269,7 @@ final class WikiMetadataService
     public function backlinks(int $pageId): array
     {
         return $this->database->fetchAll(
-            'SELECT p.id, p.space_id, p.title, p.slug, p.status, p.owner_id, p.author_id,
+            'SELECT DISTINCT p.id, p.space_id, p.title, p.slug, p.status, p.owner_id, p.author_id,
                     p.parent_id, p.inherit_acl, p.updated_at, u.username AS author_username,
                     s.space_key, s.name AS space_name, s.visibility AS space_visibility,
                     s.owner_id AS space_owner_id, s.status AS space_status, s.deleted_at AS space_deleted_at
@@ -315,7 +316,11 @@ final class WikiMetadataService
         foreach ($children as $child) {
             if ($child instanceof DOMElement) {
                 if (strtolower($child->tagName) === 'a') {
-                    $path = parse_url($child->getAttribute('href'), PHP_URL_PATH);
+                    $href = $child->getAttribute('href');
+                    $host = parse_url($href, PHP_URL_HOST);
+                    $localHost = parse_url((string) Env::get('APP_URL', ''), PHP_URL_HOST);
+                    $path = $host === null || (is_string($host) && is_string($localHost) && strcasecmp($host, $localHost) === 0)
+                        ? parse_url($href, PHP_URL_PATH) : null;
                     $prefix = '/spaces/' . rawurlencode($spaceKey) . '/';
                     if (is_string($path) && str_starts_with($path, $prefix)) {
                         $suffix = substr($path, strlen($prefix));

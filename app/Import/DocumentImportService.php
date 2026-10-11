@@ -18,7 +18,8 @@ final class DocumentImportService
         private readonly Database $database,
         private readonly ?string $basePath = null,
         private readonly bool $allowInlineImages = false,
-        private readonly mixed $can = null
+        private readonly mixed $can = null,
+        private readonly ?\OpenWiki\Core\Request $request = null
     ) {
         $this->writer = new \OpenWiki\Wiki\PageWriteService($database, $basePath);
     }
@@ -116,7 +117,7 @@ final class DocumentImportService
                 $content,
                 $format
             ): int {
-                return $this->createDocument(
+                $id = $this->createDocument(
                     $space,
                     $userId,
                     $parentId,
@@ -125,14 +126,14 @@ final class DocumentImportService
                     $format,
                     $sourceName
                 );
+                (new WikiMetadataService($this->database))->refreshSpaceLinks((int) $space['id']);
+                return $id;
             });
             $this->writer->clearImageTracking();
         } catch (\Throwable $exception) {
             $this->writer->cleanupImages();
             throw $exception;
         }
-
-        (new WikiMetadataService($this->database))->refreshSpaceLinks((int) $space['id']);
 
         return [
             'imported_pages' => 1,
@@ -271,6 +272,7 @@ final class DocumentImportService
                     );
                 }
 
+                    (new WikiMetadataService($this->database))->refreshSpaceLinks((int) $space['id']);
                     return [
                         'imported_pages' => count($documents),
                         'section_pages' => $sectionCount,
@@ -284,7 +286,6 @@ final class DocumentImportService
                 throw $exception;
             }
 
-            (new WikiMetadataService($this->database))->refreshSpaceLinks((int) $space['id']);
             return $result;
         } finally {
             $zip->close();
@@ -308,7 +309,7 @@ final class DocumentImportService
                 'content_html' => $format === 'visual' ? $source : '',
                 'content_markdown' => $format === 'markdown' ? $source : '',
                 'status' => 'draft', 'change_summary' => mb_substr('Imported from ' . $sourceName, 0, 500),
-            ], $userId, null, $this->can, $this->allowInlineImages
+            ], $userId, $this->request, $this->can, $this->allowInlineImages, null, false
         );
         return (int) $saved['id'];
     }

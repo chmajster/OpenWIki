@@ -322,7 +322,8 @@ final class PageController extends Controller
         }
 
         $repository = new PageRepository($this->app->database());
-        $page = $repository->findBySlug((int) $space['id'], $slug);
+        $page = $repository->findBySlug((int) $space['id'], $slug)
+            ?? $repository->redirectTarget((int) $space['id'], $slug);
         $revisionNumber = filter_var($request->input('revision'), FILTER_VALIDATE_INT);
 
         if ($page === null || $revisionNumber === false || $revisionNumber < 1) {
@@ -350,6 +351,14 @@ final class PageController extends Controller
                 : json_decode($revision['tags_json'], true, 512, JSON_THROW_ON_ERROR);
             $input['base_version'] = $request->input('base_version');
             $input['change_summary'] = 'Restored revision ' . (int) $revisionNumber;
+            if ((string) $request->input('restore_conversion', '') === '1') {
+                if ($revision['conversion_backup_json'] === null) throw new \InvalidArgumentException('This revision has no conversion recovery copy.');
+                $backup = json_decode($revision['conversion_backup_json'], true, 512, JSON_THROW_ON_ERROR);
+                $input['content_format'] = $backup['format'];
+                $input['content_html'] = $backup['html'];
+                $input['content_markdown'] = $backup['markdown'];
+                $input['change_summary'] = 'Restored content before conversion in revision ' . (int) $revisionNumber;
+            }
             $saved = (new \OpenWiki\Wiki\PageWriteService($this->app->database(), $this->app->basePath()))->save(
                 $space, $page, $input, (int) $this->app->auth()->user()['id'], $request,
                 $this->pageWritePolicy($space), $this->app->auth()->can('attachment.upload'), (int) $revisionNumber
@@ -357,7 +366,7 @@ final class PageController extends Controller
             Session::flash('success', 'Revision restored as a new version.');
             return Response::redirect('/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($saved['slug']));
         } catch (\Throwable $exception) {
-            return $this->editorError($request, $space, $page, $exception);
+            return $this->editorError($request, $space, $page, $exception, $input ?? null);
         }
     }
 
@@ -378,7 +387,7 @@ final class PageController extends Controller
         return $space ?? $this->render('errors/404', ['title' => 'Space not found'], 404);
     }
 
-    private function editorError(Request $request, array $space, ?array $page, \Throwable $exception): Response
+    private function editorError(Request $request, array $space, ?array $page, \Throwable $exception, ?array $document = null): Response
     {
         error_log('[OpenWiki page save] ' . $exception->getMessage());
 
@@ -390,13 +399,14 @@ final class PageController extends Controller
         };
 
         $repository = new PageRepository($this->app->database());
-        $baseVersion = (int) $request->input('base_version', 0);
+        $old = $document ?? (array) $request->input();
+        $baseVersion = (int) ($old['base_version'] ?? 0);
         $conflict = null;
         if ($exception->getMessage() === 'EDIT_CONFLICT' && $page !== null) {
             $conflict = [
                 'base_version' => $baseVersion,
                 'base' => $repository->revision((int) $page['id'], $baseVersion),
-                'local' => (array) $request->input(),
+                'local' => $old,
                 'server' => $repository->findById((int) $page['id']),
             ];
             if ($conflict['server'] !== null) {
@@ -413,8 +423,7 @@ final class PageController extends Controller
         if ($request->expectsJson()) {
             return Response::json(['error' => ['message' => $message, 'conflict' => $conflict]], $status);
         }
-        $old = (array) $request->input();
-        $old['content_html'] = (new \OpenWiki\Security\HtmlSanitizer())->sanitize((string) ($old['content_html'] ?? ''));
+        $old['content_html'] = (new \OpenWiki\Security\HtmlSanitizer())->sanitize(is_string($old['content_html'] ?? null) ? $old['content_html'] : '');
 
 
         return $this->render('pages/editor', [

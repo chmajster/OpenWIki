@@ -5,7 +5,7 @@ declare(strict_types=1);
 return [
     'version' => '005_editor_drafts_and_revision_metadata',
     'up' => [
-        'ALTER TABLE page_revisions ADD COLUMN slug VARCHAR(255) NULL, ADD COLUMN parent_id BIGINT UNSIGNED NULL, ADD COLUMN tags_json TEXT NULL',
+        'ALTER TABLE page_revisions ADD COLUMN slug VARCHAR(255) NULL, ADD COLUMN parent_id BIGINT UNSIGNED NULL, ADD COLUMN tags_json TEXT NULL, ADD COLUMN conversion_backup_json MEDIUMTEXT NULL',
         <<<'SQL'
 CREATE TABLE IF NOT EXISTS page_editor_drafts (
     space_id BIGINT UNSIGNED NOT NULL,

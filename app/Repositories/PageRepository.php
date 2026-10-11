@@ -84,10 +84,10 @@ final class PageRepository
             $db->execute(
                 'INSERT INTO page_revisions
                  (page_id, revision_number, title, content_html, content_markdown, content_text, content_format,
-                  status, author_id, change_summary, slug, parent_id, tags_json, created_at)
+                  status, author_id, change_summary, slug, parent_id, tags_json, conversion_backup_json, created_at)
                  VALUES
                  (:page_id, 1, :title, :content_html, :content_markdown, :content_text, :content_format,
-                  :status, :author_id, :change_summary, :revision_slug, :revision_parent_id, :tags_json, UTC_TIMESTAMP())',
+                  :status, :author_id, :change_summary, :revision_slug, :revision_parent_id, :tags_json, :conversion_backup_json, UTC_TIMESTAMP())',
                 [
                     'page_id' => $pageId,
                     'title' => $data['title'],
@@ -101,6 +101,7 @@ final class PageRepository
                     'revision_slug' => $data['slug'],
                     'revision_parent_id' => $data['parent_id'],
                     'tags_json' => json_encode($data['tags'] ?? [], JSON_THROW_ON_ERROR),
+                    'conversion_backup_json' => isset($data['conversion_backup']) ? json_encode($data['conversion_backup'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) : null,
                 ]
             );
 
@@ -167,10 +168,10 @@ final class PageRepository
             $db->execute(
                 'INSERT INTO page_revisions
                  (page_id, revision_number, title, content_html, content_markdown, content_text, content_format,
-                  status, author_id, change_summary, slug, parent_id, tags_json, created_at)
+                  status, author_id, change_summary, slug, parent_id, tags_json, conversion_backup_json, created_at)
                  VALUES
                  (:page_id, :revision_number, :title, :content_html, :content_markdown, :content_text, :content_format,
-                  :status, :author_id, :change_summary, :revision_slug, :revision_parent_id, :tags_json, UTC_TIMESTAMP())',
+                  :status, :author_id, :change_summary, :revision_slug, :revision_parent_id, :tags_json, :conversion_backup_json, UTC_TIMESTAMP())',
                 [
                     'page_id' => (int) $current['id'],
                     'revision_number' => $newVersion,
@@ -185,6 +186,7 @@ final class PageRepository
                     'revision_slug' => $data['slug'],
                     'revision_parent_id' => $data['parent_id'],
                     'tags_json' => json_encode($data['tags'] ?? [], JSON_THROW_ON_ERROR),
+                    'conversion_backup_json' => isset($data['conversion_backup']) ? json_encode($data['conversion_backup'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) : null,
                 ]
             );
 

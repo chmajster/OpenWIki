@@ -79,6 +79,7 @@ final class PageDraftController extends Controller
         if ($context instanceof Response) return $context;
         if (($failure = $this->verifyCsrf($request)) !== null) return $failure;
         try {
+            $this->validateContentFields($request);
             $result = (new ContentService())->convert(
                 (string) $request->input('content_format', 'visual'), (string) $request->input('target_format', 'visual'),
                 (string) $request->input('content_html', ''), (string) $request->input('content_markdown', '')
@@ -95,6 +96,7 @@ final class PageDraftController extends Controller
         if ($context instanceof Response) return $context;
         if (($failure = $this->verifyCsrf($request)) !== null) return $failure;
         try {
+            $this->validateContentFields($request);
             $base = filter_var($request->input('base_version'), FILTER_VALIDATE_INT);
             if ($base === false || ($context['page'] !== null ? $base < 1 : $base !== 0)) {
                 throw new \InvalidArgumentException('Invalid base version.');
@@ -105,17 +107,13 @@ final class PageDraftController extends Controller
             );
             $payload = ['format' => $content['format'], 'html' => $content['html'],
                 'markdown' => $content['markdown'] ?? '', 'baseVersion' => $base];
-            foreach (['title' => 255, 'slug' => 255, 'parent_id' => 20, 'status' => 20, 'tags' => 1500, 'change_summary' => 500] as $field => $limit) {
+            foreach (['title' => 255, 'slug' => 255, 'parent_id' => 20, 'status' => 20, 'tags' => 4000, 'change_summary' => 500] as $field => $limit) {
                 $value = $request->input($field, '');
                 if (!is_string($value) || mb_strlen($value) > $limit) throw new \InvalidArgumentException('Invalid draft field: ' . $field);
                 $key = ['parent_id' => 'parentId', 'change_summary' => 'changeSummary'][$field] ?? $field;
                 $payload[$key] = $value;
             }
-            $backup = $request->input('conversion_backup');
-            if (is_array($backup)) {
-                $safe = (new ContentService())->normalize((string) ($backup['format'] ?? 'visual'), (string) ($backup['html'] ?? ''), (string) ($backup['markdown'] ?? ''));
-                $payload['conversionBackup'] = ['format' => $safe['format'], 'html' => $safe['html'], 'markdown' => $safe['markdown'] ?? ''];
-            }
+            $payload['conversionBackup'] = (new ContentService())->recoveryCopy($request->input('conversion_backup'));
             $sequence = filter_var($request->input('draft_sequence'), FILTER_VALIDATE_INT);
             if ($sequence === false || $sequence < 1) throw new \InvalidArgumentException('Invalid draft sequence.');
             $result = (new EditSessionService($this->app->database()))->saveEditorDraft(
@@ -128,6 +126,15 @@ final class PageDraftController extends Controller
             return Response::json(['data' => $result]);
         } catch (\InvalidArgumentException $exception) {
             return Response::json(['error' => ['message' => $exception->getMessage()]], 422);
+        }
+    }
+
+    private function validateContentFields(Request $request): void
+    {
+        foreach (['content_format', 'target_format', 'content_html', 'content_markdown'] as $field) {
+            if ($request->input($field) !== null && !is_string($request->input($field))) {
+                throw new \InvalidArgumentException($field . ' must be a string.');
+            }
         }
     }
 
