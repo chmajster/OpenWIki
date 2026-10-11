@@ -111,6 +111,19 @@ final class PageSavingTest extends TestCase
         self::assertSame(5, (int) $db->fetchOne('SELECT COUNT(*) AS n FROM webhook_deliveries d INNER JOIN webhooks w ON w.id = d.webhook_id WHERE w.created_by = ?', [$this->userId])['n']);
     }
 
+    public function testPreviewAndApiSaveUseTheSameRendererAndPreviewDoesNotWrite(): void
+    {
+        $markdown = "| Nazwa | Wynik |\n| --- | --- |\n| Żółć | OK |\n\n- [x] gotowe\n\n```php\necho 1;\n```";
+        $draft = new PageDraftController($this->app);
+        $preview = $draft->preview($this->request(['document_key' => 'new:10000000-1000-4000-8000-100000000000', 'content_markdown' => $markdown]), $this->space['space_key']);
+        self::assertSame(200, $preview->status());
+        self::assertSame(0, (int) $this->app->database()->fetchOne('SELECT COUNT(*) AS n FROM pages WHERE space_id = ?', [$this->space['id']])['n']);
+        $page = (new PageWriteService($this->app->database()))->save($this->space, null, ['title' => 'Preview', 'content_format' => 'markdown', 'content_markdown' => $markdown], $this->userId);
+        self::assertSame($page['content_html'], json_decode($preview->body(), true)['data']['html']);
+        $bad = $draft->preview($this->request(['document_key' => 'new:10000000-1000-4000-8000-100000000000', 'content_markdown' => ['invalid']]), $this->space['space_key']);
+        self::assertSame(422, $bad->status());
+    }
+
     public function testRepeatedConflictsKeepTheOriginalBaseAndDoNotCreateRevisionsOrEvents(): void
     {
         $writer = new PageWriteService($this->app->database());

@@ -129,6 +129,41 @@ final class PageDraftController extends Controller
         }
     }
 
+    public function preview(Request $request, string $spaceKey): Response
+    {
+        $context = $this->draftContext($request, $spaceKey, (string) $request->input('document_key', ''));
+        if ($context instanceof Response) return $context;
+        if (($failure = $this->verifyCsrf($request)) !== null) return $failure;
+        try {
+            $this->validateContentFields($request);
+            $content = (new ContentService())->normalize('markdown', '', (string) $request->input('content_markdown', ''));
+            return Response::json(['data' => ['html' => $content['html'], 'renderer' => 'commonmark-2', 'user_id' => (int) $this->app->auth()->user()['id']]]);
+        } catch (\InvalidArgumentException $exception) {
+            return Response::json(['error' => ['message' => $exception->getMessage()]], 422);
+        }
+    }
+
+    public function pages(Request $request, string $spaceKey): Response
+    {
+        $context = $this->draftContext($request, $spaceKey, (string) $request->query('document_key', ''));
+        if ($context instanceof Response) return $context;
+        $query = $request->query('q', '');
+        if (!is_string($query) || mb_strlen($query) > 100) return Response::json(['error' => ['message' => 'Search is limited to 100 characters.']], 422);
+        $rows = $this->app->database()->fetchAll(
+            'SELECT id, space_id, parent_id, inherit_acl, owner_id, author_id, title, slug, status FROM pages WHERE space_id = :space AND deleted_at IS NULL
+             AND (title LIKE :title OR slug LIKE :slug) ORDER BY title, id LIMIT 100',
+            ['space' => $context['space']['id'], 'title' => '%' . $query . '%', 'slug' => '%' . $query . '%']
+        );
+        $acl = new PageAclService($this->app);
+        $results = [];
+        foreach ($rows as $row) {
+            if (!$acl->canView($row, $context['space'])) continue;
+            $results[] = ['id' => (int) $row['id'], 'title' => $row['title'], 'url' => '/spaces/' . rawurlencode($spaceKey) . '/pages/' . rawurlencode($row['slug'])];
+            if (count($results) === 20) break;
+        }
+        return Response::json(['data' => ['pages' => $results, 'user_id' => (int) $this->app->auth()->user()['id']]]);
+    }
+
     private function validateContentFields(Request $request): void
     {
         foreach (['content_format', 'target_format', 'content_html', 'content_markdown'] as $field) {

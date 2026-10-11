@@ -20,6 +20,9 @@ final class HtmlSanitizer
 
     private const GLOBAL_ATTRIBUTES = ['id', 'class', 'title', 'aria-label', 'data-callout'];
     private const TAG_ATTRIBUTES = [
+        'ul' => ['data-type'],
+        'ol' => ['start'],
+        'li' => ['data-type', 'data-checked'],
         'a' => ['href', 'target', 'rel'],
         'img' => [
             'src', 'alt', 'width', 'height', 'loading',
@@ -29,6 +32,11 @@ final class HtmlSanitizer
         'th' => ['colspan', 'rowspan', 'scope'],
         'code' => ['data-language'],
     ];
+
+    public static function policy(): array
+    {
+        return ['tags' => self::ALLOWED_TAGS, 'global' => self::GLOBAL_ATTRIBUTES, 'attributes' => self::TAG_ATTRIBUTES];
+    }
 
     public function sanitize(string $html): string
     {
