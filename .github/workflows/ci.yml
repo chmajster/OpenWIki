@@ -47,9 +47,10 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - name: Install browser test dependencies
+      - name: Build editor and install browser test dependencies
         run: |
           npm ci
+          npm run build
           npx playwright install --with-deps chromium
 
       - name: Validate Composer metadata
@@ -59,7 +60,7 @@ jobs:
         run: composer install --no-interaction --prefer-dist --no-progress
 
       - name: PHP syntax
-        run: find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+        run: find . -type f -name '*.php' -not -path './vendor/*' -not -path './node_modules/*' -print0 | xargs -0 -n1 php -l
 
       - name: JavaScript syntax
         run: npm run check:js
@@ -95,6 +96,19 @@ jobs:
           name: browser-failure-traces
           path: test-results/
           retention-days: 3
+
+      - name: Verify PHP release package without Node.js runtime
+        shell: bash
+        run: |
+          composer install --no-dev --prefer-dist --no-interaction
+          node scripts/package-release.cjs "$RUNNER_TEMP/openwiki.tar.gz"
+          mkdir "$RUNNER_TEMP/openwiki-runtime"
+          tar -xzf "$RUNNER_TEMP/openwiki.tar.gz" -C "$RUNNER_TEMP/openwiki-runtime"
+          test -s "$RUNNER_TEMP/openwiki-runtime/public/assets/wiki-editor.js"
+          test ! -d "$RUNNER_TEMP/openwiki-runtime/node_modules"
+          test ! -f "$RUNNER_TEMP/openwiki-runtime/.env"
+          cd "$RUNNER_TEMP/openwiki-runtime"
+          php -r 'require "bootstrap/autoload.php"; $c = new OpenWiki\Wiki\ContentService(); if ($c->normalize("markdown", "", "# Release")["html"] !== "<h1>Release</h1>") exit(1);'
 
 
   installer-e2e:
@@ -134,6 +148,8 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1/health >/dev/null
           test "$(sudo stat -c '%a' /var/www/openwiki-ci/.env)" = "640"
           test "$(sudo stat -c '%a' /var/www/openwiki-ci/install.sh)" = "755"
+          test -s /var/www/openwiki-ci/public/assets/wiki-editor.js
+          curl --fail --silent --show-error http://127.0.0.1/assets/wiki-editor.js >/dev/null
           sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --status
 
       - name: Verify repair idempotency

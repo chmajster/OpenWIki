@@ -107,7 +107,7 @@ install_packages() {
   if [[ "$PKG_FAMILY" == "apt" ]]; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
-    apt-get install -y git curl ca-certificates nginx mariadb-server composer \
+    apt-get install -y git curl ca-certificates nginx mariadb-server composer nodejs npm \
       php-cli php-fpm php-mysql php-mbstring php-xml php-curl php-ldap php-zip php-gd
   else
     if ! command -v php >/dev/null 2>&1 || ! php -r 'exit(version_compare(PHP_VERSION, "8.2.0", ">=") ? 0 : 1);' >/dev/null 2>&1; then
@@ -116,7 +116,7 @@ install_packages() {
         dnf -y module enable php:8.2 >/dev/null
       fi
     fi
-    dnf install -y git curl ca-certificates nginx mariadb-server composer policycoreutils-python-utils \
+    dnf install -y git curl ca-certificates nginx mariadb-server composer nodejs npm policycoreutils-python-utils \
       php-cli php-fpm php-mysqlnd php-mbstring php-xml php-curl php-ldap php-zip php-gd
   fi
 
@@ -200,6 +200,10 @@ deploy_code() {
 
   cd "$INSTALL_DIR"
   composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+  node -e 'if (Number(process.versions.node.split(".")[0]) < 18) process.exit(1)' ||
+    fail "Budowanie edytora wymaga Node.js 18 lub nowszego."
+  npm ci --include=dev --no-audit --no-fund
+  npm run build
   mkdir -p storage/{attachments,backups,cache,temp,logs}
   chown -R root:"$WEB_USER" "$INSTALL_DIR"
   find "$INSTALL_DIR" -type d -exec chmod 0755 {} \;

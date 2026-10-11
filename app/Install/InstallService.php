@@ -40,6 +40,11 @@ final class InstallService
             }
             $writable[$path] = is_writable($path);
         }
+        $assets = [
+            'Composer runtime dependencies' => class_exists(\League\CommonMark\MarkdownConverter::class),
+            'Compiled editor assets' => is_readable($this->basePath . '/public/assets/wiki-editor.js')
+                && filesize($this->basePath . '/public/assets/wiki-editor.js') > 0,
+        ];
 
         return [
             'php' => [
@@ -49,8 +54,10 @@ final class InstallService
             ],
             'extensions' => $extensions,
             'writable' => $writable,
+            'assets' => $assets,
             'ok' => version_compare(PHP_VERSION, '8.2.0', '>=')
                 && !in_array(false, $extensions, true)
+                && !in_array(false, $assets, true)
                 && !in_array(false, $writable, true),
         ];
     }
