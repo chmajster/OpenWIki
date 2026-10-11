@@ -41,6 +41,17 @@ jobs:
           extensions: pdo_mysql, mbstring, openssl, dom, curl, phar, ldap, zip, gd
           coverage: none
 
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install browser test dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
       - name: Validate Composer metadata
         run: composer validate --strict
 
@@ -51,7 +62,7 @@ jobs:
         run: find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
 
       - name: JavaScript syntax
-        run: node --check public/assets/app.js
+        run: npm run check:js
 
       - name: Bash installer syntax
         run: bash -n install.sh
@@ -67,6 +78,23 @@ jobs:
           OPENWIKI_TEST_DB_USERNAME: root
           OPENWIKI_TEST_DB_PASSWORD: root
         run: vendor/bin/phpunit
+
+      - name: Real editor browser tests
+        env:
+          OPENWIKI_TEST_DB_HOST: 127.0.0.1
+          OPENWIKI_TEST_DB_PORT: 3306
+          OPENWIKI_TEST_DB_DATABASE: openwiki_test
+          OPENWIKI_TEST_DB_USERNAME: root
+          OPENWIKI_TEST_DB_PASSWORD: root
+        run: npm run test:browser
+
+      - name: Browser failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure-traces
+          path: test-results/
+          retention-days: 3
 
 
   installer-e2e:

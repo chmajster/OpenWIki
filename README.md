@@ -327,6 +327,20 @@ The Visual editor supports PNG, JPEG, GIF and WebP images through file selection
 SVG is intentionally not accepted as an uploaded image format because it may contain active content.
 
 
+## Editor saves and recovery
+
+The active editor format is the source of a document. Visual pages store sanitized HTML; Markdown pages store the original Markdown and derive their HTML and search text. Inactive editor buffers never replace that source. A format change through the API must include the converted source explicitly.
+
+Mode switches convert the current document. Markdown to Visual renders the supported Markdown syntax. Visual to Markdown compares the HTML before conversion with the rendered result; unsupported formatting such as underline, image presentation, tables or callout attributes requires reviewing a preview and source differences. The editor keeps the previous source for undo, includes it in recovery drafts, and stores it in the saved revision. History can restore the content before conversion as a new revision.
+
+Every update and revision restore requires the original `base_version`. A conflict shows the base, local and current server documents. Repeating the same save cannot advance that base or overwrite a concurrent edit. Only explicitly preparing the reviewed document against the displayed server version changes the base; another concurrent edit then causes another conflict.
+
+Recovery copies include content, title, slug, parent, status, tags, change summary and base version. They are isolated by account, Space, document and editor instance. New-page URLs receive a document identifier so a reload can recover that same document; separate new-page URLs are separate documents. Autosave acknowledges a particular snapshot, so typing while a request is in flight remains pending. Confirmed page saves acknowledge only the submitted copy and the selected recovered snapshot; newer copies and other tabs survive. Unconfirmed server drafts do not expire automatically. `cron:run` removes only acknowledged draft records older than 30 days.
+
+UI, API, import and restore share transactional validation, version checks, revisions, tags, backlinks, audit, watcher notifications and queued webhook events. Existing internal HTML links and `[[references]]` both contribute backlinks.
+
+Browser regression tests use the real login and editor forms, PHP routes and an isolated MySQL/MariaDB database. Install dependencies with `npm ci` and `npx playwright install chromium`, configure the same `OPENWIKI_TEST_DB_*` variables as the PHPUnit integration tests, and run `npm run test:browser`. The database name must end in `_test`; fixtures are created and removed automatically. Run against a disposable checkout/database with no live PHP server on port 8765. The suite temporarily manages the installation marker and restores it afterward. `npm run check:js` checks the shipped JavaScript syntax.
+
 ## REST API v1
 
 API clients authenticate with a Bearer token created under `/account/api-tokens`. Tokens are stored only as SHA-256 hashes and are shown in plaintext once.

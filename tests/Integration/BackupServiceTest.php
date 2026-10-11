@@ -66,7 +66,7 @@ final class BackupServiceTest extends TestCase
         self::assertFileExists($backup['path']);
         self::assertGreaterThan(0, $backup['size_bytes']);
         self::assertCount(1, $service->list());
-        self::assertSame($backup['path'], $service->find($backup['name']));
+        self::assertSame(realpath($backup['path']), $service->find($backup['name']));
         self::assertNull($service->find('../.env'));
 
         $archive = new PharData($backup['path']);
