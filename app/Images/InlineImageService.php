@@ -26,7 +26,7 @@ final class InlineImageService
 
     public function materializeDataImages(string $html, int $pageId, int $userId): array
     {
-        if (!str_contains($html, 'data:image/')) {
+        if (stripos($html, 'data:image/') === false) {
             return [
                 'html' => $html,
                 'text' => $this->plainText($html),
@@ -37,7 +37,7 @@ final class InlineImageService
         $document = new DOMDocument('1.0', 'UTF-8');
         $previous = libxml_use_internal_errors(true);
         $document->loadHTML(
-            '<!doctype html><html><body><div id="openwiki-inline-image-root">' . $html . '</div></body></html>',
+            '<!doctype html><html><head><meta charset="utf-8"></head><body><div id="openwiki-inline-image-root">' . $html . '</div></body></html>',
             LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
         );
         libxml_clear_errors();
@@ -50,7 +50,7 @@ final class InlineImageService
 
         $images = [];
         foreach ($root->getElementsByTagName('img') as $image) {
-            if ($image instanceof DOMElement && str_starts_with(trim($image->getAttribute('src')), 'data:image/')) {
+            if ($image instanceof DOMElement && stripos(trim($image->getAttribute('src')), 'data:image/') === 0) {
                 $images[] = $image;
             }
         }

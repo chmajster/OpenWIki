@@ -31,7 +31,17 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                         <form method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/restore">
                             <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                             <input type="hidden" name="revision" value="<?= (int) $revision['revision_number'] ?>">
+                            <input type="hidden" name="base_version" value="<?= (int) $page['version'] ?>">
                             <button class="button button--secondary" type="submit">Restore</button>
+                        </form>
+                    <?php endif; ?>
+                    <?php if ($canRestore && !empty($revision['conversion_backup_json'])): ?>
+                        <form method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/restore">
+                            <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                            <input type="hidden" name="revision" value="<?= (int) $revision['revision_number'] ?>">
+                            <input type="hidden" name="base_version" value="<?= (int) $page['version'] ?>">
+                            <input type="hidden" name="restore_conversion" value="1">
+                            <button class="button button--secondary" type="submit">Restore content before conversion</button>
                         </form>
                     <?php endif; ?>
                 </article>

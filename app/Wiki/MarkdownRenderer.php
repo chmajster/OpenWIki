@@ -98,6 +98,17 @@ final class MarkdownRenderer
 
     private function inline(string $value): string
     {
+        $tokens = [];
+        $value = preg_replace_callback('/\\\\([\\\\*`~\[\]])/u', static function (array $match) use (&$tokens): string {
+            $token = '@@OW_LITERAL_' . count($tokens) . '@@';
+            $tokens[$token] = htmlspecialchars($match[1], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            return $token;
+        }, $value) ?? $value;
+        $value = preg_replace_callback('/`([^`]+)`/u', static function (array $match) use (&$tokens): string {
+            $token = '@@OW_LITERAL_' . count($tokens) . '@@';
+            $tokens[$token] = '<code>' . htmlspecialchars($match[1], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</code>';
+            return $token;
+        }, $value) ?? $value;
         $escaped = htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
         $escaped = preg_replace_callback('/\[([^\]]+)\]\(([^\s)]+)\)/', function (array $match): string {
@@ -114,7 +125,7 @@ final class MarkdownRenderer
         $escaped = preg_replace('/(?<!\*)\*([^*]+)\*(?!\*)/u', '<em>$1</em>', $escaped) ?? $escaped;
         $escaped = preg_replace('/\x60([^\x60]+)\x60/u', '<code>$1</code>', $escaped) ?? $escaped;
 
-        return $escaped;
+        return strtr($escaped, $tokens);
     }
 
     private function safeUrl(string $url): bool

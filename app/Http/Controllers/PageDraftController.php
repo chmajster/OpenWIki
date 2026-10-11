@@ -59,43 +59,111 @@ final class PageDraftController extends Controller
 
     public function autosave(Request $request, string $spaceKey, string $slug): Response
     {
-        $context = $this->editablePage($request, $spaceKey, $slug);
-        if ($context instanceof Response) {
-            return $context;
-        }
+        return $this->saveEditorDraft($request, $spaceKey);
+    }
 
-        if (($failure = $this->verifyCsrf($request)) !== null) {
-            return $failure;
-        }
+    public function drafts(Request $request, string $spaceKey): Response
+    {
+        $context = $this->draftContext($request, $spaceKey, (string) $request->query('document_key', ''));
+        if ($context instanceof Response) return $context;
+        return Response::json(['data' => [
+            'drafts' => (new EditSessionService($this->app->database()))->editorDrafts(
+                (int) $context['space']['id'], (int) $this->app->auth()->user()['id'], $context['document_key']
+            ), 'user_id' => (int) $this->app->auth()->user()['id'],
+        ]]);
+    }
 
-        $baseVersion = filter_var($request->input('base_version'), FILTER_VALIDATE_INT);
-        if ($baseVersion === false || $baseVersion < 1) {
-            return Response::json([
-                'error' => ['code' => 'invalid_version', 'message' => 'Invalid base version.'],
-            ], 422);
-        }
-
+    public function convert(Request $request, string $spaceKey): Response
+    {
+        $context = $this->draftContext($request, $spaceKey, (string) $request->input('document_key', ''));
+        if ($context instanceof Response) return $context;
+        if (($failure = $this->verifyCsrf($request)) !== null) return $failure;
         try {
-            $content = (new ContentService())->normalize(
-                (string) $request->input('content_format', 'visual'),
-                (string) $request->input('content_html', ''),
-                (string) $request->input('content_markdown', '')
+            $this->validateContentFields($request);
+            $result = (new ContentService())->convert(
+                (string) $request->input('content_format', 'visual'), (string) $request->input('target_format', 'visual'),
+                (string) $request->input('content_html', ''), (string) $request->input('content_markdown', '')
             );
-
-            $user = $this->app->auth()->user();
-            $result = (new EditSessionService($this->app->database()))->saveDraft(
-                (int) $context['page']['id'],
-                (int) $user['id'],
-                (int) $baseVersion,
-                $content
-            );
-
             return Response::json(['data' => $result]);
         } catch (\InvalidArgumentException $exception) {
-            return Response::json([
-                'error' => ['code' => 'invalid_content', 'message' => $exception->getMessage()],
-            ], 422);
+            return Response::json(['error' => ['message' => $exception->getMessage()]], 422);
         }
+    }
+
+    public function saveEditorDraft(Request $request, string $spaceKey): Response
+    {
+        $context = $this->draftContext($request, $spaceKey, (string) $request->input('document_key', ''));
+        if ($context instanceof Response) return $context;
+        if (($failure = $this->verifyCsrf($request)) !== null) return $failure;
+        try {
+            $this->validateContentFields($request);
+            $base = filter_var($request->input('base_version'), FILTER_VALIDATE_INT);
+            if ($base === false || ($context['page'] !== null ? $base < 1 : $base !== 0)) {
+                throw new \InvalidArgumentException('Invalid base version.');
+            }
+            $content = (new ContentService())->normalize(
+                (string) $request->input('content_format', 'visual'),
+                (string) $request->input('content_html', ''), (string) $request->input('content_markdown', '')
+            );
+            $payload = ['format' => $content['format'], 'html' => $content['html'],
+                'markdown' => $content['markdown'] ?? '', 'baseVersion' => $base];
+            foreach (['title' => 255, 'slug' => 255, 'parent_id' => 20, 'status' => 20, 'tags' => 4000, 'change_summary' => 500] as $field => $limit) {
+                $value = $request->input($field, '');
+                if (!is_string($value) || mb_strlen($value) > $limit) throw new \InvalidArgumentException('Invalid draft field: ' . $field);
+                $key = ['parent_id' => 'parentId', 'change_summary' => 'changeSummary'][$field] ?? $field;
+                $payload[$key] = $value;
+            }
+            $payload['conversionBackup'] = (new ContentService())->recoveryCopy($request->input('conversion_backup'));
+            $sequence = filter_var($request->input('draft_sequence'), FILTER_VALIDATE_INT);
+            if ($sequence === false || $sequence < 1) throw new \InvalidArgumentException('Invalid draft sequence.');
+            $result = (new EditSessionService($this->app->database()))->saveEditorDraft(
+                (int) $context['space']['id'], (int) $this->app->auth()->user()['id'],
+                $context['document_key'], (string) $request->input('editor_id', ''), $sequence, $base, $payload
+            );
+            $result['stale'] = $context['page'] !== null && (int) $context['page']['version'] !== $base;
+            $result['current_version'] = (int) ($context['page']['version'] ?? 0);
+            $result['user_id'] = (int) $this->app->auth()->user()['id'];
+            return Response::json(['data' => $result]);
+        } catch (\InvalidArgumentException $exception) {
+            return Response::json(['error' => ['message' => $exception->getMessage()]], 422);
+        }
+    }
+
+    private function validateContentFields(Request $request): void
+    {
+        foreach (['content_format', 'target_format', 'content_html', 'content_markdown'] as $field) {
+            if ($request->input($field) !== null && !is_string($request->input($field))) {
+                throw new \InvalidArgumentException($field . ' must be a string.');
+            }
+        }
+    }
+
+    private function draftContext(Request $request, string $spaceKey, string $documentKey): array|Response
+    {
+        if (($failure = $this->requireAuth($request)) !== null) return $failure;
+        $user = $this->app->auth()->user();
+        if ($request->input('editor_user_id') !== null && (int) $request->input('editor_user_id') !== (int) $user['id']) {
+            return Response::json(['error' => ['message' => 'The signed-in account changed. Reopen the editor.']], 403);
+        }
+        $space = (new SpaceRepository($this->app->database()))->findByKey($spaceKey);
+        if ($space === null) return Response::json(['error' => ['message' => 'Space not found.']], 404);
+        $page = null;
+        if (preg_match('/^page:([1-9][0-9]*)$/D', $documentKey, $match)) {
+            $page = (new PageRepository($this->app->database()))->findById((int) $match[1]);
+            if ($page === null || (int) $page['space_id'] !== (int) $space['id']) {
+                return Response::json(['error' => ['message' => 'Page not found.']], 404);
+            }
+            if (!(new PageAclService($this->app))->canEdit($page, $space)) {
+                return Response::json(['error' => ['message' => 'Permission denied.']], 403);
+            }
+        } elseif (preg_match('/^new:[a-f0-9-]{36}$/D', $documentKey)) {
+            if (!$this->app->auth()->can('page.create') || !(new SpaceAccessService($this->app))->canEdit($space)) {
+                return Response::json(['error' => ['message' => 'Permission denied.']], 403);
+            }
+        } else {
+            return Response::json(['error' => ['message' => 'Invalid document identity.']], 422);
+        }
+        return ['space' => $space, 'page' => $page, 'document_key' => $documentKey];
     }
 
     private function editablePage(Request $request, string $spaceKey, string $slug): array|Response

@@ -5,24 +5,18 @@ declare(strict_types=1);
 namespace OpenWiki\Http\Controllers;
 
 use OpenWiki\Attachments\AttachmentService;
-use OpenWiki\Audit\AuditLogger;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
 use OpenWiki\Http\Controller;
-use OpenWiki\Images\InlineImageService;
 use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Wiki\CommentService;
-use OpenWiki\Wiki\ContentService;
-use OpenWiki\Wiki\EditSessionService;
 use OpenWiki\Wiki\MacroService;
 use OpenWiki\Wiki\PageEngagementService;
-use OpenWiki\Wiki\Slugger;
 use OpenWiki\Wiki\WikiMetadataService;
-use OpenWiki\Webhooks\WebhookService;
 
 final class PageController extends Controller
 {
@@ -80,124 +74,20 @@ final class PageController extends Controller
         }
 
         try {
-            $data = $this->validatedPageData($request, $space, null);
             $user = $this->app->auth()->user();
-            $data['space_id'] = (int) $space['id'];
-            $data['author_id'] = (int) $user['id'];
-            $data['owner_id'] = (int) $user['id'];
-
-            if (
-                str_contains((string) $data['content_html'], 'data:image/')
-                && !$this->app->auth()->can('attachment.upload')
-            ) {
-                throw new \InvalidArgumentException('You do not have permission to upload pasted images.');
+            if ($request->input('editor_user_id') !== null && (int) $request->input('editor_user_id') !== (int) $user['id']) {
+                throw new \DomainException('The signed-in account changed. Reopen the editor for this account.');
             }
-
-            $metadata = new WikiMetadataService($this->app->database());
-            $tagInput = (string) $request->input('tags', '');
-            $metadata->normalizeTags($tagInput);
-            $decorated = $metadata->decorateWikiLinks(
-                (int) $space['id'],
-                (string) $space['space_key'],
-                (string) $data['content_html']
+            $saved = (new \OpenWiki\Wiki\PageWriteService($this->app->database(), $this->app->basePath()))->save(
+                $space, null, (array) $request->input(), (int) $user['id'], $request,
+                $this->pageWritePolicy($space), $this->app->auth()->can('attachment.upload')
             );
-            $data['content_html'] = $decorated['html'];
-
-            $inlineImages = new InlineImageService(
-                $this->app->database(),
-                $this->app->basePath()
-            );
-
-            try {
-                $pageId = $this->app->database()->transaction(
-                    function () use ($data, $metadata, $tagInput, $decorated, $space, $user, $inlineImages): int {
-                        $id = (new PageRepository($this->app->database()))->create($data);
-
-                        $materialized = $inlineImages->materializeDataImages(
-                            (string) $data['content_html'],
-                            $id,
-                            (int) $user['id']
-                        );
-                        if ($materialized['attachment_ids'] !== []) {
-                            $this->app->database()->execute(
-                                'UPDATE pages
-                                 SET content_html = :content_html, content_text = :content_text
-                                 WHERE id = :id',
-                                [
-                                    'content_html' => $materialized['html'],
-                                    'content_text' => $materialized['text'],
-                                    'id' => $id,
-                                ]
-                            );
-                            $this->app->database()->execute(
-                                'UPDATE page_revisions
-                                 SET content_html = :content_html, content_text = :content_text
-                                 WHERE page_id = :page_id AND revision_number = 1',
-                                [
-                                    'content_html' => $materialized['html'],
-                                    'content_text' => $materialized['text'],
-                                    'page_id' => $id,
-                                ]
-                            );
-                        }
-
-                        $metadata->syncTags($id, $tagInput);
-                        $metadata->syncLinks($id, (int) $space['id'], $decorated['references']);
-                        $metadata->refreshSpaceLinks((int) $space['id']);
-                        return $id;
-                    }
-                );
-                $inlineImages->clearTracking();
-            } catch (\Throwable $imageTransactionError) {
-                $inlineImages->cleanupCreatedFiles();
-                throw $imageTransactionError;
+            $url = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($saved['slug']);
+            if ($request->expectsJson()) {
+                return Response::json(['data' => ['page' => $saved, 'url' => $url, 'user_id' => (int) $user['id']]]);
             }
-
-            (new AuditLogger($this->app->database()))->log(
-                'PAGE_CREATED',
-                'page',
-                $pageId,
-                (int) $user['id'],
-                $request,
-                null,
-                ['title' => $data['title'], 'slug' => $data['slug'], 'status' => $data['status']]
-            );
-
-            try {
-                (new PageEngagementService($this->app->database()))->notifyWatchers(
-                    $pageId,
-                    (int) $space['id'],
-                    (int) $user['id'],
-                    'page.created',
-                    'New page: ' . $data['title'],
-                    '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($data['slug'])
-                );
-            } catch (\Throwable $notificationError) {
-                error_log('[OpenWiki notification] ' . $notificationError->getMessage());
-            }
-
-            try {
-                $webhooks = new WebhookService($this->app->database());
-                $payload = [
-                    'id' => $pageId,
-                    'space_id' => (int) $space['id'],
-                    'title' => $data['title'],
-                    'slug' => $data['slug'],
-                    'status' => $data['status'],
-                    'author_id' => (int) $user['id'],
-                ];
-                $webhooks->queue('page.created', $payload);
-                if ($data['status'] === 'published') {
-                    $webhooks->queue('page.published', $payload);
-                }
-            } catch (\Throwable $webhookError) {
-                error_log('[OpenWiki webhook queue] ' . $webhookError->getMessage());
-            }
-
-            Session::flash('success', 'Page created.');
-            return Response::redirect(
-                '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($data['slug'])
-            );
+            Session::flash('success', 'Page saved.');
+            return Response::redirect($url);
         } catch (\Throwable $exception) {
             return $this->editorError($request, $space, null, $exception);
         }
@@ -315,16 +205,11 @@ final class PageController extends Controller
         }
 
         $user = $this->app->auth()->user();
-        $serverDraft = (new EditSessionService($this->app->database()))->draft(
-            (int) $page['id'],
-            (int) $user['id']
-        );
-
         return $this->render('pages/editor', [
             'title' => 'Edit ' . $page['title'],
             'space' => $space,
             'page' => $page,
-            'serverDraft' => $serverDraft,
+            'serverDraft' => null,
             'pages' => $this->visibleTree($space),
             'templates' => [],
             'tags' => (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
@@ -356,7 +241,8 @@ final class PageController extends Controller
         }
 
         $repository = new PageRepository($this->app->database());
-        $current = $repository->findBySlug((int) $space['id'], $slug);
+        $current = $repository->findBySlug((int) $space['id'], $slug)
+            ?? $repository->redirectTarget((int) $space['id'], $slug);
         if ($current === null) {
             return $this->render('errors/404', ['title' => 'Page not found'], 404);
         }
@@ -365,141 +251,20 @@ final class PageController extends Controller
         }
 
         try {
-            $data = $this->validatedPageData($request, $space, $current);
             $user = $this->app->auth()->user();
-            $data['author_id'] = (int) $user['id'];
-
-            $baseVersion = filter_var($request->input('base_version'), FILTER_VALIDATE_INT);
-            if ($baseVersion === false || $baseVersion < 1) {
-                throw new \InvalidArgumentException('Invalid base page version.');
+            if ($request->input('editor_user_id') !== null && (int) $request->input('editor_user_id') !== (int) $user['id']) {
+                throw new \DomainException('The signed-in account changed. Reopen the editor for this account.');
             }
-            $data['base_version'] = (int) $baseVersion;
-
-            if (
-                str_contains((string) $data['content_html'], 'data:image/')
-                && !$this->app->auth()->can('attachment.upload')
-            ) {
-                throw new \InvalidArgumentException('You do not have permission to upload pasted images.');
-            }
-
-            $metadata = new WikiMetadataService($this->app->database());
-            $tagInput = (string) $request->input('tags', '');
-            $metadata->normalizeTags($tagInput);
-            $decorated = $metadata->decorateWikiLinks(
-                (int) $space['id'],
-                (string) $space['space_key'],
-                (string) $data['content_html']
+            $saved = (new \OpenWiki\Wiki\PageWriteService($this->app->database(), $this->app->basePath()))->save(
+                $space, $current, (array) $request->input(), (int) $user['id'], $request,
+                $this->pageWritePolicy($space), $this->app->auth()->can('attachment.upload')
             );
-            $data['content_html'] = $decorated['html'];
-
-            $before = ['title' => $current['title'], 'slug' => $current['slug'], 'status' => $current['status'], 'version' => $current['version']];
-            $inlineImages = new InlineImageService(
-                $this->app->database(),
-                $this->app->basePath()
-            );
-
-            try {
-                $result = $this->app->database()->transaction(
-                    function () use (
-                        $repository,
-                        $current,
-                        $data,
-                        $metadata,
-                        $tagInput,
-                        $decorated,
-                        $space,
-                        $user,
-                        $inlineImages
-                    ): array {
-                        $updated = $repository->update($current, $data);
-
-                        $materialized = $inlineImages->materializeDataImages(
-                            (string) $data['content_html'],
-                            (int) $current['id'],
-                            (int) $user['id']
-                        );
-                        if ($materialized['attachment_ids'] !== []) {
-                            $this->app->database()->execute(
-                                'UPDATE pages
-                                 SET content_html = :content_html, content_text = :content_text
-                                 WHERE id = :id',
-                                [
-                                    'content_html' => $materialized['html'],
-                                    'content_text' => $materialized['text'],
-                                    'id' => (int) $current['id'],
-                                ]
-                            );
-                            $this->app->database()->execute(
-                                'UPDATE page_revisions
-                                 SET content_html = :content_html, content_text = :content_text
-                                 WHERE page_id = :page_id AND revision_number = :revision_number',
-                                [
-                                    'content_html' => $materialized['html'],
-                                    'content_text' => $materialized['text'],
-                                    'page_id' => (int) $current['id'],
-                                    'revision_number' => (int) $updated['version'],
-                                ]
-                            );
-                        }
-
-                        $metadata->syncTags((int) $current['id'], $tagInput);
-                        $metadata->syncLinks((int) $current['id'], (int) $space['id'], $decorated['references']);
-                        $metadata->refreshSpaceLinks((int) $space['id']);
-                        return $updated;
-                    }
-                );
-                $inlineImages->clearTracking();
-            } catch (\Throwable $imageTransactionError) {
-                $inlineImages->cleanupCreatedFiles();
-                throw $imageTransactionError;
+            $url = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($saved['slug']);
+            if ($request->expectsJson()) {
+                return Response::json(['data' => ['page' => $saved, 'url' => $url, 'user_id' => (int) $user['id']]]);
             }
-
-            (new AuditLogger($this->app->database()))->log(
-                'PAGE_UPDATED',
-                'page',
-                (int) $current['id'],
-                (int) $user['id'],
-                $request,
-                $before,
-                ['title' => $data['title'], 'slug' => $data['slug'], 'status' => $data['status'], 'version' => $result['version']]
-            );
-
-            try {
-                (new PageEngagementService($this->app->database()))->notifyWatchers(
-                    (int) $current['id'],
-                    (int) $space['id'],
-                    (int) $user['id'],
-                    'page.updated',
-                    'Page updated: ' . $data['title'],
-                    '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($data['slug'])
-                );
-            } catch (\Throwable $notificationError) {
-                error_log('[OpenWiki notification] ' . $notificationError->getMessage());
-            }
-
-            try {
-                $webhooks = new WebhookService($this->app->database());
-                $payload = [
-                    'id' => (int) $current['id'],
-                    'space_id' => (int) $space['id'],
-                    'title' => $data['title'],
-                    'slug' => $data['slug'],
-                    'status' => $data['status'],
-                    'version' => $result['version'],
-                    'author_id' => (int) $user['id'],
-                ];
-                $webhooks->queue('page.updated', $payload);
-                if ($data['status'] === 'published' && $current['status'] !== 'published') {
-                    $webhooks->queue('page.published', $payload);
-                }
-            } catch (\Throwable $webhookError) {
-                error_log('[OpenWiki webhook queue] ' . $webhookError->getMessage());
-            }
-
             Session::flash('success', 'Page saved.');
-            return Response::redirect(
-                '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($data['slug'])
-            );
+            return Response::redirect($url);
         } catch (\Throwable $exception) {
             return $this->editorError($request, $space, $current, $exception);
         }
@@ -557,7 +322,8 @@ final class PageController extends Controller
         }
 
         $repository = new PageRepository($this->app->database());
-        $page = $repository->findBySlug((int) $space['id'], $slug);
+        $page = $repository->findBySlug((int) $space['id'], $slug)
+            ?? $repository->redirectTarget((int) $space['id'], $slug);
         $revisionNumber = filter_var($request->input('revision'), FILTER_VALIDATE_INT);
 
         if ($page === null || $revisionNumber === false || $revisionNumber < 1) {
@@ -576,153 +342,32 @@ final class PageController extends Controller
             return $this->render('errors/403', ['title' => 'Publishing permission required'], 403);
         }
 
-        $user = $this->app->auth()->user();
-        $metadata = new WikiMetadataService($this->app->database());
-        $decorated = $metadata->decorateWikiLinks(
-            (int) $space['id'],
-            (string) $space['space_key'],
-            (string) $revision['content_html']
-        );
-        $revision['content_html'] = $decorated['html'];
-
-        $newVersion = $this->app->database()->transaction(
-            function () use ($repository, $page, $revision, $user, $metadata, $decorated, $space): int {
-                $version = $repository->restore($page, $revision, (int) $user['id']);
-                $metadata->syncLinks((int) $page['id'], (int) $space['id'], $decorated['references']);
-                $metadata->refreshSpaceLinks((int) $space['id']);
-                return $version;
-            }
-        );
-
-        (new AuditLogger($this->app->database()))->log(
-            'PAGE_REVISION_RESTORED',
-            'page',
-            (int) $page['id'],
-            (int) $user['id'],
-            $request,
-            ['version' => $page['version']],
-            ['version' => $newVersion, 'restored_revision' => (int) $revisionNumber]
-        );
-
         try {
-            (new PageEngagementService($this->app->database()))->notifyWatchers(
-                (int) $page['id'],
-                (int) $space['id'],
-                (int) $user['id'],
-                'page.updated',
-                'Page revision restored: ' . $page['title'],
-                '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($page['slug'])
+            $input = $revision;
+            $input['slug'] = $revision['slug'] ?? $page['slug'];
+            $input['parent_id'] = $revision['tags_json'] === null ? $page['parent_id'] : $revision['parent_id'];
+            $input['tags'] = $revision['tags_json'] === null
+                ? array_column((new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']), 'name')
+                : json_decode($revision['tags_json'], true, 512, JSON_THROW_ON_ERROR);
+            $input['base_version'] = $request->input('base_version');
+            $input['change_summary'] = 'Restored revision ' . (int) $revisionNumber;
+            if ((string) $request->input('restore_conversion', '') === '1') {
+                if ($revision['conversion_backup_json'] === null) throw new \InvalidArgumentException('This revision has no conversion recovery copy.');
+                $backup = json_decode($revision['conversion_backup_json'], true, 512, JSON_THROW_ON_ERROR);
+                $input['content_format'] = $backup['format'];
+                $input['content_html'] = $backup['html'];
+                $input['content_markdown'] = $backup['markdown'];
+                $input['change_summary'] = 'Restored content before conversion in revision ' . (int) $revisionNumber;
+            }
+            $saved = (new \OpenWiki\Wiki\PageWriteService($this->app->database(), $this->app->basePath()))->save(
+                $space, $page, $input, (int) $this->app->auth()->user()['id'], $request,
+                $this->pageWritePolicy($space), $this->app->auth()->can('attachment.upload'), (int) $revisionNumber
             );
-        } catch (\Throwable $notificationError) {
-            error_log('[OpenWiki notification] ' . $notificationError->getMessage());
+            Session::flash('success', 'Revision restored as a new version.');
+            return Response::redirect('/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($saved['slug']));
+        } catch (\Throwable $exception) {
+            return $this->editorError($request, $space, $page, $exception, $input ?? null);
         }
-
-        Session::flash('success', 'Revision restored as a new version.');
-        return Response::redirect(
-            '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($page['slug'])
-        );
-    }
-
-    private function validatedPageData(Request $request, array $space, ?array $current): array
-    {
-        $title = trim((string) $request->input('title', ''));
-        if ($title === '' || mb_strlen($title) > 255) {
-            throw new \InvalidArgumentException('Page title is required and may contain at most 255 characters.');
-        }
-
-        $slugger = new Slugger();
-        $slugInput = trim((string) $request->input('slug', ''));
-        $slug = $slugger->slug($slugInput === '' ? $title : $slugInput);
-
-        $status = (string) $request->input('status', 'draft');
-        if (!in_array($status, ['draft', 'published', 'archived'], true)) {
-            throw new \InvalidArgumentException('Invalid page status.');
-        }
-
-        if ($status === 'published' && !$this->app->auth()->can('page.publish')) {
-            throw new \InvalidArgumentException('You do not have permission to publish pages.');
-        }
-        if ($status === 'archived' && !$this->app->auth()->can('page.archive')) {
-            throw new \InvalidArgumentException('You do not have permission to archive pages.');
-        }
-        if ($current !== null) {
-            $pageAccess = new PageAclService($this->app);
-            if ($status === 'published' && !$pageAccess->can($current, $space, 'page.publish')) {
-                throw new \InvalidArgumentException('Page ACL does not allow publishing this page.');
-            }
-            if ($status === 'archived' && !$pageAccess->can($current, $space, 'page.archive')) {
-                throw new \InvalidArgumentException('Page ACL does not allow archiving this page.');
-            }
-        }
-
-        $parentId = $request->input('parent_id');
-        $parentId = ($parentId === null || $parentId === '') ? null : filter_var($parentId, FILTER_VALIDATE_INT);
-        if ($parentId === false || (is_int($parentId) && $parentId < 1)) {
-            throw new \InvalidArgumentException('Invalid parent page.');
-        }
-
-        if ($parentId !== null) {
-            $parent = (new PageRepository($this->app->database()))->findById((int) $parentId);
-            if ($parent === null || (int) $parent['space_id'] !== (int) $space['id']) {
-                throw new \InvalidArgumentException('Parent page must belong to the same space.');
-            }
-
-            $pageAccess = new PageAclService($this->app);
-            if ($current === null) {
-                if (!$pageAccess->can($parent, $space, 'page.create')) {
-                    throw new \InvalidArgumentException('You cannot create a child page under the selected parent.');
-                }
-            } else {
-                $parentChanged = (int) ($current['parent_id'] ?? 0) !== (int) $parentId;
-                if ($parentChanged) {
-                    if (
-                        !$this->app->auth()->can('page.move')
-                        || !$pageAccess->can($current, $space, 'page.move')
-                        || !$pageAccess->canView($parent, $space)
-                    ) {
-                        throw new \InvalidArgumentException('You do not have permission to move this page to the selected parent.');
-                    }
-                }
-            }
-
-            if (
-                $current !== null
-                && (new PageRepository($this->app->database()))->wouldCreateCycle((int) $current['id'], (int) $parentId)
-            ) {
-                throw new \InvalidArgumentException('The selected parent would create a cycle in the page tree.');
-            }
-        }
-
-        if (
-            $current !== null
-            && $parentId === null
-            && $current['parent_id'] !== null
-            && (
-                !$this->app->auth()->can('page.move')
-                || !(new PageAclService($this->app))->can($current, $space, 'page.move')
-            )
-        ) {
-            throw new \InvalidArgumentException('You do not have permission to move this page to the root level.');
-        }
-
-        $format = (string) $request->input('content_format', 'visual');
-        $content = (new ContentService())->normalize(
-            $format,
-            (string) $request->input('content_html', ''),
-            (string) $request->input('content_markdown', '')
-        );
-
-        return [
-            'parent_id' => $parentId,
-            'title' => $title,
-            'slug' => $slug,
-            'content_html' => $content['html'],
-            'content_markdown' => $content['markdown'],
-            'content_text' => $content['text'],
-            'content_format' => $content['format'],
-            'status' => $status,
-            'change_summary' => mb_substr(trim((string) $request->input('change_summary', '')), 0, 500),
-        ];
     }
 
     private function visibleTree(array $space): array
@@ -742,30 +387,51 @@ final class PageController extends Controller
         return $space ?? $this->render('errors/404', ['title' => 'Space not found'], 404);
     }
 
-    private function editorError(Request $request, array $space, ?array $page, \Throwable $exception): Response
+    private function editorError(Request $request, array $space, ?array $page, \Throwable $exception, ?array $document = null): Response
     {
         error_log('[OpenWiki page save] ' . $exception->getMessage());
 
         $message = match (true) {
-            $exception->getMessage() === 'EDIT_CONFLICT' => 'This page changed after you opened the editor. Reload the page before saving again.',
+            $exception->getMessage() === 'EDIT_CONFLICT' => 'This page changed after you opened the editor. Compare all three versions and resolve the conflict explicitly.',
             str_contains(strtolower($exception->getMessage()), 'duplicate') => 'A page with that slug already exists in this space.',
-            $exception instanceof \InvalidArgumentException => $exception->getMessage(),
+            $exception instanceof \InvalidArgumentException, $exception instanceof \DomainException => $exception->getMessage(),
             default => 'Unable to save the page.',
         };
 
         $repository = new PageRepository($this->app->database());
+        $old = $document ?? (array) $request->input();
+        $baseVersion = (int) ($old['base_version'] ?? 0);
+        $conflict = null;
+        if ($exception->getMessage() === 'EDIT_CONFLICT' && $page !== null) {
+            $conflict = [
+                'base_version' => $baseVersion,
+                'base' => $repository->revision((int) $page['id'], $baseVersion),
+                'local' => $old,
+                'server' => $repository->findById((int) $page['id']),
+            ];
+            if ($conflict['server'] !== null) {
+                $conflict['server']['tags'] = array_column((new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']), 'name');
+            }
+        }
+        $status = match (true) {
+            $exception->getMessage() === 'EDIT_CONFLICT' => 409,
+            $exception instanceof \DomainException => 403,
+            $exception instanceof \InvalidArgumentException => 422,
+            str_contains(strtolower($exception->getMessage()), 'duplicate') => 422,
+            default => 500,
+        };
+        if ($request->expectsJson()) {
+            return Response::json(['error' => ['message' => $message, 'conflict' => $conflict]], $status);
+        }
+        $old['content_html'] = (new \OpenWiki\Security\HtmlSanitizer())->sanitize(is_string($old['content_html'] ?? null) ? $old['content_html'] : '');
+
 
         return $this->render('pages/editor', [
             'title' => $page === null ? 'Create page' : 'Edit ' . $page['title'],
             'space' => $space,
             'page' => $page,
-            'serverDraft' => $page === null
-                ? null
-                : (new EditSessionService($this->app->database()))->draft(
-                    (int) $page['id'],
-                    (int) $this->app->auth()->user()['id']
-                ),
-            'pages' => $repository->tree((int) $space['id']),
+            'serverDraft' => null,
+            'pages' => $this->visibleTree($space),
             'templates' => $page === null
                 ? $this->app->database()->fetchAll('SELECT id, name, description, content_html, content_markdown FROM page_templates ORDER BY is_system DESC, name ASC')
                 : [],
@@ -782,7 +448,8 @@ final class PageController extends Controller
                 ? '/spaces/' . rawurlencode($space['space_key']) . '/pages'
                 : '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($page['slug']),
             'formError' => $message,
-            'old' => (array) $request->input(),
-        ], $exception->getMessage() === 'EDIT_CONFLICT' ? 409 : 422);
+            'old' => $old,
+            'conflict' => $conflict,
+        ], $status);
     }
 }

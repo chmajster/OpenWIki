@@ -9,6 +9,7 @@ use DOMElement;
 use DOMNode;
 use DOMText;
 use OpenWiki\Core\Database;
+use OpenWiki\Core\Env;
 
 final class WikiMetadataService
 {
@@ -22,6 +23,7 @@ final class WikiMetadataService
         $tags = [];
 
         foreach ($values ?: [] as $value) {
+            if (!is_string($value)) throw new \InvalidArgumentException('Each tag must be a string.');
             $name = trim((string) $value);
             $name = ltrim($name, '#');
             $name = preg_replace('/\s+/u', ' ', $name) ?? $name;
@@ -110,14 +112,14 @@ final class WikiMetadataService
 
     public function decorateWikiLinks(int $spaceId, string $spaceKey, string $html): array
     {
-        if ($html === '' || !str_contains($html, '[[')) {
+        if ($html === '') {
             return ['html' => $html, 'references' => []];
         }
 
         $document = new DOMDocument('1.0', 'UTF-8');
         $previous = libxml_use_internal_errors(true);
         $document->loadHTML(
-            '<!doctype html><html><body><div id="openwiki-wiki-root">' . $html . '</div></body></html>',
+            '<!doctype html><html><head><meta charset="utf-8"></head><body><div id="openwiki-wiki-root">' . $html . '</div></body></html>',
             LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
         );
         libxml_clear_errors();
@@ -267,7 +269,7 @@ final class WikiMetadataService
     public function backlinks(int $pageId): array
     {
         return $this->database->fetchAll(
-            'SELECT p.id, p.space_id, p.title, p.slug, p.status, p.owner_id, p.author_id,
+            'SELECT DISTINCT p.id, p.space_id, p.title, p.slug, p.status, p.owner_id, p.author_id,
                     p.parent_id, p.inherit_acl, p.updated_at, u.username AS author_username,
                     s.space_key, s.name AS space_name, s.visibility AS space_visibility,
                     s.owner_id AS space_owner_id, s.status AS space_status, s.deleted_at AS space_deleted_at
@@ -313,6 +315,23 @@ final class WikiMetadataService
 
         foreach ($children as $child) {
             if ($child instanceof DOMElement) {
+                if (strtolower($child->tagName) === 'a') {
+                    $href = $child->getAttribute('href');
+                    $host = parse_url($href, PHP_URL_HOST);
+                    $localHost = parse_url((string) Env::get('APP_URL', ''), PHP_URL_HOST);
+                    $path = $host === null || (is_string($host) && is_string($localHost) && strcasecmp($host, $localHost) === 0)
+                        ? parse_url($href, PHP_URL_PATH) : null;
+                    $prefix = '/spaces/' . rawurlencode($spaceKey) . '/';
+                    if (is_string($path) && str_starts_with($path, $prefix)) {
+                        $suffix = substr($path, strlen($prefix));
+                        if (preg_match('#^(?:wiki|pages)/([^/]+)$#u', $suffix, $match)) {
+                            $reference = trim(rawurldecode($match[1]));
+                            if ($reference !== '' && mb_strlen($reference) <= 255) {
+                                $references[mb_strtolower($reference)] = $reference;
+                            }
+                        }
+                    }
+                }
                 if (in_array(strtolower($child->tagName), ['a', 'code', 'pre'], true)) {
                     continue;
                 }

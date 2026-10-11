@@ -1,0 +1,11 @@
+{
+  "name": "openwiki-browser-tests",
+  "private": true,
+  "scripts": {
+    "test:browser": "playwright test",
+    "check:js": "node --check public/assets/app.js && node --check public/assets/wiki-editor.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0"
+  }
+}

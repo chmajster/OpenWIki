@@ -43,7 +43,7 @@ final class HtmlSanitizer
         $document = new DOMDocument('1.0', 'UTF-8');
         $previous = libxml_use_internal_errors(true);
         $document->loadHTML(
-            '<!doctype html><html><body><div id="openwiki-root">' . $html . '</div></body></html>',
+            '<!doctype html><html><head><meta charset="utf-8"></head><body><div id="openwiki-root">' . $html . '</div></body></html>',
             LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
         );
         libxml_clear_errors();
@@ -72,6 +72,12 @@ final class HtmlSanitizer
             if ($child instanceof DOMElement) {
                 $tag = strtolower($child->tagName);
                 if (!in_array($tag, self::ALLOWED_TAGS, true)) {
+                    if (in_array($tag, ['script', 'style', 'iframe', 'object', 'embed', 'svg', 'math'], true)) {
+                        $node->removeChild($child);
+                        $child = $next;
+                        continue;
+                    }
+                    $this->cleanChildren($child);
                     while ($child->firstChild) {
                         $node->insertBefore($child->firstChild, $child);
                     }
