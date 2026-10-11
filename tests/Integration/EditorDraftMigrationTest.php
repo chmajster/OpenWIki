@@ -41,13 +41,13 @@ final class EditorDraftMigrationTest extends TestCase
             self::assertSame([], $runner->migrate());
             $migrated = $db->fetchOne('SELECT content_html, document_json FROM pages WHERE id = ?', [$page]);
             self::assertSame('<p>Server</p>', $migrated['content_html']);
-            self::assertSame(['version' => 1, 'format' => 'visual', 'source' => '<p>Server</p>'], json_decode($migrated['document_json'], true));
+            self::assertDocument(['version' => 1, 'format' => 'visual', 'source' => '<p>Server</p>'], $migrated['document_json']);
             $historical = $db->fetchOne('SELECT content_html, document_json FROM page_revisions WHERE page_id = ?', [$page]);
             self::assertSame($oldRevision, $historical['content_html']);
             self::assertSame($oldRevision, json_decode($historical['document_json'], true)['source']);
             $preserved = $db->fetchOne('SELECT content_format, content_markdown, content_html, document_json FROM pages WHERE id = ?', [$inconsistent]);
             self::assertSame('markdown', $preserved['content_format']); self::assertNull($preserved['content_markdown']);
-            self::assertSame(['version' => 1, 'format' => 'visual', 'source' => '<p>Only preserved HTML</p>'], json_decode($preserved['document_json'], true));
+            self::assertDocument(['version' => 1, 'format' => 'visual', 'source' => '<p>Only preserved HTML</p>'], $preserved['document_json']);
             $service = new EditSessionService($db);
             $drafts = $service->editorDrafts($space, $user, 'page:' . $page);
             self::assertCount(1, $drafts);
@@ -60,5 +60,12 @@ final class EditorDraftMigrationTest extends TestCase
         } finally {
             $admin->pdo()->exec('DROP DATABASE `' . $name . '`');
         }
+    }
+    private static function assertDocument(array $expected, string $serialized): void
+    {
+        $actual = json_decode($serialized, true, 512, JSON_THROW_ON_ERROR);
+        // Native MySQL JSON normalizes object key order; MariaDB retains insertion order.
+        ksort($expected); ksort($actual);
+        self::assertSame($expected, $actual);
     }
 }

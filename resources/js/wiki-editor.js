@@ -125,7 +125,7 @@ if (editorRoot) {
     const persistLocalRecovery = () => {
         const captured = snapshot();
         return localRecovery.save(recoveryKey, captured).then((ok) => {
-            localState.textContent = ok ? 'Zapisano lokalnie o ' + new Date().toLocaleTimeString() : 'Lokalny magazyn jest niedostępny lub pełny. Brak lokalnej kopii tej zmiany.';
+            localState.textContent = ok ? 'Zapisano lokalnie o ' + new Date().toLocaleTimeString('pl-PL') : 'Lokalny magazyn jest niedostępny lub pełny. Brak lokalnej kopii tej zmiany.';
             localState.dataset.protected = String(ok);
             return ok;
         });

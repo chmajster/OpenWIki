@@ -17,7 +17,7 @@ export function setupUploads(root, editor, local, context, uuid, changed, pendin
         return changed();
     };
     const send = async (row) => {
-        if (row.running || row.done || !context().canSend || row.documentKey !== context().documentKey) return;
+        if (row.cancelled || row.running || row.done || !context().canSend || row.documentKey !== context().documentKey) return;
         row.running = true; row.retry.hidden = true; row.status.textContent = 'Przesyłanie…';
         try {
             if (!navigator.onLine) throw new Error('Brak połączenia. Plik oczekuje na ponowienie.');
@@ -33,7 +33,7 @@ export function setupUploads(root, editor, local, context, uuid, changed, pendin
                     try { result = JSON.parse(xhr.responseText); }
                     catch { reject(new Error('Nieoczekiwana odpowiedź uploadu.')); return; }
                     if (xhr.status < 200 || xhr.status >= 300) {
-                        const error = new Error(result.error?.message || 'Upload nie powiódł się.'); error.status = xhr.status; reject(error); return;
+                        const error = new Error(window.wikiTranslate(result.error?.message || 'Upload nie powiódł się.')); error.status = xhr.status; reject(error); return;
                     }
                     if (String(result.data.user_id) !== root.dataset.userId) { reject(new Error('Konto zmieniło się. Zachowano plik dla pierwotnego konta.')); return; }
                     resolve(result.data);
@@ -62,7 +62,7 @@ export function setupUploads(root, editor, local, context, uuid, changed, pendin
         const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Usuń z kolejki'; cancel.className = 'button button--ghost';
         element.append(name, progress, status, retry, cancel); list.append(element);
         const row = {key, operation, documentKey: context().documentKey, file, status, progress, retry, done: false, running: false};
-        rows.set(key, row); updatePending(); retry.onclick = () => send(row);
+        rows.set(key, row); updatePending(); retry.onclick = () => { if (!context().canSend) { status.textContent = 'Wróć do trybu Visual i sprawdź konto oraz uprawnienia przed ponowieniem.'; return; } send(row); };
         cancel.onclick = async () => {
             row.cancelled = true; row.xhr?.abort(); rows.delete(key); updatePending();
             try { await local.removeUpload(key); element.remove(); }

@@ -328,7 +328,7 @@ $preserveParent = $isEdit && (int) $parentValue > 0
             <div class="editor-save-state" data-save-state role="status" aria-live="polite"><?= $e($t('Recovery copy enabled.')) ?></div>
             <div class="field-help" data-local-state role="status">Autozapis włączony: po 2 s bezczynności, najpóźniej po 10 s pisania.</div>
             <button type="button" class="button button--secondary" data-resume-save hidden>Sprawdź konto i wznów zapis</button>
-            <a href="/login" target="_blank" rel="noopener" class="field-help">Zaloguj się ponownie w osobnej karcie</a>
+            <a href="/login" target="_blank" rel="noopener" class="field-help" data-editor-signin>Zaloguj się ponownie w osobnej karcie</a>
             <div data-draft-conflict hidden role="alert"><p>Serwerowy szkic tego kontekstu zmienił się. Oryginalna wersja bazowa pozostaje zachowana.</p><pre data-draft-conflict-current></pre><button type="button" class="button" data-draft-fork>Zachowaj pracę jako osobny szkic</button></div>
         </aside>
     </form>

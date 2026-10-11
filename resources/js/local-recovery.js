@@ -42,9 +42,7 @@ export class LocalRecovery {
             };
             if (encoded.length < 250000) try { fallback = mirror(); } catch {}
             try {
-                const records = await this.operation('copies', 'readonly', store => store.getAllKeys());
-                if (records.length >= 100 && !records.includes(key)) throw new Error('Local copy quota reached.');
-                await this.operation('copies', 'readwrite', store => store.put({key, data, updated: Date.now()}));
+                await this.putCopy(key, data);
                 if (encoded.length >= 250000) try { localStorage.removeItem(key); } catch {}
                 return true;
             } catch {
@@ -80,8 +78,7 @@ export class LocalRecovery {
     async remove(key, sequence = Infinity) {
         await this.serial;
         try {
-            const record = await this.operation('copies', 'readonly', (store) => store.get(key));
-            if (record && record.data.sequence <= sequence) await this.operation('copies', 'readwrite', (store) => store.delete(key));
+            await this.conditionalRemove(key, sequence);
         } catch {}
         try {
             const data = JSON.parse(localStorage.getItem(key) || 'null');
@@ -98,11 +95,57 @@ export class LocalRecovery {
         catch { return []; }
     }
 
+    async putCopy(key, data) {
+        const database = await this.database;
+        return new Promise((resolve, reject) => {
+            const transaction = database.transaction('copies', 'readwrite');
+            const store = transaction.objectStore('copies');
+            const request = store.getAllKeys();
+            let error;
+            request.onsuccess = () => {
+                if (request.result.length >= 100 && !request.result.includes(key)) {
+                    error = new Error('Local copy quota reached.'); transaction.abort(); return;
+                }
+                store.put({key, data, updated: Date.now()});
+            };
+            transaction.oncomplete = resolve;
+            transaction.onerror = () => reject(transaction.error);
+            transaction.onabort = () => reject(error || transaction.error);
+        });
+    }
+
+    async conditionalRemove(key, sequence) {
+        const database = await this.database;
+        return new Promise((resolve, reject) => {
+            const transaction = database.transaction('copies', 'readwrite');
+            const store = transaction.objectStore('copies');
+            const request = store.get(key);
+            request.onsuccess = () => { if (request.result && request.result.data.sequence <= sequence) store.delete(key); };
+            transaction.oncomplete = resolve;
+            transaction.onerror = () => reject(transaction.error);
+            transaction.onabort = () => reject(transaction.error);
+        });
+    }
+
     async putUpload(key, data) {
-        const records = await this.operation('uploads', 'readonly', store => store.getAll());
-        const other = records.filter(record => record.key !== key);
-        if (other.length >= 50 || other.reduce((size, record) => size + record.file.size, data.file.size) > 100 * 1024 * 1024) throw new Error('Local upload quota reached.');
-        return this.operation('uploads', 'readwrite', store => store.put({key, ...data, updated: Date.now()}));
+        const database = await this.database;
+        return new Promise((resolve, reject) => {
+            // A single write transaction serializes quota checks across tabs and cancellation.
+            const transaction = database.transaction('uploads', 'readwrite');
+            const store = transaction.objectStore('uploads');
+            const request = store.getAll();
+            let error;
+            request.onsuccess = () => {
+                const other = request.result.filter(record => record.key !== key);
+                if (other.length >= 50 || other.reduce((size, record) => size + record.file.size, data.file.size) > 100 * 1024 * 1024) {
+                    error = new Error('Local upload quota reached.'); transaction.abort(); return;
+                }
+                store.put({key, ...data, updated: Date.now()});
+            };
+            transaction.oncomplete = resolve;
+            transaction.onerror = () => reject(transaction.error);
+            transaction.onabort = () => reject(error || transaction.error);
+        });
     }
     removeUpload(key) { return this.operation('uploads', 'readwrite', (store) => store.delete(key)); }
 }

@@ -125,7 +125,8 @@ final class EditSessionService
                 throw new DraftConflict($existing === null ? ['draftVersion' => 0] : json_decode($existing['payload_json'], true, 512, JSON_THROW_ON_ERROR)
                     + ['draftVersion' => (int) $existing['draft_version'], 'sequence' => (int) $existing['sequence'], 'baseVersion' => (int) $existing['base_version']]);
             }
-            if ($existing === null && (int) $this->database->fetchOne('SELECT COUNT(*) AS total FROM page_editor_drafts WHERE user_id = :user AND sequence > acknowledged_sequence', ['user' => $userId])['total'] >= 100) {
+            $becomesActive = $existing === null || ((int) $existing['sequence'] <= (int) $existing['acknowledged_sequence'] && $sequence > (int) $existing['acknowledged_sequence']);
+            if ($becomesActive && (int) $this->database->fetchOne('SELECT COUNT(*) AS total FROM page_editor_drafts WHERE user_id = :user AND sequence > acknowledged_sequence', ['user' => $userId])['total'] >= 100) {
                 throw new \InvalidArgumentException('Active draft limit reached (100). Apply a completed draft or wait for retention cleanup.');
             }
             $this->database->execute(

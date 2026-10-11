@@ -324,6 +324,39 @@ final class PageSavingTest extends TestCase
         self::assertCount(1, (new PageRepository($this->app->database()))->revisions((int) $page['id']));
     }
 
+    public function testDocumentedPrivateFileUrlsInsideCodeAreNotAttachmentReferences(): void
+    {
+        $html = '<pre><code>/editor-files/999999/download data-draft-file-id="999999"</code></pre>';
+        $response = (new PageDraftController($this->app))->saveEditorDraft($this->request([
+            'document_key' => 'new:11111111-1111-4111-8111-111111111111', 'editor_id' => '22222222-2222-4222-8222-222222222222',
+            'base_version' => 0, 'draft_sequence' => 1, 'content_html' => $html,
+        ]), $this->space['space_key']);
+        self::assertSame(200, $response->status());
+    }
+
+    public function testReactivatingAnAcknowledgedContextCannotBypassTheActiveDraftQuota(): void
+    {
+        $db = $this->app->database(); $service = new EditSessionService($db);
+        $document = 'new:11111111-1111-4111-8111-111111111111'; $tab = '22222222-2222-4222-8222-222222222222';
+        $service->saveEditorDraft((int) $this->space['id'], $this->userId, $document, $tab, 1, 0, ['title' => 'Completed']);
+        $service->acknowledgeDraft((int) $this->space['id'], $this->userId, $document, $tab, 1);
+        for ($i = 0; $i < 100; $i++) {
+            $db->execute('INSERT INTO page_editor_drafts (space_id, user_id, document_key, editor_id, sequence, base_version, payload_json, updated_at) VALUES (?, ?, ?, ?, 1, 0, "{}", UTC_TIMESTAMP())',
+                [$this->space['id'], $this->userId, $document, sprintf('00000000-0000-4000-8000-%012d', $i)]);
+        }
+        $operation = '33333333-3333-4333-8333-333333333333';
+        try {
+            $service->saveEditorDraft((int) $this->space['id'], $this->userId, $document, $tab, 2, 0, ['title' => 'Reactivated'], 1, $operation);
+            self::fail('Acknowledged contexts must count again when reactivated.');
+        } catch (\InvalidArgumentException $error) {
+            self::assertStringContainsString('Active draft limit', $error->getMessage());
+        }
+        $service->acknowledgeDraft((int) $this->space['id'], $this->userId, $document, '00000000-0000-4000-8000-000000000000', 1);
+        $saved = $service->saveEditorDraft((int) $this->space['id'], $this->userId, $document, $tab, 2, 0, ['title' => 'Reactivated'], 1, $operation);
+        self::assertSame(2, $saved['draft_version']);
+        self::assertSame(100, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM page_editor_drafts WHERE user_id = ? AND sequence > acknowledged_sequence', [$this->userId])['total']);
+    }
+
     private function request(array $input, ?string $token = null): Request
     {
         $server = ['HTTP_ACCEPT' => 'application/json'];

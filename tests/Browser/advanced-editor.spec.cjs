@@ -125,6 +125,7 @@ for (const width of [360, 768, 1440]) test('workspace, wide tables and keyboard 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
     await editor(page).press('ControlOrMeta+End'); await editor(page).press('Enter'); await page.keyboard.type('Najnowsza treść ' + width); await editor(page).press('ControlOrMeta+s');
     await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server');
+    await page.evaluate(() => scrollTo(0, 0));
     await page.screenshot({path: 'storage/temp/editor-' + width + '-saved.png', fullPage: true});
     await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content]')).toContainText('Najnowsza treść ' + width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
