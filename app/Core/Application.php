@@ -70,6 +70,6 @@ final class Application
 
     public function version(): string
     {
-        return '0.1.0';
+        return (string) (\OpenWiki\System\ReadinessService::manifest($this->basePath)['version'] ?? '0.1.0');
     }
 }

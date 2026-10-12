@@ -19,9 +19,11 @@ final class SystemInfoService
 
     public function snapshot(): array
     {
-        $database = $this->app->database();
         $basePath = $this->app->basePath();
-
+        $readiness = (new ReadinessService($this->app))->check();
+        $db = []; $dbSize = []; $migrations = []; $cron = null;
+        try {
+        $database = $this->app->database();
         $db = $database->fetchOne(
             'SELECT VERSION() AS version, DATABASE() AS database_name'
         ) ?? [];
@@ -31,7 +33,6 @@ final class SystemInfoService
              WHERE table_schema = DATABASE()'
         );
 
-        $requirements = (new InstallService($basePath))->requirements();
         $migrations = (new MigrationRunner(
             $database,
             $basePath . '/database/migrations'
@@ -43,6 +44,8 @@ final class SystemInfoService
              WHERE setting_key = "system.cron_last_run"
              LIMIT 1'
         );
+        } catch (\Throwable) { /* Keep runtime and storage diagnostics available when DB/schema is unavailable. */ }
+        $requirements = (new InstallService($basePath))->requirements();
         $cronLastRun = $cron === null ? null : (string) $cron['setting_value'];
         $cronTimestamp = $cronLastRun === null ? false : strtotime($cronLastRun);
         $cronStale = $cronTimestamp === false || (time() - $cronTimestamp) > 600;
@@ -51,6 +54,8 @@ final class SystemInfoService
         $diskFree = @disk_free_space($basePath);
 
         return [
+            'readiness' => $readiness,
+            'upgrade' => (new \OpenWiki\Upgrade\UpgradeState(\OpenWiki\Upgrade\WriteGate::instancePath($basePath) . '/.openwiki'))->read(),
             'application' => [
                 'name' => $this->app->name(),
                 'version' => $this->app->version(),
@@ -82,7 +87,10 @@ final class SystemInfoService
             ],
             'migrations' => [
                 'total' => count($migrations),
-                'pending' => count(array_filter(
+                'pending' => count($readiness['schema']['pending']),
+                'unknown' => $readiness['schema']['unknown'],
+                'unfinished' => $readiness['schema']['unfinished'],
+                'applied' => count(array_filter(
                     $migrations,
                     static fn (array $migration): bool => !$migration['applied']
                 )),

@@ -63,6 +63,9 @@ local_run_preparation() {
 }
 
 local_mode() {
+  if [[ -L "$SCRIPT_DIR/current" ]]; then
+    SCRIPT_DIR=$(readlink -f "$SCRIPT_DIR/current")
+  fi
   LOCAL_SERVER_PID=""
   LOCAL_PREP_PID=""
   trap 'fail "Uruchomienie lokalne przerwane w linii $LINENO. Sprawdź komunikat powyżej."' ERR

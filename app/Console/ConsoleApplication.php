@@ -25,6 +25,10 @@ final class ConsoleApplication
         $command = $argv[1] ?? 'help';
 
         try {
+            $writeGate = new \OpenWiki\Upgrade\WriteGate();
+            if (!in_array($command, ['help', '--help', '-h', 'install', 'db:status', 'system:check', 'readiness'], true)) {
+                $writeGate->acquire($this->basePath, $command === 'migrate');
+            }
             return match ($command) {
                 'help', '--help', '-h' => $this->help(),
                 'install' => $this->install(),
@@ -33,6 +37,7 @@ final class ConsoleApplication
                 'cache:clear' => $this->cacheClear(),
                 'cron:run' => $this->cronRun(),
                 'system:check' => $this->systemCheck(),
+                'readiness' => $this->readiness(),
                 'user:create' => $this->userCreate(),
                 'user:disable' => $this->userDisable($argv[2] ?? null),
                 'admin:reset-password' => $this->adminResetPassword($argv[2] ?? null),
@@ -61,6 +66,7 @@ Commands:
   cache:clear   Remove application cache files
   cron:run      Run scheduled housekeeping tasks
   system:check          Validate runtime, database and writable storage
+  readiness             Check database, storage and release/schema compatibility
   user:create           Create a local user
   user:disable <user>   Disable a user by ID, username or email
   admin:reset-password <user>
@@ -145,6 +151,9 @@ TEXT);
 
         $runner = new MigrationRunner($app->database(), $this->basePath . '/database/migrations');
         $applied = $runner->migrate();
+        if (!$runner->schemaState(\OpenWiki\System\ReadinessService::manifest($this->basePath)['compatible_extra_migrations'] ?? [])['ready']) {
+            throw new \RuntimeException('Migration finished without a compatible schema. No upgrade success may be reported.');
+        }
 
         if ($applied === []) {
             fwrite(STDOUT, '[ OK ] Database is already up to date.' . PHP_EOL);
@@ -179,6 +188,7 @@ TEXT);
             );
         }
 
+        if (!$runner->schemaState(\OpenWiki\System\ReadinessService::manifest($this->basePath)['compatible_extra_migrations'] ?? [])['ready']) throw new \RuntimeException('Database schema is not compatible with this release.');
         return 0;
     }
 
@@ -313,6 +323,13 @@ TEXT);
             }
         } else {
             fwrite(STDOUT, '[WARN] Application is not installed.' . PHP_EOL);
+            $failed = true;
+        }
+
+        if ($app->installed()) {
+            $state = (new \OpenWiki\System\ReadinessService($app))->check();
+            fwrite(STDOUT, ($state['ready'] ? '[ OK ] ' : '[FAIL] ') . 'Application readiness' . PHP_EOL);
+            $failed = $failed || !$state['ready'];
         }
 
         return $failed ? 1 : 0;
@@ -336,6 +353,13 @@ TEXT);
         fwrite(STDOUT, '[ OK ] Backup: ' . $backup['path'] . PHP_EOL);
         fwrite(STDOUT, '[INFO] Size: ' . $backup['size_bytes'] . ' bytes' . PHP_EOL);
         return 0;
+    }
+
+    private function readiness(): int
+    {
+        $state = (new \OpenWiki\System\ReadinessService(Application::boot($this->basePath)))->check();
+        fwrite(STDOUT, json_encode($state, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL);
+        return $state['ready'] ? 0 : 1;
     }
 
     private function searchIndex(): int

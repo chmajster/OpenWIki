@@ -13,6 +13,8 @@ PHP_FPM_SERVICE=""
 NGINX_SITE="openwiki"
 CRON_FILE="/etc/cron.d/openwiki"
 MODE="install"
+APP_DIR=""
+RESTORE_DATABASE=""
 EXPLICIT_MODE=""
 INSTALL_DIR_SPECIFIED=0
 LOCAL_HOST="127.0.0.1"
@@ -42,7 +44,14 @@ Użycie:
   bash install.sh --local [--host ADRES] [--port PORT]
 
 Opcje:
-  --install              Instalacja lub naprawa OpenWiki (domyślnie)
+  --install              Świeża instalacja (domyślnie); odmawia zmiany istniejącej
+  --repair               Napraw konfigurację usług i uprawnienia bez zmiany wersji
+  --upgrade REF          Aktualizuj istniejącą instancję do wskazanego ref/SHA Git
+  --resume               Wznów zapisaną, przerwaną aktualizację
+  --upgrade-status       Status etapów i wskazówki diagnostyczne
+  --rollback             Cofnij kod tylko przy zgodnym schemacie
+  --restore DATABASE     Odtwórz zweryfikowaną kopię; potwierdź nazwę bazy
+  --diagnose             Diagnostyka procesu, bazy i gotowości (alias --status)
   --status               Status aplikacji i usług
   --uninstall            Usuń konfigurację usług i pliki OpenWiki
   --install-dir PATH     Katalog instalacji (domyślnie: /var/www/openwiki)
@@ -78,6 +87,13 @@ select_mode() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --install) select_mode install ;;
+    --repair) select_mode repair ;;
+    --upgrade) select_mode upgrade; shift; [[ $# -gt 0 && "$1" != -* ]] || fail "--upgrade wymaga wersji/ref Git."; GIT_REF="$1" ;;
+    --resume) select_mode resume ;;
+    --upgrade-status) select_mode upgrade-status ;;
+    --rollback) select_mode rollback ;;
+    --restore) select_mode restore; shift; [[ $# -gt 0 && "$1" != -* ]] || fail "--restore wymaga potwierdzenia nazwy bazy."; RESTORE_DATABASE="$1" ;;
+    --diagnose) select_mode status ;;
     --status) select_mode status ;;
     --uninstall) select_mode uninstall ;;
     --local) select_mode local ;;
@@ -434,8 +450,10 @@ server {
     listen 80;
     listen [::]:80;
     server_name $server_names;
-    root $INSTALL_DIR/public;
+    root ${APP_DIR:-$INSTALL_DIR}/public;
     index index.php;
+
+    if (-f $INSTALL_DIR/.openwiki/maintenance) { return 503; }
 
     client_max_body_size 64m;
 
@@ -446,7 +464,7 @@ server {
     location ~ \.php$ {
         try_files \$uri =404;
         include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
         fastcgi_param HTTP_PROXY "";
         fastcgi_pass unix:$socket;
     }
@@ -470,7 +488,7 @@ NGINX
 configure_cron() {
   info "[7/8] Konfiguracja zadań cyklicznych"
   cat > "$CRON_FILE" <<EOF
-* * * * * $WEB_USER cd "$INSTALL_DIR" && /usr/bin/php bin/console cron:run >/dev/null 2>&1
+* * * * * $WEB_USER cd "${APP_DIR:-$INSTALL_DIR}" && /usr/bin/php bin/console cron:run >/dev/null 2>&1
 EOF
   chmod 0644 "$CRON_FILE"
   ok "Cron OpenWiki skonfigurowany."
@@ -478,13 +496,13 @@ EOF
 
 verify_installation() {
   info "[8/8] Weryfikacja"
-  cd "$INSTALL_DIR"
+  cd "${APP_DIR:-$INSTALL_DIR}"
   php bin/console system:check
   php bin/console db:status
   if command -v runuser >/dev/null 2>&1; then
     runuser -u "$WEB_USER" -- test -r "$INSTALL_DIR/.env"
     runuser -u "$WEB_USER" -- test -w "$INSTALL_DIR/storage"
-    runuser -u "$WEB_USER" -- php "$INSTALL_DIR/bin/console" db:status
+    runuser -u "$WEB_USER" -- php "${APP_DIR:-$INSTALL_DIR}/bin/console" db:status
     ok "Runtime $WEB_USER ma dostęp do konfiguracji, storage i bazy."
   else
     warn "Brak runuser — pominięto weryfikację uprawnień jako $WEB_USER."
@@ -513,9 +531,10 @@ status_mode() {
   else
     warn "PHP-FPM inactive lub niewykryty"
   fi
-  if [[ -f "$INSTALL_DIR/bin/console" ]]; then
-    (cd "$INSTALL_DIR" && php bin/console system:check) || true
-  fi
+  [[ -f "$APP_DIR/bin/console" ]] || return 1
+  php "$SCRIPT_DIR/scripts/upgrade-tool.php" status "$INSTALL_DIR"
+  php "$APP_DIR/bin/console" system:check
+  php "$APP_DIR/bin/console" readiness
 }
 
 uninstall_mode() {
@@ -551,14 +570,39 @@ if [[ "$MODE" == local ]]; then
 fi
 
 validate_install_dir
+APP_DIR="$INSTALL_DIR"
+[[ ! -L "$INSTALL_DIR/current" ]] || APP_DIR="$INSTALL_DIR/current"
 
 case "$MODE" in
-  status) status_mode; exit 0 ;;
+  status) status_mode; exit $? ;;
+  upgrade-status) php "$SCRIPT_DIR/scripts/upgrade-tool.php" status "$INSTALL_DIR"; exit $? ;;
   uninstall) uninstall_mode; exit 0 ;;
 esac
 
 require_root
 detect_os
+if [[ "$MODE" == upgrade || "$MODE" == resume || "$MODE" == rollback || "$MODE" == restore ]]; then
+  PHP_FPM_SERVICE="$(find_php_fpm_service)"
+  [[ -n "$PHP_FPM_SERVICE" ]] || fail "Nie znaleziono PHP-FPM."
+  detect_php_runtime_user
+  source "$SCRIPT_DIR/scripts/upgrade.sh"
+  upgrade_mode
+  exit $?
+fi
+if [[ "$MODE" == repair ]]; then
+  [[ -f "$INSTALL_DIR/.env" && -f "$INSTALL_DIR/storage/installed.lock" ]] || fail "Repair wymaga istniejącej instalacji."
+  [[ ! -f "$INSTALL_DIR/.openwiki/maintenance" ]] || fail "Trwa aktualizacja. Użyj --resume."
+  start_services
+  secure_env_permissions
+  chown -R "$WEB_USER:$WEB_USER" "$INSTALL_DIR/storage"
+  configure_selinux
+  configure_nginx
+  configure_cron
+  verify_installation
+  ok "Naprawa zakończona; konfiguracja, klucz i wersja zachowane."
+  exit 0
+fi
+[[ ! -f "$INSTALL_DIR/storage/installed.lock" && ! -f "$INSTALL_DIR/.env" ]] || fail "Instancja już istnieje. Użyj --repair albo --upgrade REF."
 install_packages
 start_services
 deploy_code
@@ -567,4 +611,8 @@ run_app_installer
 configure_selinux
 configure_nginx
 configure_cron
+mkdir -p "$INSTALL_DIR/.openwiki"
+chmod 0755 "$INSTALL_DIR/.openwiki"
+touch "$INSTALL_DIR/.openwiki/requests.lock"
+chmod 0644 "$INSTALL_DIR/.openwiki/requests.lock"
 verify_installation

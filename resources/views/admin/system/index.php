@@ -45,6 +45,22 @@ $bytes = static function (?int $value): string {
     </div>
 
     <div class="card panel">
+        <div class="panel__header"><h2>Gotowość i aktualizacja</h2></div>
+        <dl class="definition-list">
+            <dt>Proces PHP</dt><dd>aktywny</dd>
+            <dt>Baza danych</dt><dd><?= $system['readiness']['checks']['database'] ? 'dostępna' : 'niedostępna' ?></dd>
+            <dt>Gotowość aplikacji</dt><dd><?= $e($system['readiness']['status']) ?></dd>
+            <dt>Status aktualizacji</dt><dd><?= $e($system['upgrade']['status']) ?></dd>
+            <dt>Etap</dt><dd><?= $e($system['upgrade']['stage'] ?? '—') ?></dd>
+            <dt>Wersja docelowa</dt><dd><?= $e($system['upgrade']['sha'] ?? '—') ?></dd>
+        </dl>
+        <?php if (!empty($system['upgrade']['error'])): ?>
+            <div class="alert alert--error"><?= $e($system['upgrade']['error']) ?></div>
+            <p>Administrator hosta może sprawdzić prywatny log i wznowić pracę poleceniem <code>sudo bash install.sh --resume</code>.</p>
+        <?php endif; ?>
+    </div>
+
+    <div class="card panel">
         <div class="panel__header"><h2><?= $e($t('Runtime')) ?></h2></div>
         <dl class="definition-list">
             <dt><?= $e($t('Application name')) ?></dt><dd><?= $e($system['application']['name']) ?></dd>
