@@ -1,0 +1,9 @@
+# Przestrzenie i struktura dokumentacji
+
+Przestrzeń publiczna udostępnia opublikowane strony także gościom, z uwzględnieniem ograniczeń ACL stron. Prywatna jest dostępna właścicielowi i superadministratorowi. Ograniczona udostępnia dokumenty osobom wskazanym przez ACL użytkowników, grup lub ról. Dopasowane deny ma pierwszeństwo przed allow; właściciel i superadministrator zachowują dostęp do zarządzania przestrzenią. Migracja prywatnych przestrzeni z istniejącymi grantami do restricted zachowa ich dotychczasowy dostęp.
+
+Archiwum pozostaje czytelne zgodnie z tymi samymi zasadami odczytu, lecz blokuje zmiany stron i załączników. Przywrócenie przestrzeni wymaga uprawnienia do archiwizacji. Zmiana dostępu i właściciela wymaga osobnych uprawnień. Nie można pozostawić przestrzeni bez aktywnego zarządzającego; zmiany kont, ról i grup również muszą zachowywać tę zasadę.
+
+Przeniesienie zachowuje identyfikatory, rewizje, załączniki i lokalne ACL stron. Dziedziczenie wynika z nowego rodzica i przestrzeni; skutki dla dostępu wymagają podglądu i świadomego zatwierdzenia. Kopiowanie tworzy nowe strony i niezależne załączniki z nową historią rozpoczynającą się od pierwszej rewizji. Źródłowe snapshoty rewizji pozostają niezmienione. Linki wewnętrzne kopiowanego poddrzewa wskazują kopie; pozostałe wskazują dotychczasowe dokumenty. Przeniesienie zachowuje odnośniki przez przekierowania starych adresów. Operacje UI i API korzystają z tych samych usług, kontroli wersji, blokad, audytu i zdarzeń.
+
+Drzewo doładowuje gałęzie, pamięta rozwinięcia osobno dla użytkownika i przestrzeni oraz obsługuje wyszukiwanie, klawiaturę i dialogi operacji. Widoczne dziecko ukrytego rodzica jest prezentowane jako korzeń bez identyfikatora, tytułu i innych metadanych rodzica. Breadcrumbs pokazują dostępne poziomy; niedostępne poziomy mają neutralny opis bez metadanych.
