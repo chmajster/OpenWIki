@@ -15,7 +15,7 @@ final class MfaAdminController extends Controller
 {
     public function index(Request $request): Response
     {
-        if (($failure = $this->authorize($request, 'settings.manage')) !== null) {
+        if (($failure = $this->authorize($request, '*')) !== null) {
             return $failure;
         }
 
@@ -32,7 +32,7 @@ final class MfaAdminController extends Controller
 
     public function update(Request $request): Response
     {
-        if (($failure = $this->authorize($request, 'settings.manage')) !== null) {
+        if (($failure = $this->authorize($request, '*')) !== null) {
             return $failure;
         }
         if (($failure = $this->verifyCsrf($request)) !== null) {
@@ -64,6 +64,8 @@ final class MfaAdminController extends Controller
             );
 
             Session::flash('success', 'MFA policy updated.');
+        } catch (\DomainException $exception) {
+            return $this->render('errors/403', ['title' => $exception->getMessage()], 403);
         } catch (\InvalidArgumentException $exception) {
             Session::flash('error', $exception->getMessage());
         } catch (\Throwable $exception) {

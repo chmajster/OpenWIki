@@ -15,7 +15,7 @@ final class BackupController extends Controller
 {
     public function index(Request $request): Response
     {
-        if (($failure = $this->authorize($request, 'settings.manage')) !== null) {
+        if (($failure = $this->authorize($request, '*')) !== null) {
             return $failure;
         }
 
@@ -27,7 +27,7 @@ final class BackupController extends Controller
 
     public function create(Request $request): Response
     {
-        if (($failure = $this->authorize($request, 'settings.manage')) !== null) {
+        if (($failure = $this->authorize($request, '*')) !== null) {
             return $failure;
         }
         if (($failure = $this->verifyCsrf($request)) !== null) {
@@ -62,7 +62,7 @@ final class BackupController extends Controller
 
     public function download(Request $request, string $name): Response
     {
-        if (($failure = $this->authorize($request, 'settings.manage')) !== null) {
+        if (($failure = $this->authorize($request, '*')) !== null) {
             return $failure;
         }
 

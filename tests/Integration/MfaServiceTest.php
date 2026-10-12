@@ -77,6 +77,9 @@ final class MfaServiceTest extends TestCase
         );
 
         $service = new MfaService($this->database);
+        $this->database->execute('INSERT IGNORE INTO permissions (name, description, created_at) VALUES ("*", "All", UTC_TIMESTAMP())');
+        $wildcard = $this->database->fetchOne('SELECT id FROM permissions WHERE name = "*"');
+        $this->database->execute('INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)', [$roleId, $wildcard['id']]);
         $service->updatePolicy(false, [$roleId], $userId);
 
         self::assertTrue($service->required($userId));

@@ -15,7 +15,7 @@ final class LdapAdminController extends Controller
 {
     public function index(Request $request): Response
     {
-        if (($failure = $this->authorize($request, 'settings.manage')) !== null) {
+        if (($failure = $this->authorize($request, '*')) !== null) {
             return $failure;
         }
 
@@ -24,7 +24,7 @@ final class LdapAdminController extends Controller
 
     public function save(Request $request): Response
     {
-        if (($failure = $this->authorize($request, 'settings.manage')) !== null) {
+        if (($failure = $this->authorize($request, '*')) !== null) {
             return $failure;
         }
         if (($failure = $this->verifyCsrf($request)) !== null) {
@@ -51,6 +51,8 @@ final class LdapAdminController extends Controller
 
             Session::flash('success', 'LDAP / Active Directory settings saved.');
             return Response::redirect('/admin/ldap');
+        } catch (\DomainException $exception) {
+            return $this->render('errors/403', ['title' => $exception->getMessage()], 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->renderForm((array) $request->input(), $exception->getMessage(), null, 422);
         } catch (\Throwable $exception) {
@@ -66,7 +68,7 @@ final class LdapAdminController extends Controller
 
     public function test(Request $request): Response
     {
-        if (($failure = $this->authorize($request, 'settings.manage')) !== null) {
+        if (($failure = $this->authorize($request, '*')) !== null) {
             return $failure;
         }
         if (($failure = $this->verifyCsrf($request)) !== null) {
@@ -74,12 +76,14 @@ final class LdapAdminController extends Controller
         }
 
         try {
-            $result = (new LdapService($this->app->database()))->testConfig((array) $request->input());
+            $result = (new LdapService($this->app->database()))->testConfig((array) $request->input(), (int) $this->app->auth()->user()['id']);
             return $this->renderForm(
                 (array) $request->input(),
                 null,
                 (string) $result['message']
             );
+        } catch (\DomainException $exception) {
+            return $this->render('errors/403', ['title' => $exception->getMessage()], 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->renderForm((array) $request->input(), $exception->getMessage(), null, 422);
         } catch (\Throwable $exception) {

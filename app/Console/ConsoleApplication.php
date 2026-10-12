@@ -363,7 +363,7 @@ TEXT);
         }
 
         $database = $app->database();
-        $service = new DirectoryAdminService($database);
+        $service = new DirectoryAdminService($database, \OpenWiki\Admin\AdminActor::localConsole());
 
         fwrite(STDOUT, '[1/3] User details' . PHP_EOL);
         $username = $this->prompt('Username');
@@ -416,7 +416,7 @@ TEXT);
             throw new \InvalidArgumentException('User not found: ' . $identifier);
         }
 
-        (new DirectoryAdminService($database))->disableUser((int) $user['id']);
+        (new DirectoryAdminService($database, \OpenWiki\Admin\AdminActor::localConsole()))->disableUser((int) $user['id']);
         fwrite(STDOUT, '[ OK ] Disabled user ' . $user['username'] . ' (#' . $user['id'] . ').' . PHP_EOL);
         return 0;
     }
@@ -438,7 +438,7 @@ TEXT);
             throw new \InvalidArgumentException('User not found: ' . $identifier);
         }
 
-        $password = (new DirectoryAdminService($database))->resetPassword((int) $user['id']);
+        $password = (new DirectoryAdminService($database, \OpenWiki\Admin\AdminActor::localConsole()))->resetPassword((int) $user['id']);
         fwrite(STDOUT, '[ OK ] Password reset for ' . $user['username'] . ' (#' . $user['id'] . ').' . PHP_EOL);
         fwrite(STDOUT, '[INFO] Temporary password: ' . $password . PHP_EOL);
         fwrite(STDOUT, '[INFO] User must change it on next login.' . PHP_EOL);

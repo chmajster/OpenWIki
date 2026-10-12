@@ -10,9 +10,102 @@ use OpenWiki\Wiki\Slugger;
 
 final class DirectoryAdminService
 {
-    public function __construct(private readonly Database $database)
+    public function __construct(private readonly Database $database, private readonly ?AdminActor $actor = null)
     {
     }
+
+    public function createUser(array $input): int
+    {
+        return $this->policy()->run('user.manage', function (AdministrationPolicy $policy) use ($input): int {
+            $policy->roles($this->validatedIds($input['role_ids'] ?? []));
+            return $this->createUserUnchecked($input);
+        });
+    }
+
+    public function updateUser(int $id, array $input): void
+    {
+        $this->policy()->run('user.manage', function (AdministrationPolicy $policy) use ($id, $input): void {
+            $policy->targetUser($id);
+            $policy->roles($this->validatedIds($input['role_ids'] ?? []));
+            $this->updateUserUnchecked($id, $input);
+            $this->database->execute('DELETE FROM user_sessions WHERE user_id = ?', [$id]);
+        });
+    }
+
+    public function disableUser(int $id): bool
+    {
+        return $this->policy()->run('user.manage', function (AdministrationPolicy $policy) use ($id): bool {
+            $policy->targetUser($id);
+            return $this->disableUserUnchecked($id);
+        });
+    }
+
+    public function softDeleteUser(int $id): bool
+    {
+        return $this->policy()->run('user.manage', function (AdministrationPolicy $policy) use ($id): bool {
+            $policy->targetUser($id);
+            return $this->softDeleteUserUnchecked($id);
+        });
+    }
+
+    public function resetPassword(int $id): string
+    {
+        return $this->policy()->run('user.manage', function (AdministrationPolicy $policy) use ($id): string {
+            $policy->targetUser($id);
+            return $this->resetPasswordUnchecked($id);
+        });
+    }
+
+    public function resetMfa(int $id): void
+    {
+        $this->policy()->run('user.manage', function (AdministrationPolicy $policy) use ($id): void {
+            $policy->targetUser($id);
+            $this->resetMfaUnchecked($id);
+            $this->database->execute('DELETE FROM user_sessions WHERE user_id = ?', [$id]);
+        });
+    }
+
+    public function saveRole(?int $id, array $input): int
+    {
+        return $this->policy()->run('role.manage', function (AdministrationPolicy $policy) use ($id, $input): int {
+            if ($id !== null) $policy->role($id);
+            $policy->permissionIds($this->validatedIds($input['permission_ids'] ?? []));
+            if ((new Slugger())->slug((string) ($input['slug'] ?? $input['name'] ?? '')) === 'super-admin') {
+                $super = $this->database->fetchOne('SELECT id FROM permissions WHERE name = "*"');
+                if ($super === null) throw new \DomainException('The Super Admin role requires full administration.');
+                $policy->permissionIds([(int) $super['id']]);
+            }
+            return $this->saveRoleUnchecked($id, $input);
+        });
+    }
+
+    public function deleteRole(int $id): bool
+    {
+        return $this->policy()->run('role.manage', function (AdministrationPolicy $policy) use ($id): bool {
+            if ($this->role($id) === null) return false;
+            $policy->role($id);
+            return $this->deleteRoleUnchecked($id);
+        });
+    }
+
+    public function saveGroup(?int $id, array $input): int
+    {
+        return $this->policy()->run('group.manage', function (AdministrationPolicy $policy) use ($id, $input): int {
+            $old = $id === null ? [] : ($this->group($id)['user_ids'] ?? []);
+            foreach (array_unique(array_merge($old, $this->validatedIds($input['user_ids'] ?? []))) as $userId) $policy->targetUser((int) $userId);
+            return $this->saveGroupUnchecked($id, $input);
+        });
+    }
+
+    public function deleteGroup(int $id): bool
+    {
+        return $this->policy()->run('group.manage', function (AdministrationPolicy $policy) use ($id): bool {
+            foreach ($this->group($id)['user_ids'] ?? [] as $userId) $policy->targetUser((int) $userId);
+            return $this->deleteGroupUnchecked($id);
+        });
+    }
+
+    private function policy(): AdministrationPolicy { return new AdministrationPolicy($this->database, $this->actor); }
 
     public function users(string $query = ''): array
     {
@@ -86,7 +179,7 @@ final class DirectoryAdminService
         return $user;
     }
 
-    public function createUser(array $input): int
+    private function createUserUnchecked(array $input): int
     {
         $data = $this->validatedUser($input, null);
         $password = (string) ($input['password'] ?? '');
@@ -123,7 +216,7 @@ final class DirectoryAdminService
         });
     }
 
-    public function updateUser(int $id, array $input): void
+    private function updateUserUnchecked(int $id, array $input): void
     {
         if ($this->user($id) === null) {
             throw new \InvalidArgumentException('User not found.');
@@ -152,7 +245,7 @@ final class DirectoryAdminService
         });
     }
 
-    public function disableUser(int $id): bool
+    private function disableUserUnchecked(int $id): bool
     {
         if ($this->user($id) === null) {
             return false;
@@ -170,7 +263,7 @@ final class DirectoryAdminService
         });
     }
 
-    public function softDeleteUser(int $id): bool
+    private function softDeleteUserUnchecked(int $id): bool
     {
         return $this->database->transaction(function (Database $db) use ($id): bool {
             $db->execute('DELETE FROM user_sessions WHERE user_id = :user_id', ['user_id' => $id]);
@@ -184,7 +277,7 @@ final class DirectoryAdminService
         });
     }
 
-    public function resetPassword(int $id): string
+    private function resetPasswordUnchecked(int $id): string
     {
         if ($this->user($id) === null) {
             throw new \InvalidArgumentException('User not found.');
@@ -209,7 +302,7 @@ final class DirectoryAdminService
         return $password;
     }
 
-    public function resetMfa(int $id): void
+    private function resetMfaUnchecked(int $id): void
     {
         if ($this->user($id) === null) {
             throw new \InvalidArgumentException('User not found.');
@@ -261,7 +354,7 @@ final class DirectoryAdminService
         return $this->database->fetchAll('SELECT id, name, description FROM permissions ORDER BY name ASC');
     }
 
-    public function saveRole(?int $id, array $input): int
+    private function saveRoleUnchecked(?int $id, array $input): int
     {
         $name = trim((string) ($input['name'] ?? ''));
         if ($name === '' || mb_strlen($name) > 100) {
@@ -331,7 +424,7 @@ final class DirectoryAdminService
         });
     }
 
-    public function deleteRole(int $id): bool
+    private function deleteRoleUnchecked(int $id): bool
     {
         $role = $this->role($id);
         if ($role === null) {
@@ -377,7 +470,7 @@ final class DirectoryAdminService
         return $group;
     }
 
-    public function saveGroup(?int $id, array $input): int
+    private function saveGroupUnchecked(?int $id, array $input): int
     {
         $name = trim((string) ($input['name'] ?? ''));
         if ($name === '' || mb_strlen($name) > 150) {
@@ -434,7 +527,7 @@ final class DirectoryAdminService
         });
     }
 
-    public function deleteGroup(int $id): bool
+    private function deleteGroupUnchecked(int $id): bool
     {
         $group = $this->group($id);
         if ($group === null) {
