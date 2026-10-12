@@ -93,7 +93,7 @@ test('phone tree, copy dialog and cross-space access preview preserve document r
     const image = page.locator('[data-document-content] img'), copiedAttachment = await image.getAttribute('data-attachment-id'); expect(copiedAttachment).not.toBe(String(attachment.id));
     await expect(image).toHaveAttribute('alt', 'Schemat'); await expect(page.locator('figcaption')).toHaveText('Podpis schematu');
     await expect.poll(() => image.evaluate(img => img.complete && img.naturalWidth > 0)).toBeTruthy();
-    await page.goto(pathFor(target, copied) + '/edit'); await expect(page.locator('[data-rich-editor] img')).toHaveAttribute('data-attachment-id', copiedAttachment);
+    await page.goto(pathFor(target, copied) + '/edit'); await expect(page.locator('[data-visual-editor] img')).toHaveAttribute('data-attachment-id', copiedAttachment);
     await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content] img')).toHaveAttribute('data-attachment-id', copiedAttachment); await expect(page.locator('figcaption')).toHaveText('Podpis schematu');
 });
 
