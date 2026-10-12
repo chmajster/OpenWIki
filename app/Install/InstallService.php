@@ -6,6 +6,7 @@ namespace OpenWiki\Install;
 
 use OpenWiki\Auth\AuthService;
 use OpenWiki\Core\Database;
+use OpenWiki\Core\RuntimePaths;
 use OpenWiki\Database\MigrationRunner;
 
 final class InstallService
@@ -23,14 +24,14 @@ final class InstallService
         }
 
         $paths = [
-            $this->basePath . '/storage',
-            $this->basePath . '/storage/attachments',
-            $this->basePath . '/storage/backups',
-            $this->basePath . '/storage/cache',
-            $this->basePath . '/storage/logs',
-            $this->basePath . '/storage/temp',
+            RuntimePaths::storage($this->basePath),
+            RuntimePaths::storage($this->basePath, 'attachments'),
+            RuntimePaths::storage($this->basePath, 'backups'),
+            RuntimePaths::storage($this->basePath, 'cache'),
+            RuntimePaths::storage($this->basePath, 'logs'),
+            RuntimePaths::storage($this->basePath, 'temp'),
         ];
-        if (!is_file($this->basePath . '/storage/installed.lock')) array_unshift($paths, $this->basePath);
+        if (!is_file(RuntimePaths::storage($this->basePath, 'installed.lock'))) array_unshift($paths, dirname(RuntimePaths::configuration($this->basePath)));
 
         $writable = [];
         foreach ($paths as $path) {
@@ -103,7 +104,7 @@ final class InstallService
 
     public function install(array $input): void
     {
-        if (is_file($this->basePath . '/storage/installed.lock')) {
+        if (is_file(RuntimePaths::storage($this->basePath, 'installed.lock'))) {
             throw new \RuntimeException('OpenWiki is already installed.');
         }
 
@@ -161,10 +162,10 @@ final class InstallService
             'version' => \OpenWiki\System\ReadinessService::manifest($this->basePath)['version'] ?? '0.1.0',
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 
-        if (file_put_contents($this->basePath . '/storage/installed.lock', $lockData . PHP_EOL, LOCK_EX) === false) {
+        if (file_put_contents(RuntimePaths::storage($this->basePath, 'installed.lock'), $lockData . PHP_EOL, LOCK_EX) === false) {
             throw new \RuntimeException('Unable to create installation lock.');
         }
-        @chmod($this->basePath . '/storage/installed.lock', 0640);
+        @chmod(RuntimePaths::storage($this->basePath, 'installed.lock'), 0640);
     }
 
     private function validate(array $input): array
@@ -427,7 +428,7 @@ final class InstallService
             $lines[] = $key . '=' . $encoded;
         }
 
-        $path = $this->basePath . '/.env';
+        $path = RuntimePaths::configuration($this->basePath);
         $temp = $path . '.tmp-' . bin2hex(random_bytes(6));
         if (file_put_contents($temp, implode(PHP_EOL, $lines) . PHP_EOL, LOCK_EX) === false) {
             throw new \RuntimeException('Unable to write environment configuration.');

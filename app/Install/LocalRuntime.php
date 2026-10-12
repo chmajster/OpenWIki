@@ -41,7 +41,7 @@ final class LocalRuntime
             if (($manifest['version'] ?? null) !== 1 || ($manifest['input'] ?? null) !== $this->assetFingerprint()) return false;
             foreach (['wiki-editor.js', 'diagram.js', 'document-reader.js', 'diagram.html'] as $name) {
                 $file = $this->root . '/public/assets/' . $name;
-                if (!is_file($file) || filesize($file) === 0 || !hash_equals($manifest['outputs'][$name] ?? '', hash_file('sha256', $file))) return false;
+                if (!is_file($file) || !is_readable($file) || filesize($file) === 0 || !hash_equals($manifest['outputs'][$name] ?? '', hash_file('sha256', $file))) return false;
             }
             return true;
         } catch (\Throwable) { return false; }
@@ -80,12 +80,12 @@ final class LocalRuntime
         }
     }
 
-    public static function validateAddress(string $host, string $port): void
+    public static function validateAddress(string $host, string $port, int $minimumPort = 1024): void
     {
         $validHost = filter_var($host, FILTER_VALIDATE_IP) !== false || $host === 'localhost';
         if (!$validHost) throw new \InvalidArgumentException('Host musi być adresem IPv4, IPv6 lub localhost (np. 127.0.0.1 albo 0.0.0.0).');
-        if (!preg_match('/^[0-9]{1,5}$/D', $port) || (int) $port < 1024 || (int) $port > 65535) {
-            throw new \InvalidArgumentException('Port lokalny musi mieścić się w zakresie 1024–65535.');
+        if (!preg_match('/^[0-9]{1,5}$/D', $port) || (int) $port < $minimumPort || (int) $port > 65535) {
+            throw new \InvalidArgumentException('Port musi mieścić się w zakresie ' . $minimumPort . '–65535.');
         }
     }
 
@@ -123,6 +123,7 @@ final class LocalRuntime
         if ($health === null) return 'pending';
         if (!$health['identity']) return 'wrong_server';
         $data = json_decode($health['body'], true);
+        if (($data['status'] ?? '') === 'configuration_error') return 'configuration_error';
         if ($health['status'] === 503 && ($data['status'] ?? null) === 'setup_required') {
             $wizard = $get('/install');
             return $wizard !== null && $wizard['identity'] && $wizard['status'] === 200 && str_contains($wizard['body'], 'name="db_host"') ? 'setup' : 'installer_error';
@@ -140,6 +141,7 @@ final class LocalRuntime
 
     private function json(string $file): array
     {
+        if (!is_file($this->root . '/' . $file) || !is_readable($this->root . '/' . $file)) throw new \RuntimeException('Missing dependency metadata: ' . $file);
         $data = json_decode(file_get_contents($this->root . '/' . $file), true, 512, JSON_THROW_ON_ERROR);
         if (!is_array($data)) throw new \RuntimeException('Invalid dependency metadata: ' . $file);
         return $data;

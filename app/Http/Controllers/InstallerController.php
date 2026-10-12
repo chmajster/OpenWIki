@@ -18,6 +18,9 @@ final class InstallerController extends Controller
         if ($this->app->installed()) {
             return Response::redirect('/');
         }
+        if (is_file($this->app->basePath('storage/installed.lock'))) {
+            return Response::json(['error' => ['code' => 'configuration_error', 'message' => 'Instancja jest już zainstalowana. Przywróć jej konfigurację i APP_KEY; nie uruchamiaj kreatora ponownie.']], 503);
+        }
 
         $service = new InstallService($this->app->basePath());
 
@@ -28,11 +31,13 @@ final class InstallerController extends Controller
                 'app_name' => 'OpenWiki',
                 'app_url' => $this->suggestedUrl($request),
                 'timezone' => 'UTC',
-                'db_host' => '127.0.0.1',
-                'db_port' => 3306,
-                'db_database' => 'openwiki',
-                'create_database' => true,
+                'db_host' => Env::get('DB_HOST', '127.0.0.1'),
+                'db_port' => Env::get('DB_PORT', '3306'),
+                'db_database' => Env::get('DB_DATABASE', 'openwiki'),
+                'db_username' => Env::bool('OPENWIKI_MANAGED_DATABASE') ? Env::get('DB_USERNAME') : '',
+                'create_database' => !Env::bool('OPENWIKI_MANAGED_DATABASE'),
             ],
+            'managedDatabase' => Env::bool('OPENWIKI_MANAGED_DATABASE'),
         ]);
     }
 
@@ -50,7 +55,7 @@ final class InstallerController extends Controller
 
         try {
             $result = (new InstallService($this->app->basePath()))
-                ->testDatabaseConnection((array) $request->input());
+                ->testDatabaseConnection($this->installationInput($request));
 
             return Response::json(['data' => $result]);
         } catch (\Throwable $exception) {
@@ -76,7 +81,7 @@ final class InstallerController extends Controller
         }
 
         try {
-            (new InstallService($this->app->basePath()))->install((array) $request->input());
+            (new InstallService($this->app->basePath()))->install($this->installationInput($request));
             Env::load($this->app->basePath('.env'));
             Session::flash(
                 'success',
@@ -88,7 +93,8 @@ final class InstallerController extends Controller
             return $this->render('install/index', [
                 'title' => 'Install OpenWiki',
                 'requirements' => (new InstallService($this->app->basePath()))->requirements(),
-                'defaults' => (array) $request->input(),
+                'defaults' => array_diff_key($this->installationInput($request), ['db_password' => true, 'admin_password' => true]),
+                'managedDatabase' => Env::bool('OPENWIKI_MANAGED_DATABASE'),
                 'installError' => $exception->getMessage(),
             ], 422);
         }
@@ -99,5 +105,17 @@ final class InstallerController extends Controller
         $host = $request->header('Host', 'localhost') ?? 'localhost';
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
         return $scheme . '://' . $host;
+    }
+
+    private function installationInput(Request $request): array
+    {
+        $input = (array) $request->input();
+        if (Env::bool('OPENWIKI_MANAGED_DATABASE')) {
+            foreach (['host', 'port', 'database', 'username', 'password'] as $key) {
+                $input['db_' . $key] = Env::get('DB_' . strtoupper($key), '') ?? '';
+            }
+            $input['create_database'] = false;
+        }
+        return $input;
     }
 }

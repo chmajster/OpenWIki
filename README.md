@@ -65,7 +65,7 @@ bash install.sh --local --host 0.0.0.0 --port 8090
 bash "/ścieżka ze spacjami/OpenWIki/install.sh" --local
 ```
 
-Hostem może być adres IPv4/IPv6 lub `localhost`; port musi mieścić się w zakresie 1024–65535. Dla `0.0.0.0` podsumowanie podaje adres `http://127.0.0.1:PORT`. Zajęty port powoduje błąd i nie zatrzymuje procesu, który go używa. `--host`/`--port` wymagają `--local`, a `--local` nie łączy się z `--install`, `--status`, `--uninstall` ani `--install-dir`. Zmienna `OPENWIKI_INSTALL_DIR` nie zmienia katalogu trybu lokalnego.
+Hostem może być adres IPv4/IPv6 lub `localhost`; port lokalny musi mieścić się w zakresie 1024–65535. Dla `0.0.0.0` podsumowanie podaje adres `http://127.0.0.1:PORT`. Zajęty port powoduje błąd i nie zatrzymuje procesu, który go używa. `--host`/`--port` wymagają `--local` lub `--docker`. Te środowiska nie łączą się z instalacją systemową, naprawą, aktualizacją ani `--install-dir`. Zmienna `OPENWIKI_INSTALL_DIR` nie zmienia katalogu bieżącej kopii.
 
 Pierwsze uruchomienie udostępnia istniejący kreator pod `http://127.0.0.1:8080/install`. Potrzebny jest dostępny serwer **MySQL/MariaDB** oraz konto z uprawnieniami do bazy; kreator może utworzyć bazę, jeżeli konto ma takie prawo. Przed instalacją `/health` zwraca `503` i `setup_required` — skrypt sprawdza również kreator i rozpoznaje ten stan. Nie instaluje automatycznie bazy ani nie wprowadza SQLite.
 
@@ -73,7 +73,39 @@ Przy ponownym uruchomieniu pozostają dotychczasowe `.env`, `APP_KEY`, poświadc
 
 Skrypt używa `composer install` z `composer.lock`. Aktualne zależności PHP i kompletne, zgodne bundle są ponownie używane. Gdy potrzebne jest zbudowanie edytora, wymagane są **Node.js 22+ i npm**; skrypt używa `npm ci --include=dev` oraz `npm run build`. Manifest builda sprawdza lockfile, źródła i wyniki, a zmiana źródła wymusza przebudowanie. Na Linuxie można wcześniej wykonać `bash scripts/build-editor.sh`, aby użyć istniejącego, tymczasowego narzędzia Node.js z weryfikacją sumy kontrolnej.
 
-Zmiany plików PHP są widoczne po odświeżeniu strony. Zmiany w `resources/js/` wymagają `npm run build` albo ponownego uruchomienia `--local`, które wykryje nieaktualne zasoby. Serwer wyświetla logi w terminalu i działa na pierwszym planie. **Ctrl+C** kończy jego proces i zwalnia port. Tryb lokalny używa [serwera developerskiego PHP CLI](https://www.php.net/manual/en/features.commandline.webserver.php); wdrożenie systemowe pozostaje osobnym trybem. Szczegóły i testy opisuje [dokumentacja lokalnego runtime](docs/local-runtime.md).
+Zmiany plików PHP są widoczne po odświeżeniu strony. Zmiany w `resources/js/` wymagają `npm run build` albo ponownego uruchomienia `--local`, które wykryje nieaktualne zasoby. Samo `--local` działa na pierwszym planie z logami; **Ctrl+C** zwalnia port. Linux/WSL obsługuje także zarządzanie w tle:
+
+```bash
+bash install.sh --local --start --port 8090
+bash install.sh --local --status
+bash install.sh --local --logs
+bash install.sh --local --restart
+bash install.sh --local --stop
+bash install.sh --local --no-start
+```
+
+Adres jest zapamiętany w `.openwiki/local/`. Zatrzymanie sprawdza tożsamość własnego procesu PHP. Flagi środowiska i akcji można podawać w dowolnej kolejności; sprzeczne akcje są odrzucane. Bez wskazania środowiska `--status` nadal oznacza diagnostykę instalacji systemowej. Szczegóły opisuje [lokalny runtime](docs/local-runtime.md).
+
+### Bieżąca kopia przez Docker
+
+Na Linuxie lub w WSL z Docker Engine/Desktop i Compose v2:
+
+```bash
+bash install.sh --docker
+bash install.sh --docker --host 127.0.0.1 --port 8090
+# Aplikacja: http://127.0.0.1:8090
+bash install.sh --docker --status
+bash install.sh --docker --logs
+bash install.sh --docker --stop
+bash install.sh --docker --start
+bash install.sh --docker --restart
+bash install.sh --docker --rebuild
+bash install.sh --docker --no-start
+```
+
+Host nie potrzebuje PHP, Composer, Node, npm, Nginx ani bazy. Kontenery przygotowują zależności z lockfile, budują edytor i uruchamiają PHP-FPM, Nginx, MariaDB oraz worker. Kod z katalogu `install.sh` jest zamontowany RW; zmiana PHP działa po odświeżeniu. Domyślny adres to `127.0.0.1:8080`, port jest zapamiętywany. Pierwszy start udostępnia `/install` z gotowym połączeniem do bazy.
+
+**Docker tworzy osobną instancję danych.** Jej konfiguracja, klucz i storage znajdują się w ignorowanym `.openwiki/docker/`, a baza w prywatnym wolumenie. Zmiana trybu nie przenosi lokalnej bazy ani załączników. Kolejne starty, restart i rebuild zachowują klucz, konta i pliki. Zależności Node i PHP kontenera są oddzielone od hostowych katalogów; gotowa aplikacja nie wymaga serwera Node. [Instrukcja Dockera](docs/docker-runtime.md) opisuje trwałość, budowanie, logi, diagnostykę i testy.
 
 ## Daily documentation editor
 

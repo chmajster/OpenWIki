@@ -183,30 +183,31 @@ $timezones = array_values($timezones);
                     <div class="form-stack">
                         <div class="form-grid">
                             <label><?= $e($t('Host')) ?>
-                                <input name="db_host" required value="<?= $value('db_host', '127.0.0.1') ?>">
+                                <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_host" required value="<?= $value('db_host', '127.0.0.1') ?>">
                             </label>
                             <label><?= $e($t('Port')) ?>
-                                <input name="db_port" type="number" min="1" max="65535" required value="<?= $value('db_port', '3306') ?>">
+                                <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_port" type="number" min="1" max="65535" required value="<?= $value('db_port', '3306') ?>">
                             </label>
                         </div>
                         <label><?= $e($t('Database name')) ?>
-                            <input name="db_database" required pattern="[A-Za-z0-9_]+" value="<?= $value('db_database', 'openwiki') ?>">
+                            <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_database" required pattern="[A-Za-z0-9_]+" value="<?= $value('db_database', 'openwiki') ?>">
                             <span class="field-help"><?= $e($t('Letters, numbers and underscore only.')) ?></span>
                         </label>
                         <label><?= $e($t('Database username')) ?>
-                            <input name="db_username" required autocomplete="username" value="<?= $value('db_username') ?>">
+                            <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_username" required autocomplete="username" value="<?= $value('db_username') ?>">
                         </label>
                         <label><?= $e($t('Database password')) ?>
-                            <input name="db_password" type="password" autocomplete="current-password">
+                            <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_password" type="password" autocomplete="current-password">
                         </label>
                         <label class="checkbox-row install-checkbox">
-                            <input name="create_database" type="checkbox" value="1" <?= !empty($defaults['create_database']) ? 'checked' : '' ?>>
+                            <input <?= !empty($managedDatabase) ? 'disabled' : '' ?> name="create_database" type="checkbox" value="1" <?= !empty($defaults['create_database']) ? 'checked' : '' ?>>
                             <span>
                                 <strong><?= $e($t('Create database automatically if it does not exist')) ?></strong>
                                 <small><?= $e($t('The supplied database account must have CREATE DATABASE permission.')) ?></small>
                             </span>
                         </label>
 
+                        <?php if (!empty($managedDatabase)): ?><p class="muted">Docker: baza i konto są przygotowane. Hasło pochodzi z prywatnej konfiguracji kontenera; nie wpisuj go w formularzu.</p><?php endif; ?>
                         <div class="database-test" data-database-test data-test-url="/install/test-database">
                             <div class="database-test__actions">
                                 <button class="button button--secondary" type="button" data-database-test-button>

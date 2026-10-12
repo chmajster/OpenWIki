@@ -21,8 +21,8 @@ final class BackupService
         private readonly Database $database,
         private readonly string $basePath
     ) {
-        $this->backupRoot = rtrim($basePath, '/\\') . '/storage/backups';
-        $this->tempRoot = rtrim($basePath, '/\\') . '/storage/temp';
+        $this->backupRoot = \OpenWiki\Core\RuntimePaths::storage($basePath, 'backups');
+        $this->tempRoot = \OpenWiki\Core\RuntimePaths::storage($basePath, 'temp');
     }
 
     public function create(): array
@@ -226,7 +226,7 @@ final class BackupService
 
     private function attachmentFiles(): array
     {
-        $root = rtrim($this->basePath, '/\\') . '/storage/attachments';
+        $root = \OpenWiki\Core\RuntimePaths::storage($this->basePath, 'attachments');
         if (!is_dir($root)) {
             return [];
         }

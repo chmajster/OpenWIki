@@ -15,7 +15,7 @@ final class ImageService
         private readonly AttachmentService $attachments,
         string $basePath
     ) {
-        $this->cacheRoot = rtrim($basePath, '/\\') . '/storage/cache/images';
+        $this->cacheRoot = \OpenWiki\Core\RuntimePaths::storage($basePath, 'cache/images');
     }
 
     public function inspectPath(string $path): array

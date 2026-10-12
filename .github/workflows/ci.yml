@@ -217,6 +217,39 @@ jobs:
       - name: Upgrade old schema with accounts, revisions, drafts and attachments
         run: python3 tests/Upgrade/runtime.py
 
+  docker-runtime-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node for browser test tooling
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Browser test dependencies
+        run: |
+          npm ci --include=dev --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Verify Docker and runtime shell syntax
+        run: |
+          docker version
+          docker compose version
+          bash -n install.sh scripts/local-server.sh scripts/docker-runtime.sh
+          sh -n docker/php/entrypoint.sh docker/php/worker.sh
+      - name: Isolated Docker wizard, RW code, persistent data and lifecycle
+        env:
+          OPENWIKI_DOCKER_BROWSER_TEST: '1'
+        run: python3 tests/Docker/runtime.py --workspace-temp
+      - name: Runtime failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-runtime-diagnostics
+          path: storage/temp/docker-runtime-last.log
+          if-no-files-found: ignore
+
   installer-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20

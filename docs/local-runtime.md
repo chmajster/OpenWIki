@@ -1,5 +1,28 @@
 # Lokalny runtime — granice odpowiedzialności
 
+Linux/WSL obsługuje osobny wybór środowiska i akcji. Samo `--local` pozostaje
+na pierwszym planie z Ctrl+C. W tle i do zarządzania:
+
+```bash
+bash install.sh --local --start --port 8090
+bash install.sh --local --status
+bash install.sh --local --logs
+bash install.sh --local --restart
+bash install.sh --local --stop
+bash install.sh --local --no-start
+```
+
+Adres i port są zapamiętywane w ignorowanym `.openwiki/local/state.json`, a logi
+w `server.log` obok niego. `--start` oddaje terminal po rzeczywistym sprawdzeniu
+gotowości. Stop weryfikuje PID, czas startu z `/proc`, router, document root i
+token środowiska; nie zabija obcego procesu po ponownym użyciu PID-u.
+`--no-start` przygotowuje zależności i pozostawia własny serwer zatrzymany.
+Operacje są serializowane przez `flock`; status i logi pozostają dostępne także
+przy serwerze na pierwszym planie. Kolejność flag nie zmienia działania.
+
+Tryb [Docker](docker-runtime.md) korzysta z tego samego kodu i kreatora, ale
+ma odrębne dane oraz narzędzia w kontenerach. Nie przenosi lokalnej bazy.
+
 Tryb `install.sh --local` korzysta z katalogu ustalonego przez `SCRIPT_DIR`, przed procedurami wdrożenia systemowego. Nie pobiera kodu, nie zmienia gałęzi, nie konfiguruje usług i nie przejmuje własności repozytorium.
 
 PHP CLI obsługuje HTTP z document root `public/`. Osobny router kieruje aplikację do istniejącego front controllera i udostępnia wyłącznie bezpieczne zasoby publiczne. Zachowanie routera odpowiada [dokumentacji PHP](https://www.php.net/manual/en/features.commandline.webserver.php).

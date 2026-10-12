@@ -15,7 +15,7 @@ final class AttachmentService
         private readonly Database $database,
         string $basePath
     ) {
-        $this->storageRoot = rtrim($basePath, '/\\') . '/storage/attachments';
+        $this->storageRoot = \OpenWiki\Core\RuntimePaths::storage($basePath, 'attachments');
     }
 
     public function listForPage(int $pageId, bool $publishedFiles = false): array

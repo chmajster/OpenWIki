@@ -22,6 +22,10 @@ INSTALL_DIR_SPECIFIED=0
 LOCAL_HOST="127.0.0.1"
 LOCAL_PORT="8080"
 LOCAL_ADDRESS_SPECIFIED=0
+LOCAL_HOST_SPECIFIED=0
+LOCAL_PORT_SPECIFIED=0
+ENVIRONMENT=""
+RUNTIME_ACTION=""
 NO_COLOR="${NO_COLOR:-0}"
 
 if [[ -t 1 && "${NO_COLOR:-0}" != "1" ]]; then
@@ -44,6 +48,7 @@ OpenWiki installer
 Użycie:
   sudo ./install.sh [opcje]
   bash install.sh --local [--host ADRES] [--port PORT]
+  bash install.sh --docker [--host ADRES] [--port PORT]
 
 Opcje:
   --install              Świeża instalacja (domyślnie); odmawia zmiany istniejącej
@@ -58,8 +63,15 @@ Opcje:
   --uninstall            Usuń konfigurację usług i pliki OpenWiki
   --install-dir PATH     Katalog instalacji (domyślnie: /var/www/openwiki)
   --local                Uruchom tę kopię projektu bez roota i usług systemowych
-  --host ADRES           Lokalny adres IPv4/IPv6 lub localhost (domyślnie: 127.0.0.1)
-  --port PORT            Port trybu --local, 1024–65535 (domyślnie: 8080)
+  --docker               Osobna instancja Compose z kodem tej kopii zamontowanym RW
+  --start                Uruchom w tle (local) lub przywróć usługi (docker)
+  --stop                 Zatrzymaj własną instancję, zachowując dane
+  --restart              Restart z zapamiętanym adresem i portem
+  --logs                 Ostatnie 100 linii logów właściwej instancji
+  --no-start             Przygotuj środowisko i pozostaw usługi zatrzymane
+  --rebuild              Docker: odśwież obrazy, zależności i zasoby bez utraty danych
+  --host ADRES           IPv4/IPv6 lub localhost (domyślnie: 127.0.0.1)
+  --port PORT            Docker: 1–65535; local: 1024–65535 (domyślnie: 8080)
   --no-color             Wyłącz kolory
   --help                 Pomoc
 
@@ -70,7 +82,22 @@ Przykłady lokalne (PHP 8.2+, Composer, dostępny MySQL/MariaDB):
   bash /ścieżka/do/OpenWIki/install.sh --local
   Pierwsza konfiguracja: http://127.0.0.1:8080/install
   Zatrzymanie: Ctrl+C. Node.js 22+ jest potrzebny przy budowaniu zasobów.
-  --local nie łączy się z --install, --status, --uninstall ani --install-dir.
+  --local --start uruchamia w tle; --local --status pokazuje stan własnego procesu.
+  Linux/WSL: PHP CLI 8.2+, Composer i dostępny MySQL/MariaDB. Bez instalacji usług.
+
+Przykłady Docker (Docker Engine/Desktop i Compose v2; bez PHP/Node na hoście):
+  bash install.sh --docker --port 8090
+  bash install.sh --docker --status
+  bash install.sh --docker --restart
+  bash install.sh --docker --logs
+  bash install.sh --docker --stop
+  bash install.sh --docker --rebuild
+  bash install.sh --docker --no-start
+  --local i --docker wzajemnie się wykluczają. Kolejność flag nie ma znaczenia.
+  Każda akcja jest osobna; bez środowiska --status zachowuje diagnostykę systemową.
+  Stan Dockera: .openwiki/docker/ oraz prywatne wolumeny projektu Compose.
+  Docker tworzy osobną instancję danych; zmiana trybu nie przenosi bazy lokalnej.
+  Oba środowiska nie łączą się z trybami wdrożenia systemowego ani --install-dir.
 
 Zmienne środowiskowe:
   OPENWIKI_INSTALL_DIR
@@ -86,6 +113,16 @@ select_mode() {
   MODE="$1"
 }
 
+select_environment() {
+  [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" == "$1" ]] || fail "--local i --docker wzajemnie się wykluczają."
+  ENVIRONMENT="$1"
+}
+
+select_action() {
+  [[ -z "$RUNTIME_ACTION" || "$RUNTIME_ACTION" == "$1" ]] || fail "Sprzeczne akcje: --$RUNTIME_ACTION i --$1."
+  RUNTIME_ACTION="$1"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --install) select_mode install ;;
@@ -96,12 +133,14 @@ while [[ $# -gt 0 ]]; do
     --rollback) select_mode rollback ;;
     --restore) select_mode restore; shift; [[ $# -gt 0 && "$1" != -* ]] || fail "--restore wymaga potwierdzenia nazwy bazy."; RESTORE_DATABASE="$1" ;;
     --diagnose) select_mode status ;;
-    --status) select_mode status ;;
+    --status) select_action status ;;
     --uninstall) select_mode uninstall ;;
-    --local) select_mode local ;;
+    --local) select_environment local ;;
+    --docker) select_environment docker ;;
+    --start|--stop|--restart|--logs|--no-start|--rebuild) select_action "${1#--}" ;;
     --install-dir) shift; [[ $# -gt 0 && "$1" != --* ]] || fail "Brak wartości dla --install-dir"; INSTALL_DIR="$1"; INSTALL_DIR_SPECIFIED=1 ;;
-    --host) shift; [[ $# -gt 0 && "$1" != --* ]] || fail "Brak wartości dla --host"; LOCAL_HOST="$1"; LOCAL_ADDRESS_SPECIFIED=1 ;;
-    --port) shift; [[ $# -gt 0 && "$1" != --* ]] || fail "Brak wartości dla --port"; LOCAL_PORT="$1"; LOCAL_ADDRESS_SPECIFIED=1 ;;
+    --host) shift; [[ $# -gt 0 && "$1" != --* ]] || fail "Brak wartości dla --host"; LOCAL_HOST="$1"; LOCAL_ADDRESS_SPECIFIED=1; LOCAL_HOST_SPECIFIED=1 ;;
+    --port) shift; [[ $# -gt 0 && "$1" != --* ]] || fail "Brak wartości dla --port"; LOCAL_PORT="$1"; LOCAL_ADDRESS_SPECIFIED=1; LOCAL_PORT_SPECIFIED=1 ;;
     --no-color) NO_COLOR=1; C_OK=''; C_INFO=''; C_WARN=''; C_FAIL=''; C_RESET='' ;;
     --help|-h) usage; exit 0 ;;
     *) fail "Nieznana opcja: $1" ;;
@@ -109,8 +148,18 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-[[ "$MODE" == local || "$LOCAL_ADDRESS_SPECIFIED" == 0 ]] || fail "--host i --port wymagają --local."
-[[ "$MODE" != local || "$INSTALL_DIR_SPECIFIED" == 0 ]] || fail "--local zawsze używa katalogu install.sh; nie łączy się z --install-dir."
+if [[ -n "$ENVIRONMENT" ]]; then
+  [[ -z "$EXPLICIT_MODE" && "$INSTALL_DIR_SPECIFIED" == 0 ]] || fail "--$ENVIRONMENT używa katalogu skryptu; nie łączy się z trybami instalacji systemowej ani --install-dir."
+  MODE="$ENVIRONMENT"
+  RUNTIME_ACTION="${RUNTIME_ACTION:-prepare}"
+  [[ "$ENVIRONMENT" == docker || "$RUNTIME_ACTION" != rebuild ]] || fail "--rebuild wymaga --docker."
+else
+  [[ "$LOCAL_ADDRESS_SPECIFIED" == 0 ]] || fail "--host i --port wymagają --local albo --docker."
+  if [[ -n "$RUNTIME_ACTION" ]]; then
+    [[ "$RUNTIME_ACTION" == status && ( -z "$EXPLICIT_MODE" || "$EXPLICIT_MODE" == status ) ]] || fail "Ta akcja wymaga --local albo --docker."
+    MODE=status
+  fi
+fi
 
 validate_install_dir() {
   [[ "$INSTALL_DIR" == /* ]] || fail "Katalog instalacji musi być ścieżką absolutną."
@@ -623,6 +672,12 @@ if [[ "$MODE" == local ]]; then
   # This flow intentionally bypasses every deployment, root and service operation.
   source "$SCRIPT_DIR/scripts/local-server.sh"
   local_mode
+  exit $?
+fi
+
+if [[ "$MODE" == docker ]]; then
+  source "$SCRIPT_DIR/scripts/docker-runtime.sh"
+  docker_mode
   exit $?
 fi
 
