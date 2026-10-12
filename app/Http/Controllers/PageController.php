@@ -146,8 +146,7 @@ final class PageController extends Controller
             }
         ));
 
-        $safe = (new \OpenWiki\Wiki\ContentService())->normalize($page['content_format'], $page['content_html'], $page['content_markdown'] ?? '', false);
-        $rendered = (new MacroService($this->app))->renderPage(array_replace($page, ['content_html' => $safe['html']]), $space);
+        $rendered = (new MacroService($this->app))->renderPage($page, $space);
 
         return $this->render('pages/show', [
             'title' => $page['title'],
@@ -310,9 +309,9 @@ final class PageController extends Controller
         if (!(new PageAclService($this->app))->canView($page, $space)) return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         $revision = $repository->revision((int) $page['id'], (int) $number);
         if ($revision === null) return $this->render('errors/404', ['title' => 'Revision not found'], 404);
-        $content = (new \OpenWiki\Wiki\ContentService())->normalize($revision['content_format'], $revision['content_html'], $revision['content_markdown'] ?? '', false);
+        $safeRevision = (new \OpenWiki\Wiki\ContentService())->safeProjection($revision);
         // Historical source is immutable; read-time sanitation never writes it back.
-        return $this->render('pages/revision', ['title' => $revision['title'], 'space' => $space, 'page' => $page, 'revision' => $revision, 'html' => $content['html']]);
+        return $this->render('pages/revision', ['title' => $revision['title'], 'space' => $space, 'page' => $page, 'revision' => $safeRevision, 'html' => $safeRevision['content_html']]);
     }
 
     public function restore(Request $request, string $spaceKey, string $slug): Response

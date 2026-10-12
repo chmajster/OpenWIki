@@ -60,11 +60,15 @@ if (($argv[1] ?? '') === 'seed') {
     ob_start(); imagepng($image); $imageBase64 = base64_encode((string) ob_get_clean()); imagedestroy($image);
     echo json_encode(['imageBase64' => $imageBase64, 'users'  => $users, 'roleId' => $roleId, 'limitedRoleId' => $limitedRole, 'securityRoleIds' => $securityRoles,
         'wildcardPermissionId' => $wildcardPermissionId, 'delegateToken' => $delegateToken, 'spaceId' => $spaceId, 'spaceKey' => $spaceKey, 'token' => $token], JSON_THROW_ON_ERROR);
-} elseif (($argv[1] ?? '') === 'acl-search-scale') {
+} elseif (in_array($argv[1] ?? '', ['acl-search-scale', 'acl-search-cleanup'], true)) {
     $data = json_decode(file_get_contents(dirname(__DIR__, 2) . '/storage/temp/editor-browser.json'), true, 512, JSON_THROW_ON_ERROR);
     $parentId = filter_var($argv[2] ?? '', FILTER_VALIDATE_INT);
     $parent = $parentId === false ? null : $database->fetchOne('SELECT id FROM pages WHERE id = ? AND space_id = ?', [$parentId, $data['spaceId']]);
     if ($parent === null) throw new RuntimeException('Browser fixture parent required.');
+    if ($argv[1] === 'acl-search-cleanup') {
+        $database->execute('DELETE FROM pages WHERE space_id = ? AND parent_id = ? AND slug LIKE ?', [$data['spaceId'], $parentId, 'scale-' . $parentId . '-%']);
+        exit(0);
+    }
     $database->transaction(function () use ($database, $data, $parentId): void {
         for ($index = 0; $index < 100; $index++) {
             $database->execute('INSERT INTO pages (space_id, parent_id, title, slug, content_html, content_format, author_id, owner_id, status, created_at, updated_at)
@@ -72,18 +76,24 @@ if (($argv[1] ?? '') === 'seed') {
                 [$data['spaceId'], $parentId, 'A protected scale document ' . $index, 'scale-' . $parentId . '-' . $index, $data['users'][0]['id'], $data['users'][0]['id']]);
         }
     });
-} elseif (in_array($argv[1] ?? '', ['legacy-html', 'legacy-snapshot'], true)) {
+} elseif (in_array($argv[1] ?? '', ['legacy-html', 'legacy-markdown', 'legacy-snapshot'], true)) {
     $data = json_decode(file_get_contents(dirname(__DIR__, 2) . '/storage/temp/editor-browser.json'), true, 512, JSON_THROW_ON_ERROR);
     $id = filter_var($argv[2] ?? '', FILTER_VALIDATE_INT);
     $page = $id === false ? null : $database->fetchOne('SELECT id FROM pages WHERE id = ? AND space_id = ?', [$id, $data['spaceId']]);
     if ($page === null) throw new RuntimeException('Browser fixture page required.');
-    if ($argv[1] === 'legacy-html') {
+    if ($argv[1] !== 'legacy-snapshot') {
+        $format = $argv[1] === 'legacy-markdown' ? 'markdown' : 'visual';
+        $markdown = $format === 'markdown' ? '# Original Markdown source' : null;
         $html = '<article><p onclick="window.__xss=1">Legacy safe</p><svg><script>window.__xss=1</script></svg><script>window.__xss=1</script></article>';
-        $document = json_encode(['version' => 1, 'format' => 'visual', 'source' => $html], JSON_THROW_ON_ERROR);
-        $database->execute('UPDATE pages SET content_html = ?, document_json = ? WHERE id = ?', [$html, $document, $id]);
-        $database->execute('UPDATE page_revisions SET content_html = ?, document_json = ? WHERE page_id = ? AND revision_number = 1', [$html, $document, $id]);
+        if ($format === 'markdown') $html .= '<table><tbody><tr><td>Historical table</td></tr></tbody></table>';
+        $document = json_encode(['version' => 1, 'format' => $format, 'source' => $markdown ?? $html], JSON_THROW_ON_ERROR);
+        $database->execute('UPDATE pages SET content_html = ?, content_markdown = ?, content_format = ?, document_json = ? WHERE id = ?', [$html, $markdown, $format, $document, $id]);
+        $database->execute('UPDATE page_revisions SET content_html = ?, content_markdown = ?, content_format = ?, document_json = ? WHERE page_id = ? AND revision_number = 1', [$html, $markdown, $format, $document, $id]);
     }
-    echo json_encode($database->fetchOne('SELECT content_html, document_json FROM page_revisions WHERE page_id = ? AND revision_number = 1', [$id]), JSON_THROW_ON_ERROR);
+    echo json_encode([
+        'page' => $database->fetchOne('SELECT content_html, content_markdown, content_format, document_json FROM pages WHERE id = ?', [$id]),
+        'revision' => $database->fetchOne('SELECT content_html, content_markdown, content_format, document_json FROM page_revisions WHERE page_id = ? AND revision_number = 1', [$id]),
+    ], JSON_THROW_ON_ERROR);
 } elseif (($argv[1] ?? '') === 'cleanup') {
     $data = json_decode(file_get_contents(dirname(__DIR__, 2) . '/storage/temp/editor-browser.json'), true, 512, JSON_THROW_ON_ERROR);
     $database->execute('DELETE FROM spaces WHERE id = ?', [$data['spaceId']]);

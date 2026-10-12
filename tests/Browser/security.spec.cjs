@@ -138,22 +138,25 @@ test('API deletion and real trash restore preserve subtree ACL and independent d
     expect((await member.request.get(pathFor(child))).status()).toBe(403); await context.close();
 });
 
-test('legacy page, revision, API and export reads are safe without CSP and leave snapshots intact', async ({request, browser}) => {
+for (const format of ['visual', 'markdown']) test(`legacy ${format} page, revision, API and export reads are safe without CSP and leave snapshots intact`, async ({request, browser}) => {
     const document = await create(request);
-    const snapshot = execFileSync('php', [...phpArguments, 'tests/Browser/fixture.php', 'legacy-html', String(document.id)], {encoding: 'utf8'});
+    const snapshot = execFileSync('php', [...phpArguments, 'tests/Browser/fixture.php', format === 'markdown' ? 'legacy-markdown' : 'legacy-html', String(document.id)], {encoding: 'utf8'});
     const context = await browser.newContext({bypassCSP: true}); const page = await context.newPage();
     await login(page);
     for (const path of [pathFor(document), pathFor(document) + '/revisions/1']) {
         await page.goto(path); await expect(page.locator('body')).toContainText('Legacy safe');
         expect(await page.evaluate(() => window.__xss)).toBeUndefined();
         expect(await page.locator('article[onclick], p[onclick], svg').count()).toBe(0);
+        if (format === 'markdown') await expect(page.locator('table')).toContainText('Historical table');
     }
     const response = await request.get('/api/v1/pages/' + document.id, {headers: {Authorization: 'Bearer ' + fixture().token}});
     const safe = (await response.json()).data;
-    expect(safe.content_html).toBe('<p>Legacy safe</p>'); expect(safe.document.source).toBe(safe.content_html);
+    expect(safe.content_html).toBe('<p>Legacy safe</p>' + (format === 'markdown' ? '<table><tbody><tr><td>Historical table</td></tr></tbody></table>' : ''));
+    expect(safe.document.source).toBe(format === 'markdown' ? '# Original Markdown source' : safe.content_html);
     const exported = await page.request.get(pathFor(document) + '/export/html');
     expect(exported.status()).toBe(200);
     expect(await exported.text()).toContain('Legacy safe'); expect(await exported.text()).not.toContain('window.__xss');
+    if (format === 'markdown') expect(await exported.text()).toContain('Historical table');
     expect(execFileSync('php', [...phpArguments, 'tests/Browser/fixture.php', 'legacy-snapshot', String(document.id)], {encoding: 'utf8'})).toBe(snapshot);
     await context.close();
 });
