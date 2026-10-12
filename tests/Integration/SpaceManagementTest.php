@@ -147,8 +147,13 @@ final class SpaceManagementTest extends TestCase
     {
         $this->instance(function (Application $app, Database $db): void {
             $owner = $this->user($db, 'owner', true); $spaces = new SpaceService($app);
+            $editor = $this->user($db, 'copy-author');
+            $role = $db->insert('INSERT INTO roles (name, slug) VALUES ("Copy author", "copy-author")');
+            $db->execute('INSERT IGNORE INTO permissions (name) VALUES ("page.view"), ("page.create"), ("page.publish"), ("attachment.upload")');
+            $db->execute('INSERT INTO role_permissions (role_id, permission_id) SELECT ?, id FROM permissions WHERE name IN ("page.view", "page.create", "page.publish", "attachment.upload")', [$role]); $db->execute('INSERT INTO user_roles VALUES (?, ?)', [$editor, $role]);
             $source = $spaces->create(['name' => 'Source', 'visibility' => 'public'], $owner, $this->request());
             $destination = $spaces->create(['name' => 'Destination', 'visibility' => 'public'], $owner, $this->request());
+            $spaces->rule((int) $destination['id'], ['principal_type' => 'user', 'principal_id' => $editor, 'permission' => 'space.edit', 'effect' => 'allow'], $owner, $this->request());
             $writer = new \OpenWiki\Wiki\PageWriteService($db, $app->basePath());
             $root = $writer->save($source, null, ['title' => 'Root', 'status' => 'published', 'tags' => ['tag'], 'content_html' => '<p>[[Child]]</p>'], $owner);
             $child = $writer->save($source, null, ['title' => 'Child', 'parent_id' => $root['id'], 'status' => 'published', 'content_format' => 'markdown', 'content_markdown' => "[[Root]]\n\n`[[Root]]`\n\n```php\n[[Root]]\n```"], $owner);
@@ -157,8 +162,8 @@ final class SpaceManagementTest extends TestCase
             $writer->save($source, $root, ['base_version' => 1, 'content_html' => '<p>[[Child]] <a href="/attachments/' . $attachment . '/download" data-attachment-id="' . $attachment . '">Plik</a></p>'], $owner);
             $spaces->update((int) $source['id'], ['status' => 'archived'], $owner, $this->request());
             $service = new \OpenWiki\Spaces\StructureService($app); $input = ['action' => 'copy', 'scope' => 'subtree', 'destination_space_id' => (int) $destination['id'], 'base_version' => 2];
-            $preview = $service->preview((int) $root['id'], $input, $owner); $input += ['preview_token' => $preview['preview_token'], 'operation_id' => '33333333-3333-4333-8333-333333333333'];
-            $result = $service->execute((int) $root['id'], $input, $owner, $this->request());
+            $preview = $service->preview((int) $root['id'], $input, $editor); $input += ['preview_token' => $preview['preview_token'], 'operation_id' => '33333333-3333-4333-8333-333333333333'];
+            $result = $service->execute((int) $root['id'], $input, $editor, $this->request());
             try {
                 self::assertNotSame((int) $root['id'], $result['id']); $newRoot = (new \OpenWiki\Repositories\PageRepository($db))->findById($result['id']);
                 $newChild = (new \OpenWiki\Repositories\PageRepository($db))->findById($result['mapping'][$child['id']]);
@@ -172,7 +177,7 @@ final class SpaceManagementTest extends TestCase
                 self::assertStringContainsString('/attachments/' . $copyAttachment['id'] . '/download', $newRoot['content_html']);
                 self::assertStringContainsString('data-attachment-id="' . $copyAttachment['id'] . '"', $newRoot['content_html']);
                 self::assertSame(['tag'], array_column((new \OpenWiki\Wiki\WikiMetadataService($db))->tagsForPage($result['id']), 'name'));
-                self::assertSame($result, $service->execute((int) $root['id'], $input, $owner, $this->request()));
+                self::assertSame($result, $service->execute((int) $root['id'], $input, $editor, $this->request()));
             } finally { foreach ([$root['id'], ...array_values($result['mapping'])] as $page) $files->purgeStorageKeys($files->storageKeysForPage((int) $page)); }
         });
     }

@@ -180,7 +180,7 @@ final class StructureService
         $attachments = $db->fetchAll('SELECT a.id, a.page_id, a.current_version, a.updated_at, a.size_bytes FROM attachments a INNER JOIN pages p ON p.id = a.page_id WHERE p.space_id IN (?, ?) AND a.deleted_at IS NULL ORDER BY a.id FOR UPDATE', [$source['id'], $destination['id']]);
         if ($action === 'copy') foreach ($attachments as $attachment) if (in_array((int) $attachment['page_id'], $selected, true)) {
             if (($input['copy_attachments_allowed'] ?? true) !== true) throw new \DomainException('Kopiowanie załączników wymaga scopes attachments:read i attachments:write.');
-            if (!$actor->can('attachment.view') || !$acl->canViewFor($active[$attachment['page_id']], $source, $actor->id, $actor->can('*'), $actor->can('page.view')) || !$actor->can('attachment.upload')) throw new \DomainException('Kopiowanie załączników wymaga odczytu źródła i uprawnienia upload.');
+            if (!$actor->can('page.view') || !$acl->canViewFor($active[$attachment['page_id']], $source, $actor->id, $actor->can('*'), $actor->can('page.view')) || !$actor->can('attachment.upload')) throw new \DomainException('Kopiowanie załączników wymaga odczytu źródła i uprawnienia upload.');
         }
         $detached = $action === 'move' && $scope === 'page' ? ($children[$id] ?? []) : [];
         $plan = compact('root', 'source', 'destination', 'action', 'scope', 'parent', 'before', 'selected', 'affected', 'detached', 'rows', 'slugs', 'title', 'rules', 'spaceRules', 'profiles', 'attachments', 'redirects');
