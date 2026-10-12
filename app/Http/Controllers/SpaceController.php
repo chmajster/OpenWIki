@@ -74,7 +74,7 @@ final class SpaceController extends Controller
     {
         $actor = new \OpenWiki\Spaces\SpaceActor($this->app->database(), (int) $this->app->auth()->user()['id']);
         $service = new \OpenWiki\Spaces\SpaceService($this->app);
-        return $service->allowed($space, $actor, 'space.edit') || $service->allowed($space, $actor, 'space.manage_access');
+        return (bool) array_filter(['space.edit', 'space.manage_access', 'space.manage_owner', 'space.archive'], fn (string $permission): bool => $service->allowed($space, $actor, $permission));
     }
 
     public function settings(Request $request, string $spaceKey): Response
@@ -125,15 +125,22 @@ final class SpaceController extends Controller
             if ($operation === 'update') {
                 $space = $service->update((int) $space['id'], (array) $request->input(), $actor->id, $request);
                 Session::flash('success', 'Ustawienia przestrzeni zapisane.');
-                return Response::redirect($service->allowed($space, $actor, 'space.edit') ? '/spaces/' . rawurlencode($key) . '/settings' : '/');
+                return Response::redirect($this->settingsAllowed($space) ? '/spaces/' . rawurlencode($key) . '/settings' : '/');
             }
             if (in_array($operation, ['rule', 'principals', 'effective'], true)) {
+                if ($operation === 'principals') {
+                    $type = $request->query('type', 'user'); $query = $request->query('q', '');
+                    if (!is_string($type) || !is_string($query)) throw new \InvalidArgumentException('Nieprawidłowe wyszukiwanie.');
+                    if (!$service->allowed($space, $actor, 'space.manage_access') && !($type === 'user' && $service->allowed($space, $actor, 'space.manage_owner'))) throw new \DomainException('Brak uprawnienia do wyszukiwania adresatów.');
+                    return Response::json(['data' => $service->principals($type, $query)]);
+                }
                 $service->assertAllowed($space, $actor, 'space.manage_access');
-                if ($operation === 'principals') return Response::json(['data' => $service->principals((string) $request->query('type', 'user'), (string) $request->query('q', ''))]);
                 if ($operation === 'effective') {
                     $id = $request->query('user_id');
                     if ($id !== null && (!ctype_digit((string) $id) || (int) $id < 1)) throw new \InvalidArgumentException('Nieprawidłowy użytkownik.');
-                    return Response::json(['data' => $service->effective($space, $id === null ? null : (int) $id)]);
+                    $page = $request->query('page_id');
+                    if ($page !== null && (!is_scalar($page) || !ctype_digit((string) $page) || (int) $page < 1)) throw new \InvalidArgumentException('Nieprawidłowa strona.');
+                    return Response::json(['data' => $service->effective($space, $id === null ? null : (int) $id, $page === null ? null : (int) $page, $actor)]);
                 }
                 $delete = $request->input('delete_id');
                 if ($delete !== null && (!ctype_digit((string) $delete) || (int) $delete < 1)) throw new \InvalidArgumentException('Nieprawidłowa reguła.');

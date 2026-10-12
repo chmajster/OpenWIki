@@ -25,7 +25,7 @@ final class SpaceManagementTest extends TestCase
             foreach (['DB_HOST' => $config['host'], 'DB_PORT' => $config['port'], 'DB_DATABASE' => $config['database'], 'DB_USERNAME' => $config['username'], 'DB_PASSWORD' => $config['password'], 'APP_KEY' => str_repeat('a', 64)] as $key => $value) {
                 $old[$key] = getenv($key); putenv($key . '=' . $value);
             }
-            try { $test(Application::boot(dirname(__DIR__, 2), false), $db); }
+            try { $test(Application::boot(dirname(__DIR__, 2), false), $db, $config); }
             finally { foreach ($old as $key => $value) $value === false ? putenv($key) : putenv($key . '=' . $value); }
         });
     }
@@ -187,5 +187,56 @@ final class SpaceManagementTest extends TestCase
             $service->execute((int) $pages[2]['id'], $input + ['preview_token' => $preview['preview_token'], 'operation_id' => '55555555-5555-4555-8555-555555555555'], $owner, $this->request());
             self::assertSame([(int) $pages[2]['id'], (int) $pages[1]['id']], array_map('intval', array_column($db->fetchAll('SELECT id FROM pages WHERE space_id = ? AND parent_id IS NULL ORDER BY order_index, id', [$space['id']]), 'id')));
         });
+    }
+
+    public function testConcurrentMovesUseFreshGraphAndCannotCreateCycle(): void
+    {
+        $this->instance(function (Application $app, Database $db): void {
+            $owner = $this->user($db, 'owner', true); $space = (new SpaceService($app))->create(['name' => 'Concurrent'], $owner, $this->request());
+            $writer = new \OpenWiki\Wiki\PageWriteService($db, $app->basePath());
+            $a = $writer->save($space, null, ['title' => 'A', 'content_html' => '<p>A</p>'], $owner); $b = $writer->save($space, null, ['title' => 'B', 'content_html' => '<p>B</p>'], $owner);
+            $service = new \OpenWiki\Spaces\StructureService($app); $workers = [];
+            foreach ([[$a, $b], [$b, $a]] as $index => [$page, $parent]) {
+                $input = ['base_version' => 1, 'parent_id' => (int) $parent['id']];
+                $preview = $service->preview((int) $page['id'], $input, $owner);
+                $workers[] = ['mode' => 'move', 'user' => $owner, 'page' => (int) $page['id'], 'input' => $input + ['preview_token' => $preview['preview_token'], 'operation_id' => sprintf('66666666-6666-4666-8666-%012d', $index)]];
+            }
+            self::assertSame(['denied', 'saved'], $this->race($workers));
+            $rows = array_column($db->fetchAll('SELECT id, parent_id FROM pages WHERE space_id = ?', [$space['id']]), null, 'id');
+            self::assertFalse((int) $rows[$a['id']]['parent_id'] === (int) $b['id'] && (int) $rows[$b['id']]['parent_id'] === (int) $a['id']);
+        });
+    }
+
+    public function testConcurrentAclChangesCannotRemoveBothRemainingManagers(): void
+    {
+        $this->instance(function (Application $app, Database $db): void {
+            $owner = $this->user($db, 'owner', true); $first = $this->user($db, 'first'); $second = $this->user($db, 'second');
+            $service = new SpaceService($app); $space = $service->create(['name' => 'Managers', 'visibility' => 'restricted'], $owner, $this->request());
+            foreach ([$first, $second] as $manager) {
+                $db->execute('INSERT INTO user_roles (user_id, role_id) SELECT ?, id FROM roles WHERE slug = "space-owner"', [$manager]);
+                foreach (['space.view', 'space.manage_access'] as $permission) $service->rule((int) $space['id'], ['principal_type' => 'user', 'principal_id' => $manager, 'permission' => $permission, 'effect' => 'allow'], $owner, $this->request());
+            }
+            // Legacy ownership may refer to an inactive account; these are its two actual managers.
+            $db->execute('UPDATE users SET status = "disabled" WHERE id = ?', [$owner]);
+            $workers = [];
+            foreach ([$first, $second] as $manager) $workers[] = ['mode' => 'rule', 'user' => $manager, 'space' => (int) $space['id'], 'rule' => (int) $db->fetchOne('SELECT id FROM space_acl WHERE space_id = ? AND principal_id = ? AND permission = "space.manage_access"', [$space['id'], $manager])['id']];
+            self::assertSame(['denied', 'saved'], $this->race($workers));
+            self::assertSame(1, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM space_acl WHERE space_id = ? AND permission = "space.manage_access"', [$space['id']])['total']);
+        });
+    }
+
+    private function race(array $inputs): array
+    {
+        $workers = [];
+        foreach ($inputs as $input) {
+            $process = proc_open([PHP_BINARY, dirname(__DIR__) . '/Fixtures/structure-concurrency.php', json_encode($input, JSON_THROW_ON_ERROR)], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, dirname(__DIR__, 2));
+            self::assertIsResource($process); $workers[] = [$process, $pipes]; self::assertSame("ready\n", fgets($pipes[1]));
+        }
+        foreach ($workers as [$_, $pipes]) { fwrite($pipes[0], "go\n"); fclose($pipes[0]); }
+        $results = [];
+        foreach ($workers as [$process, $pipes]) {
+            $results[] = trim(stream_get_contents($pipes[1])); $errors = stream_get_contents($pipes[2]); fclose($pipes[1]); fclose($pipes[2]); self::assertSame(0, proc_close($process), $errors);
+        }
+        sort($results); return $results;
     }
 }

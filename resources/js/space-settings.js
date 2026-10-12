@@ -33,6 +33,7 @@ document.querySelectorAll('[data-effective-access]').forEach(panel => {
         try {
             const url = new URL(panel.dataset.url, location.origin), user = panel.querySelector('[data-effective-user]').value;
             if (user) url.searchParams.set('user_id', user);
+            const page = panel.querySelector('[data-effective-page]').value; if (page) url.searchParams.set('page_id', page);
             const decisions = await message(await fetch(url, {headers: {Accept: 'application/json'}}));
             const list = document.createElement('ul');
             Object.entries(decisions).forEach(([permission, decision]) => {

@@ -20,13 +20,13 @@ final class SpaceService
 
     public function find(int $id): array
     {
-        return $this->app->database()->fetchOne('SELECT * FROM spaces WHERE id = ? AND deleted_at IS NULL', [$id])
+        return $this->app->database()->fetchOne('SELECT * FROM spaces WHERE id = ? AND deleted_at IS NULL' . ($this->app->database()->pdo()->inTransaction() ? ' FOR UPDATE' : ''), [$id])
             ?? throw new \OutOfBoundsException('Nie znaleziono przestrzeni.');
     }
 
     public function allowed(array $space, SpaceActor $actor, string $permission): bool
     {
-        $access = new SpaceAccessService($this->app);
+        $access = new SpaceAccessService($this->app, $this->app->database()->pdo()->inTransaction());
         return $access->canViewFor($space, $actor->id, $actor->can('*'))
             && $access->canManageFor($space, $actor->id, $permission, $actor->can('*'), $actor->can($permission));
     }
@@ -69,11 +69,12 @@ final class SpaceService
             $db = $this->app->database();
             $space = $this->find($id);
             $actor = new SpaceActor($db, $actorId, $ceiling);
-            $this->assertAllowed($space, $actor, 'space.edit');
+            if (!array_filter(['space.edit', 'space.manage_access', 'space.manage_owner', 'space.archive'], fn (string $permission): bool => $this->allowed($space, $actor, $permission))) throw new \DomainException('Brak uprawnienia do ustawień przestrzeni.');
             $this->version($space, $input);
             $name = $this->text($input, 'name', $space['name'], 191, true);
             $description = $this->text($input, 'description', $space['description'] ?? '', 5000);
             $icon = $this->text($input, 'icon', $space['icon'] ?? '', 64);
+            if ($name !== $space['name'] || $description !== ($space['description'] ?? '') || $icon !== ($space['icon'] ?? '')) $this->assertAllowed($space, $actor, 'space.edit');
             $visibility = $input['visibility'] ?? $space['visibility'];
             if (!in_array($visibility, ['public', 'private', 'restricted'], true)) throw new \InvalidArgumentException('Nieprawidłowa widoczność.');
             if ($visibility !== $space['visibility']) $this->assertAllowed($space, $actor, 'space.manage_access');
@@ -84,6 +85,7 @@ final class SpaceService
             if ($status !== $space['status']) $this->assertAllowed($space, $actor, 'space.archive');
             $home = array_key_exists('home_page_id', $input) ? $input['home_page_id'] : $space['home_page_id'];
             $home = $home === null || $home === '' ? null : $this->id($home);
+            if ($home !== ($space['home_page_id'] === null ? null : (int) $space['home_page_id'])) $this->assertAllowed($space, $actor, 'space.edit');
             if ($home !== null) {
                 $page = $db->fetchOne('SELECT * FROM pages WHERE id = ? AND space_id = ? AND deleted_at IS NULL', [$home, $id]);
                 if ($page === null || !(new PageAclService($this->app))->canViewFor($page, $space, $actorId, $actor->can('*'), $actor->can('page.view'))) throw new \InvalidArgumentException('Strona startowa musi być dostępną stroną tej przestrzeni.');
@@ -132,15 +134,24 @@ final class SpaceService
         return $this->app->database()->fetchAll('SELECT id, ' . $name . ' AS name FROM ' . $table . ' WHERE ' . $name . ' LIKE ?' . ($type === 'user' ? ' AND status = "active" AND deleted_at IS NULL' : '') . ' ORDER BY ' . $name . ', id LIMIT 30', ['%' . mb_substr(trim($query), 0, 100) . '%']);
     }
 
-    public function effective(array $space, ?int $id): array
+    public function effective(array $space, ?int $id, ?int $pageId = null, ?SpaceActor $viewer = null): array
     {
+        return $this->app->database()->transaction(function () use ($space, $id, $pageId, $viewer): array {
         $actor = $id === null ? null : new SpaceActor($this->app->database(), $id);
         $result = [];
         foreach (self::PERMISSIONS as $permission) {
             $result[$permission] = (new SpaceAccessService($this->app))->explainFor($space, $id, $permission, $actor?->can('*') ?? false, $actor?->can($permission) ?? false);
             if ($permission === 'space.edit' && $space['status'] === 'archived') $result[$permission] = ['allowed' => false, 'effect' => 'deny', 'reason' => 'Archiwum: dokumenty są tylko do odczytu.', 'rules' => []];
         }
+        if ($pageId !== null) {
+            $page = $this->app->database()->fetchOne('SELECT * FROM pages WHERE id = ? AND space_id = ? AND deleted_at IS NULL', [$pageId, $space['id']]);
+            $acl = new PageAclService($this->app);
+            if ($viewer === null || $page === null || !$acl->canViewFor($page, $space, $viewer->id, $viewer->can('*'), $viewer->can('page.view'))) throw new \OutOfBoundsException('Nie znaleziono strony.');
+            $acl->snapshot($space, $id, $actor?->can('*') ?? false);
+            foreach (['page.view', 'page.edit', 'page.create', 'page.move', 'page.publish', 'page.archive', 'attachment.view', 'attachment.upload'] as $permission) $result[$permission] = $acl->explainFor($page, $space, $permission, $id, $actor?->can('*') ?? false, $actor?->can($permission) ?? false);
+        }
         return $result;
+        });
     }
 
     public function delete(int $id, int $actorId, Request $request, ?array $ceiling = null): void

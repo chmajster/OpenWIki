@@ -177,9 +177,10 @@ final class ApiV1Controller extends Controller
 
         $total = count($filtered);
         $slice = array_slice($filtered, $offset, $perPage);
+        $parents = $this->visibleParents($slice, $context);
 
         return Response::json([
-            'data' => array_map([$this, 'pageListResource'], $slice),
+            'data' => array_map(fn (array $row): array => $this->pageListResource($row, $context, $parents), $slice),
             'meta' => $this->paginationMeta($page, $perPage, $total),
         ]);
     }
@@ -201,7 +202,7 @@ final class ApiV1Controller extends Controller
             return $this->error('not_found', 'Page not found.', 404);
         }
 
-        return Response::json(['data' => $this->pageResource($row)]);
+        return Response::json(['data' => $this->pageResource($row, $context)]);
     }
 
     public function createPage(Request $request): Response
@@ -228,7 +229,7 @@ final class ApiV1Controller extends Controller
                 $this->pageWritePolicy($space, $context),
                 $tokens->hasScope($context, 'attachments:write') && $tokens->hasPermission($context, 'attachment.upload')
             );
-            return Response::json(['data' => $this->pageResource($saved)], 201);
+            return Response::json(['data' => $this->pageResource($saved, $context)], 201);
         } catch (\DomainException $exception) {
             return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
@@ -279,7 +280,7 @@ final class ApiV1Controller extends Controller
                 $this->pageWritePolicy($space, $context),
                 $tokens->hasScope($context, 'attachments:write') && $tokens->hasPermission($context, 'attachment.upload')
             );
-            return Response::json(['data' => $this->pageResource($saved)], 200);
+            return Response::json(['data' => $this->pageResource($saved, $context)], 200);
         } catch (\DomainException $exception) {
             return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
@@ -1753,11 +1754,12 @@ final class ApiV1Controller extends Controller
 
         $metadata = new WikiMetadataService($this->app->database());
         $pages = [];
-        foreach ($metadata->pagesForTag((string) $tag['slug']) as $row) {
+        $tagRows = $metadata->pagesForTag((string) $tag['slug']); $parents = $this->visibleParents($tagRows, $context);
+        foreach ($tagRows as $row) {
             if (!$this->canViewPage($context, $row)) {
                 continue;
             }
-            $pages[] = $this->pageListResource($row);
+            $pages[] = $this->pageListResource($row, $context, $parents);
         }
 
         return Response::json([
@@ -2825,7 +2827,7 @@ final class ApiV1Controller extends Controller
                 $request->input('delete_id') === null ? null : ($this->positiveId((string) $request->input('delete_id')) ?? throw new \InvalidArgumentException('Nieprawidłowa reguła.')), $context['permissions']);
             $userId = $request->query('user_id');
             return Response::json(['data' => ['space' => $this->spaceResource($space), 'rules' => $service->entries((int) $space['id']),
-                'effective' => $service->effective($space, $userId === null || $userId === '' ? null : ($this->positiveId((string) $userId) ?? throw new \InvalidArgumentException('Nieprawidłowy użytkownik.')))]]);
+                'effective' => $service->effective($space, $userId === null || $userId === '' ? null : ($this->positiveId((string) $userId) ?? throw new \InvalidArgumentException('Nieprawidłowy użytkownik.')), $request->query('page_id') === null ? null : ($this->positiveId((string) $request->query('page_id')) ?? throw new \InvalidArgumentException('Nieprawidłowa strona.')), $actor)]]);
         } catch (\Throwable $error) { return $this->spaceError($error); }
     }
 
@@ -2836,8 +2838,11 @@ final class ApiV1Controller extends Controller
         try {
             $service = new \OpenWiki\Spaces\SpaceService($this->app);
             $space = $service->find($this->positiveId($id) ?? throw new \OutOfBoundsException('Nie znaleziono przestrzeni.'));
-            $service->assertAllowed($space, new \OpenWiki\Spaces\SpaceActor($this->app->database(), (int) $context['user']['id'], $context['permissions']), 'space.manage_access');
-            return Response::json(['data' => $service->principals((string) $request->query('type', 'user'), (string) $request->query('q', ''))]);
+            $actor = new \OpenWiki\Spaces\SpaceActor($this->app->database(), (int) $context['user']['id'], $context['permissions']);
+            $type = $request->query('type', 'user'); $query = $request->query('q', '');
+            if (!is_string($type) || !is_string($query)) throw new \InvalidArgumentException('Nieprawidłowe wyszukiwanie.');
+            if (!$service->allowed($space, $actor, 'space.manage_access') && !($type === 'user' && $service->allowed($space, $actor, 'space.manage_owner'))) throw new \DomainException('Brak uprawnienia do wyszukiwania adresatów.');
+            return Response::json(['data' => $service->principals($type, $query)]);
         } catch (\Throwable $error) { return $this->spaceError($error); }
     }
 
@@ -3212,12 +3217,17 @@ final class ApiV1Controller extends Controller
         ];
     }
 
-    private function pageListResource(array $page): array
+    private function pageListResource(array $page, array $context, ?array $parents = null): array
     {
+        $parentId = $page['parent_id'] === null ? null : (int) $page['parent_id'];
+        if ($parentId !== null) {
+            $parents ??= $this->visibleParents([$page], $context);
+            if (!isset($parents[$parentId])) $parentId = null;
+        }
         return [
             'id' => (int) $page['id'],
             'space_id' => (int) $page['space_id'],
-            'parent_id' => $page['parent_id'] === null ? null : (int) $page['parent_id'],
+            'parent_id' => $parentId,
             'title' => $page['title'],
             'slug' => $page['slug'],
             'status' => $page['status'],
@@ -3231,10 +3241,26 @@ final class ApiV1Controller extends Controller
         ];
     }
 
-    private function pageResource(array $page): array
+    private function visibleParents(array $rows, array $context): array
+    {
+        $ids = array_values(array_unique(array_filter(array_column($rows, 'parent_id'))));
+        if ($ids === []) return [];
+        return $this->app->database()->transaction(function () use ($ids, $context): array {
+            $parents = $this->app->database()->fetchAll('SELECT p.id, p.space_id, p.parent_id, p.inherit_acl, p.status, p.owner_id, p.author_id, s.space_key, s.name AS space_name, s.visibility AS space_visibility, s.owner_id AS space_owner_id, s.status AS space_status, s.deleted_at AS space_deleted_at FROM pages p INNER JOIN spaces s ON s.id = p.space_id WHERE p.deleted_at IS NULL AND p.id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')', $ids);
+            $services = []; $visible = [];
+            foreach ($parents as $parent) {
+                $space = $this->spaceFromPage($parent); $spaceId = (int) $space['id'];
+                if (!isset($services[$spaceId])) { $services[$spaceId] = new PageAclService($this->app); $services[$spaceId]->snapshot($space, (int) $context['user']['id'], $this->isSuperAdmin($context)); }
+                if ($services[$spaceId]->canViewFor($parent, $space, (int) $context['user']['id'], $this->isSuperAdmin($context), $this->contextHasPermission($context, 'page.view'))) $visible[(int) $parent['id']] = true;
+            }
+            return $visible;
+        });
+    }
+
+    private function pageResource(array $page, array $context): array
     {
         $page = (new \OpenWiki\Wiki\ContentService())->safeProjection($page);
-        return $this->pageListResource($page) + [
+        return $this->pageListResource($page, $context) + [
             'content_format' => $page['content_format'],
             'content_html' => $page['content_html'],
             'document' => ['version' => \OpenWiki\Wiki\ContentService::SCHEMA_VERSION, 'format' => $page['content_format'],

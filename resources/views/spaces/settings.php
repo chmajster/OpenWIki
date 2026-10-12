@@ -1,6 +1,7 @@
 <?php
 $base = '/spaces/' . rawurlencode($space['space_key']);
 $value = static fn (string $key): mixed => $old[$key] ?? $space[$key] ?? '';
+$baseVersion = (int) ($old['base_version'] ?? $space['management_version']);
 $labels = ['space.view' => 'Odczyt', 'space.edit' => 'Edycja', 'space.manage_access' => 'Zarządzanie dostępem', 'space.manage_owner' => 'Zmiana właściciela', 'space.archive' => 'Archiwizacja i przywracanie', 'space.delete' => 'Usuwanie'];
 ?>
 <div class="page-heading"><div><div class="breadcrumbs"><a href="<?= $e($base) ?>"><?= $e($space['name']) ?></a><span>/</span><span>Ustawienia przestrzeni</span></div><h1>Ustawienia przestrzeni</h1></div><a class="button button--ghost" href="<?= $e($base) ?>">Wróć do dokumentacji</a></div>
@@ -10,12 +11,12 @@ $labels = ['space.view' => 'Odczyt', 'space.edit' => 'Edycja', 'space.manage_acc
 <h2>Informacje i widoczność</h2>
 <form method="post" action="<?= $e($base) ?>/settings" class="form-grid" data-space-settings>
     <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-    <input type="hidden" name="base_version" value="<?= (int) ($old['base_version'] ?? $space['management_version']) ?>">
-    <fieldset <?= !$capabilities['space.edit'] ? 'disabled' : '' ?>>
-    <label>Nazwa <input name="name" value="<?= $e($value('name')) ?>" maxlength="191" required></label>
-    <label>Opis <textarea name="description" maxlength="5000" rows="4"><?= $e($value('description')) ?></textarea></label>
-    <label>Ikona (emoji lub krótki tekst) <input name="icon" value="<?= $e($value('icon')) ?>" maxlength="64"></label>
-    <label>Strona startowa <select name="home_page_id"><option value="">Przegląd dokumentacji</option><?php foreach ($pages as $row): ?><option value="<?= (int) $row['id'] ?>" <?= (int) $value('home_page_id') === (int) $row['id'] ? 'selected' : '' ?>><?= $e($row['title']) ?></option><?php endforeach; ?></select></label>
+    <input type="hidden" name="base_version" value="<?= $baseVersion ?>">
+    <fieldset>
+    <label>Nazwa <input name="name" value="<?= $e($value('name')) ?>" maxlength="191" required <?= !$capabilities['space.edit'] ? 'disabled' : '' ?>></label>
+    <label>Opis <textarea name="description" maxlength="5000" rows="4" <?= !$capabilities['space.edit'] ? 'disabled' : '' ?>><?= $e($value('description')) ?></textarea></label>
+    <label>Ikona (emoji lub krótki tekst) <input name="icon" value="<?= $e($value('icon')) ?>" maxlength="64" <?= !$capabilities['space.edit'] ? 'disabled' : '' ?>></label>
+    <label>Strona startowa <select name="home_page_id" <?= !$capabilities['space.edit'] ? 'disabled' : '' ?>><option value="">Przegląd dokumentacji</option><?php foreach ($pages as $row): ?><option value="<?= (int) $row['id'] ?>" <?= (int) $value('home_page_id') === (int) $row['id'] ? 'selected' : '' ?>><?= $e($row['title']) ?></option><?php endforeach; ?></select></label>
     <label>Widoczność <select name="visibility" <?= !$capabilities['space.manage_access'] ? 'disabled' : '' ?>><?php foreach (['public' => 'Publiczna', 'private' => 'Prywatna', 'restricted' => 'Ograniczona'] as $key => $label): ?><option value="<?= $e($key) ?>" <?= $value('visibility') === $key ? 'selected' : '' ?>><?= $e($label) ?></option><?php endforeach; ?></select></label>
     <p class="form-help">Publiczna: opublikowane strony także dla gości. Prywatna: właściciel i superadministrator. Ograniczona: osoby wskazane przez ACL użytkowników, grup i ról. ACL strony nadal może ograniczać odczyt.</p>
     <?php if ($capabilities['space.manage_owner']): ?>
@@ -36,7 +37,7 @@ $labels = ['space.view' => 'Odczyt', 'space.edit' => 'Edycja', 'space.manage_acc
 <h2>Dostęp użytkowników, grup i ról</h2>
 <p>Dopasowane deny ma pierwszeństwo przed allow. Właściciel i superadministrator zachowują zarządzanie. Uprawnienia do zmian wymagają także uprawnienia globalnego. W prywatnej przestrzeni granty ACL są nieaktywne; zmień widoczność na ograniczoną, aby udostępnić dokumenty.</p>
 <form class="form-grid" method="post" action="<?= $e($base) ?>/access" data-principal-picker data-url="<?= $e($base) ?>/principals">
-    <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>"><input type="hidden" name="base_version" value="<?= (int) $space['management_version'] ?>">
+    <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>"><input type="hidden" name="base_version" value="<?= $baseVersion ?>">
     <label>Typ <select name="principal_type" data-principal-type><option value="user">Użytkownik</option><option value="group">Grupa</option><option value="role">Rola</option></select></label>
     <label>Wyszukaj <input type="search" data-principal-query autocomplete="off"></label>
     <label>Adresat <select name="principal_id" data-principal-results required><option value="">Wyszukaj i wybierz adresata</option></select></label>
@@ -56,6 +57,7 @@ $labels = ['space.view' => 'Odczyt', 'space.edit' => 'Edycja', 'space.manage_acc
 <label>Wyszukaj użytkownika <input type="search" data-principal-query autocomplete="off"></label>
 <label>Sprawdź jako <select data-principal-results data-effective-user><option value="">Gość</option><option value="<?= (int) $currentUser['id'] ?>">Moje konto</option></select></label>
 <span data-picker-status role="status"></span></div>
+<label>Strona (opcjonalnie) <select data-effective-page><option value="">Uprawnienia przestrzeni</option><?php foreach ($pages as $row): ?><option value="<?= (int) $row['id'] ?>"><?= $e($row['title']) ?></option><?php endforeach; ?></select></label>
 <button type="button" class="button button--secondary" data-check-access>Sprawdź dostęp</button>
 <div data-effective-result role="status" aria-live="polite"></div>
 </section>

@@ -183,7 +183,7 @@ final class WikiMetadataService
             $db->execute('DELETE FROM page_links WHERE source_page_id = :page_id', ['page_id' => $pageId]);
 
             foreach ($unique as $reference) {
-                $target = $this->resolveTarget($spaceId, $reference);
+                $target = $this->resolveLinkTarget($spaceId, $reference);
                 $db->execute(
                     'INSERT INTO page_links
                      (source_page_id, target_page_id, target_reference, is_broken, created_at)
@@ -210,7 +210,7 @@ final class WikiMetadataService
         );
 
         foreach ($links as $link) {
-            $target = $this->resolveTarget($spaceId, (string) $link['target_reference']);
+            $target = $this->resolveLinkTarget($spaceId, (string) $link['target_reference']);
             $this->database->execute(
                 'UPDATE page_links
                  SET target_page_id = :target_page_id, is_broken = :is_broken
@@ -227,7 +227,6 @@ final class WikiMetadataService
     public function resolveTarget(int $spaceId, string $reference): ?array
     {
         $reference = trim($reference);
-        if (preg_match('/^@page:([1-9][0-9]*)$/D', $reference, $match)) return $this->database->fetchOne('SELECT p.id, p.title, p.slug FROM pages p INNER JOIN spaces s ON s.id = p.space_id AND s.deleted_at IS NULL WHERE p.id = ? AND p.deleted_at IS NULL', [(int) $match[1]]);
         if ($reference === '') {
             return null;
         }
@@ -399,5 +398,11 @@ final class WikiMetadataService
 
             $parent->removeChild($child);
         }
+    }
+
+    private function resolveLinkTarget(int $spaceId, string $reference): ?array
+    {
+        if (preg_match('/^@page:([1-9][0-9]*)$/D', $reference, $match)) return $this->database->fetchOne('SELECT p.id, p.title, p.slug FROM pages p INNER JOIN spaces s ON s.id = p.space_id AND s.deleted_at IS NULL WHERE p.id = ? AND p.deleted_at IS NULL', [(int) $match[1]]);
+        return $this->resolveTarget($spaceId, $reference);
     }
 }

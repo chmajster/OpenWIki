@@ -20,7 +20,7 @@ final class DocumentationTreeService
             foreach ($visible as $row) $children[isset($visible[(int) ($row['parent_id'] ?? 0)]) ? (int) $row['parent_id'] : 0][] = (int) $row['id'];
             $ids = $children[$parent ?? 0] ?? [];
             $query = mb_substr(trim($query), 0, 100);
-            if ($query !== '') $ids = array_keys($visible);
+            if ($query !== '' && $parent === null) $ids = array_keys($visible);
             if ($ids === []) return ['items' => [], 'next_offset' => null];
             $placeholders = implode(',', array_fill(0, count($ids), '?'));
             $parameters = $ids;

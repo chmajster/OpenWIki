@@ -33,7 +33,7 @@ final class StructureContent
         };
         $wiki = static function (string $text, bool $markdown) use ($references, $source, $cross): string {
             return preg_replace_callback('/\[\[([^\]\r\n]{1,255})\]\]/u', static function (array $match) use ($references, $source, $markdown, $cross): string {
-                $reference = trim($match[1]); $url = $references[mb_strtolower($reference)] ?? '/spaces/' . rawurlencode($source['space_key']) . '/wiki/' . rawurlencode($reference);
+                $reference = trim($markdown ? $match[1] : html_entity_decode($match[1], ENT_QUOTES | ENT_HTML5, 'UTF-8')); $url = $references[mb_strtolower($reference)] ?? '/spaces/' . rawurlencode($source['space_key']) . '/wiki/' . rawurlencode($reference);
                 $label = $markdown ? str_replace(['\\', '[', ']'], ['\\\\', '\\[', '\\]'], $reference) : htmlspecialchars($reference, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
                 return $markdown ? '[' . $label . '](' . $url . ')' : '<a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '">' . $label . '</a>';
             }, $text) ?? $text;

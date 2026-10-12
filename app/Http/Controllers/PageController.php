@@ -159,6 +159,7 @@ final class PageController extends Controller
             'canEdit' => $pageAccess->canEdit($page, $space),
             'canMove' => $pageAccess->can($page, $space, 'page.move'),
             'canCopy' => $user !== null && $this->app->auth()->can('page.create'),
+            'visibleParentId' => $page['parent_id'] === null ? null : (($parent = $repository->findById((int) $page['parent_id'])) !== null && $pageAccess->canView($parent, $space) ? (int) $parent['id'] : null),
             'canManagePermissions' => $pageAccess->canEdit($page, $space),
             'canDeletePage' => $user !== null && $pageAccess->can($page, $space, 'page.delete'),
             'isFavorite' => $user !== null && $engagement->isFavorite((int) $user['id'], (int) $page['id']),

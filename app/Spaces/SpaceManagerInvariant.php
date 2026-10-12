@@ -21,10 +21,10 @@ final class SpaceManagerInvariant
         $rules = [];
         foreach ($db->fetchAll('SELECT space_id, permission, principal_type, principal_id, effect FROM space_acl FOR UPDATE') as $row) $rules[$row['space_id']][$row['permission']][] = $row;
         $managed = [];
+        $candidates = array_filter($users, static fn (array $row): bool => isset($permissions[$row['id']]['*']) || isset($permissions[$row['id']]['space.manage_access']));
         foreach ($db->fetchAll('SELECT id, owner_id, visibility FROM spaces WHERE deleted_at IS NULL ORDER BY id FOR UPDATE') as $space) {
-            foreach ($users as $id => $_) {
-                if (!isset($permissions[$id]['*']) && !isset($permissions[$id]['space.manage_access'])) continue;
-                if ((int) $space['owner_id'] === (int) $id) { $managed[] = (int) $space['id']; break; }
+            if (isset($candidates[(int) $space['owner_id']])) { $managed[] = (int) $space['id']; continue; }
+            foreach ($candidates as $id => $_) {
                 if ($space['visibility'] === 'private') continue;
                 $decision = static function (string $permission) use ($rules, $space, $principals, $id): ?bool {
                     $allow = false;

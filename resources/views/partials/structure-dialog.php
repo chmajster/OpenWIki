@@ -9,6 +9,7 @@
     <label>Przestrzeń docelowa <select name="destination_space_id" required></select></label>
     <label>Wyszukaj rodzica <input type="search" data-parent-search autocomplete="off"></label>
     <label>Rodzic <select name="parent_id"><option value="">Główny poziom</option></select></label>
+    <label>Wyszukaj pozycję (pierwsze 50 wyników) <input type="search" data-position-search autocomplete="off"></label>
     <label>Wstaw przed stroną <select name="before_id"><option value="">Na końcu</option></select></label>
     <p class="form-help">Przeciągnięcie strony otwiera ten sam dialog. Kolejność zapisuje się dopiero po zatwierdzeniu. Tab przechodzi pomiędzy polami; Escape zamyka dialog.</p>
     <div data-structure-status role="status" aria-live="polite"></div>

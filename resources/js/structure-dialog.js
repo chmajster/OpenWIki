@@ -3,7 +3,7 @@ if (dialog) {
     const form = dialog.querySelector('form'), status = dialog.querySelector('[data-structure-status]'), preview = dialog.querySelector('[data-structure-preview]');
     const confirm = dialog.querySelector('[data-structure-confirm]'), save = dialog.querySelector('[data-structure-save]'), prepare = dialog.querySelector('[data-structure-prepare]');
     const destination = form.elements.destination_space_id, parent = form.elements.parent_id, before = form.elements.before_id;
-    let page, sourceTree, token, operation, preparedInput, spaces = [], generation = 0, destinationTimer, parentTimer, busy = false;
+    let page, sourceTree, token, operation, preparedInput, spaces = [], generation = 0, destinationTimer, parentTimer, positionTimer, busy = false;
     const json = async response => { const body = await response.json(); if (!response.ok) throw new Error(body.error?.message || `Błąd ${response.status}`); return body.data; };
     const invalidate = () => { token = null; preparedInput = null; operation = null; preview.hidden = true; confirm.checked = false; save.disabled = true; };
     const setBusy = value => { busy = value; prepare.disabled = value; save.disabled = value || !token || !confirm.checked; form.querySelectorAll('input, select').forEach(input => input.disabled = value); };
@@ -43,9 +43,9 @@ if (dialog) {
     const loadPositions = async () => {
         const current = generation, spaceId = destination.value, parentId = parent.value;
         try {
-            const items = await branches('', parentId, true);
+            const items = await branches(dialog.querySelector('[data-position-search]').value, parentId);
             if (current !== generation || spaceId !== destination.value || parentId !== parent.value) return;
-            before.replaceChildren(new Option('Na końcu', ''), ...items.filter(item => item.id !== page.id).map(item => new Option(item.title, item.id)));
+            before.replaceChildren(new Option('Na końcu', ''), ...items.filter(item => item.id !== page.id && String(item.parent_id || '') === parentId).map(item => new Option(item.title, item.id)));
         } catch (error) { status.textContent = error.message; }
     };
     const open = async detail => {
@@ -69,6 +69,7 @@ if (dialog) {
     parent.addEventListener('change', loadPositions);
     dialog.querySelector('[data-destination-search]').addEventListener('input', event => { clearTimeout(destinationTimer); destinationTimer = setTimeout(() => searchSpaces(event.target.value), 250); });
     dialog.querySelector('[data-parent-search]').addEventListener('input', event => { clearTimeout(parentTimer); parentTimer = setTimeout(() => loadParents(event.target.value), 250); });
+    dialog.querySelector('[data-position-search]').addEventListener('input', () => { clearTimeout(positionTimer); positionTimer = setTimeout(loadPositions, 250); });
     confirm.addEventListener('change', () => { save.disabled = busy || !token || !confirm.checked; });
     form.addEventListener('submit', async event => {
         event.preventDefault(); if (busy) return;

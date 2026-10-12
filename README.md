@@ -233,6 +233,8 @@ Supported events:
 - `page.deleted`
 - `page.published`
 - `space.created`
+- `space.updated`
+- `space.deleted`
 - `comment.created`
 - `user.created`
 

@@ -70,6 +70,7 @@ final class StructureService
                             $versions = array_reverse($files->versions((int) $attachment['id'])); $newAttachment = null;
                             foreach ($versions as $version) {
                                 $path = $files->versionPath((int) $attachment['id'], (int) $version['version_number'])['path'] ?? throw new \RuntimeException('Brak wersji załącznika.');
+                                if (!hash_equals($version['sha256'], hash_file('sha256', $path) ?: '')) throw new \RuntimeException('Załącznik źródłowy nie przeszedł weryfikacji integralności.');
                                 if ($newAttachment === null) $newAttachment = $files->createFromSource($new, $user, $path, $attachment['name']);
                                 else $files->addVersionFromSource($newAttachment, $user, $path, $attachment['name']);
                                 $stored = $files->find($newAttachment); $createdFiles[] = $stored['storage_key'];
@@ -148,17 +149,18 @@ final class StructureService
         if ($parent !== null && (!isset($active[$parent]) || (int) $active[$parent]['space_id'] !== (int) $destination['id'])) throw new \InvalidArgumentException('Nieprawidłowy rodzic docelowy.');
         if ($action === 'move' && $parent !== null && in_array($parent, $descendants, true)) throw new \InvalidArgumentException('Nie można przenieść strony pod własnego potomka.');
         if ($before !== null && (!isset($active[$before]) || (int) $active[$before]['space_id'] !== (int) $destination['id'] || (int) ($active[$before]['parent_id'] ?? 0) !== (int) ($parent ?? 0) || in_array($before, $selected, true))) throw new \InvalidArgumentException('Nieprawidłowa pozycja docelowa.');
-        $acl = new PageAclService($this->app); $acl->snapshot($source, $actor->id, $actor->can('*'));
+        $acl = new PageAclService($this->app, true); $acl->snapshot($source, $actor->id, $actor->can('*'));
         $affected = $action === 'move' ? $descendants : $selected;
         foreach ($affected as $pageId) {
             $page = $active[$pageId];
             if (!$acl->canViewFor($page, $source, $actor->id, $actor->can('*'), $actor->can('page.view'))) throw new \DomainException('Nie masz dostępu do wszystkich stron objętych operacją.');
             if ($action === 'move' && !$acl->canFor($page, $source, 'page.move', $actor->id, $actor->can('*'), $actor->can('page.move'))) throw new \DomainException('Brak uprawnienia do przeniesienia wszystkich stron.');
         }
-        $access = new SpaceAccessService($this->app);
+        $access = new SpaceAccessService($this->app, true);
         if (!$access->canEditFor($destination, $actor->id, $actor->can('*'))) throw new \DomainException('Przestrzeń docelowa nie pozwala na zapis.');
         if ($action === 'copy' && !$actor->can('page.create')) throw new \DomainException('Brak uprawnienia do kopiowania stron.');
-        $targetAcl = new PageAclService($this->app); $targetAcl->snapshot($destination, $actor->id, $actor->can('*'));
+        $targetAcl = new PageAclService($this->app, true); $targetAcl->snapshot($destination, $actor->id, $actor->can('*'));
+        if ($before !== null && !$targetAcl->canViewFor($active[$before], $destination, $actor->id, $actor->can('*'), $actor->can('page.view'))) throw new \DomainException('Brak dostępu do wybranej pozycji.');
         if ($parent !== null && (!$targetAcl->canViewFor($active[$parent], $destination, $actor->id, $actor->can('*'), $actor->can('page.view')) || !$targetAcl->canFor($active[$parent], $destination, $action === 'copy' ? 'page.create' : 'page.move', $actor->id, $actor->can('*'), $actor->can($action === 'copy' ? 'page.create' : 'page.move')))) throw new \DomainException('Brak uprawnienia do docelowego rodzica.');
         $title = $input['title'] ?? ($root['title'] . ($action === 'copy' ? ' (kopia)' : ''));
         if (!is_string($title) || trim($title) === '' || mb_strlen($title) > 255) throw new \InvalidArgumentException('Nieprawidłowy tytuł kopii.');
@@ -170,10 +172,10 @@ final class StructureService
             while (isset($reserved[$slug])) $slug = $base . '-kopia-' . $suffix++;
             $reserved[$slug] = true; $slugs[$pageId] = $slug;
         }
-        $rules = $db->fetchAll('SELECT a.* FROM page_acl a INNER JOIN pages p ON p.id = a.page_id WHERE p.space_id IN (?, ?) ORDER BY a.id', [$source['id'], $destination['id']]);
-        $spaceRules = $db->fetchAll('SELECT * FROM space_acl WHERE space_id IN (?, ?) ORDER BY id', [$source['id'], $destination['id']]);
+        $rules = $db->fetchAll('SELECT a.* FROM page_acl a INNER JOIN pages p ON p.id = a.page_id WHERE p.space_id IN (?, ?) ORDER BY a.id FOR UPDATE', [$source['id'], $destination['id']]);
+        $spaceRules = $db->fetchAll('SELECT * FROM space_acl WHERE space_id IN (?, ?) ORDER BY id FOR UPDATE', [$source['id'], $destination['id']]);
         $profiles = $this->profiles();
-        $attachments = $db->fetchAll('SELECT a.id, a.page_id, a.current_version, a.updated_at, a.size_bytes FROM attachments a INNER JOIN pages p ON p.id = a.page_id WHERE p.space_id IN (?, ?) AND a.deleted_at IS NULL ORDER BY a.id', [$source['id'], $destination['id']]);
+        $attachments = $db->fetchAll('SELECT a.id, a.page_id, a.current_version, a.updated_at, a.size_bytes FROM attachments a INNER JOIN pages p ON p.id = a.page_id WHERE p.space_id IN (?, ?) AND a.deleted_at IS NULL ORDER BY a.id FOR UPDATE', [$source['id'], $destination['id']]);
         if ($action === 'copy') foreach ($attachments as $attachment) if (in_array((int) $attachment['page_id'], $selected, true)) {
             if (($input['copy_attachments_allowed'] ?? true) !== true) throw new \DomainException('Kopiowanie załączników wymaga scopes attachments:read i attachments:write.');
             if (!$acl->canFor($active[$attachment['page_id']], $source, 'attachment.view', $actor->id, $actor->can('*'), $actor->can('attachment.view')) || !$actor->can('attachment.upload')) throw new \DomainException('Kopiowanie załączników wymaga odczytu źródła i uprawnienia upload.');
@@ -209,9 +211,9 @@ final class StructureService
     private function profiles(): array
     {
         $db = $this->app->database(); $profiles = [0 => ['id' => null, 'principals' => [], 'super' => false, 'view' => false]];
-        foreach ($db->fetchAll('SELECT id FROM users WHERE status = "active" AND deleted_at IS NULL ORDER BY id') as $user) $profiles[(int) $user['id']] = ['id' => (int) $user['id'], 'principals' => ['user:' . $user['id'] => true], 'super' => false, 'view' => false];
-        foreach (['role' => ['user_roles', 'role_id'], 'group' => ['group_users', 'group_id']] as $type => [$table, $column]) foreach ($db->fetchAll('SELECT user_id, ' . $column . ' AS id FROM ' . $table . ' ORDER BY user_id, ' . $column) as $row) if (isset($profiles[$row['user_id']])) $profiles[$row['user_id']]['principals'][$type . ':' . $row['id']] = true;
-        foreach ($db->fetchAll('SELECT DISTINCT ur.user_id, p.name FROM user_roles ur INNER JOIN role_permissions rp ON rp.role_id = ur.role_id INNER JOIN permissions p ON p.id = rp.permission_id ORDER BY ur.user_id, p.name') as $row) if (isset($profiles[$row['user_id']])) {
+        foreach ($db->fetchAll('SELECT id FROM users WHERE status = "active" AND deleted_at IS NULL ORDER BY id FOR UPDATE') as $user) $profiles[(int) $user['id']] = ['id' => (int) $user['id'], 'principals' => ['user:' . $user['id'] => true], 'super' => false, 'view' => false];
+        foreach (['role' => ['user_roles', 'role_id'], 'group' => ['group_users', 'group_id']] as $type => [$table, $column]) foreach ($db->fetchAll('SELECT user_id, ' . $column . ' AS id FROM ' . $table . ' ORDER BY user_id, ' . $column . ' FOR UPDATE') as $row) if (isset($profiles[$row['user_id']])) $profiles[$row['user_id']]['principals'][$type . ':' . $row['id']] = true;
+        foreach ($db->fetchAll('SELECT ur.user_id, p.name FROM user_roles ur INNER JOIN role_permissions rp ON rp.role_id = ur.role_id INNER JOIN permissions p ON p.id = rp.permission_id ORDER BY ur.user_id, p.name FOR UPDATE') as $row) if (isset($profiles[$row['user_id']])) {
             $profiles[$row['user_id']]['permissions'][$row['name']] = true;
             if ($row['name'] === '*') $profiles[$row['user_id']]['super'] = true;
             if (in_array($row['name'], ['*', 'page.view'], true)) $profiles[$row['user_id']]['view'] = true;
