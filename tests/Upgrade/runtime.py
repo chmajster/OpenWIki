@@ -214,6 +214,7 @@ def main():
             before_failure = fixture('snapshot', root)
             failed = upgrade(root, repo, 'upgrade', 'recovery-release')
             check(failed.returncode != 0 and journal(root)['status'] == 'failed', 'Partial DDL failure cannot be success')
+            check('[CAUSE]' in failed.stdout and 'upgrade_dependency' in failed.stdout, 'Private migration log identifies the actual database failure')
             backup_receipt = journal(root)['backup_sha256']
             check(upgrade(root, repo, 'rollback').returncode != 0, 'Code rollback is refused after incompatible/incomplete migration')
             fixture('fix-migration', root)

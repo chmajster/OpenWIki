@@ -48,6 +48,10 @@ final class ConsoleApplication
             };
         } catch (\Throwable $exception) {
             fwrite(STDERR, '[FAIL] ' . $exception->getMessage() . PHP_EOL);
+            if ($command === 'migrate' && $exception->getPrevious() !== null) {
+                // The host coordinator captures this in its private recovery log.
+                fwrite(STDERR, '[CAUSE] ' . $exception->getPrevious()->getMessage() . PHP_EOL);
+            }
             return 1;
         }
     }
