@@ -59,6 +59,7 @@ final class SpaceController extends Controller
 
         return $this->render('spaces/show', [
             'title' => $space['name'],
+            'structureEnabled' => true,
             'space' => $space,
             'pages' => [],
             'canCreatePage' => $canEdit && $this->app->auth()->can('page.create'),

@@ -151,6 +151,7 @@ final class PageController extends Controller
         $rendered = (new MacroService($this->app))->renderPage($page, $space);
 
         return $this->render('pages/show', [
+            'structureEnabled' => true,
             'title' => $page['title'],
             'space' => $space,
             'page' => $page,
