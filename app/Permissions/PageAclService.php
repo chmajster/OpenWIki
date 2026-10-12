@@ -20,17 +20,18 @@ final class PageAclService
     {
         $db = $this->app->database();
         if (!$db->pdo()->inTransaction()) throw new \LogicException('An ACL snapshot requires a transaction.');
+        $lock = $this->lockingReads ? ' FOR UPDATE' : '';
         $this->snapshotSpace = (int) $space['id']; $this->snapshotUser = $userId;
-        $this->snapshotPages = array_column($db->fetchAll('SELECT id, parent_id, inherit_acl FROM pages WHERE space_id = ?', [$space['id']]), null, 'id');
+        $this->snapshotPages = array_column($db->fetchAll('SELECT id, parent_id, inherit_acl FROM pages WHERE space_id = ?' . $lock, [$space['id']]), null, 'id');
         $this->snapshotRules = [];
-        foreach ($db->fetchAll('SELECT a.* FROM page_acl a INNER JOIN pages p ON p.id = a.page_id WHERE p.space_id = ?', [$space['id']]) as $rule) {
+        foreach ($db->fetchAll('SELECT a.* FROM page_acl a INNER JOIN pages p ON p.id = a.page_id WHERE p.space_id = ?' . $lock, [$space['id']]) as $rule) {
             $this->snapshotRules[(int) $rule['page_id']][$rule['permission']][] = $rule;
         }
         $this->snapshotPrincipals = $userId === null ? [] : ['user:' . $userId => true];
         foreach (['role' => ['user_roles', 'role_id'], 'group' => ['group_users', 'group_id']] as $kind => [$table, $column]) {
-            if ($userId !== null) foreach ($db->fetchAll('SELECT ' . $column . ' AS id FROM ' . $table . ' WHERE user_id = ?', [$userId]) as $row) $this->snapshotPrincipals[$kind . ':' . $row['id']] = true;
+            if ($userId !== null) foreach ($db->fetchAll('SELECT ' . $column . ' AS id FROM ' . $table . ' WHERE user_id = ?' . $lock, [$userId]) as $row) $this->snapshotPrincipals[$kind . ':' . $row['id']] = true;
         }
-        $access = new SpaceAccessService($this->app);
+        $access = new SpaceAccessService($this->app, $this->lockingReads);
         $this->snapshotAccess = ['view' => $access->canViewFor($space, $userId, $superAdmin), 'edit' => $userId !== null && $access->canEditFor($space, $userId, $superAdmin)];
     }
 
@@ -47,8 +48,46 @@ final class PageAclService
         }
     }
 
-    public function __construct(private readonly Application $app)
+    public function __construct(private readonly Application $app, private readonly bool $lockingReads = false)
     {
+    }
+
+    /** Evaluate a proposed tree without mutating persisted pages or issuing per-page queries. */
+    public function simulate(array $space, array $pages, array $rules, ?int $user, array $principals, bool $view, bool $edit): void
+    {
+        $this->snapshotSpace = (int) $space['id']; $this->snapshotUser = $user;
+        $this->snapshotPages = array_column($pages, null, 'id'); $this->snapshotRules = [];
+        foreach ($rules as $rule) $this->snapshotRules[(int) $rule['page_id']][$rule['permission']][] = $rule;
+        $this->snapshotPrincipals = $principals;
+        $this->snapshotAccess = ['view' => $view, 'edit' => $edit];
+    }
+
+    public function explainFor(array $page, array $space, string $permission, ?int $user, bool $super, bool $global): array
+    {
+        if (!$this->usesSnapshot($space, $user)) throw new \LogicException('An explanation requires a consistent ACL snapshot.');
+        $allowed = $permission === 'page.view' ? $this->canViewFor($page, $space, $user, $super, $global) : ($user !== null && $this->canFor($page, $space, $permission, $user, $super, $global));
+        $reason = $allowed ? 'Domyślny dostęp strony, jej autora lub właściciela w przestrzeni.' : 'Brak wymaganego dostępu do strony lub przestrzeni.';
+        $origin = 'default'; $rules = [];
+        if ($super) $reason = $permission !== 'page.view' && $space['status'] !== 'active' ? 'Archiwum jest tylko do odczytu.' : 'Uprawnienia superadministratora.';
+        elseif ($permission !== 'page.view' && !$global) $reason = 'Brak wymaganego uprawnienia globalnego.';
+        else {
+            $current = $page; $level = 0; $visited = [];
+            while ($current !== null && !isset($visited[$current['id']])) {
+                $visited[$current['id']] = true;
+                $decision = $this->scopeDecision((int) $current['id'], $user, $permission, $level > 0, true);
+                if ($decision !== null) {
+                    $origin = $level === 0 ? 'direct' : 'inherited';
+                    $rules = array_values(array_filter($this->snapshotRules[$current['id']][$permission] ?? [], fn (array $rule): bool => ($level === 0 || (bool) $rule['inherit_to_children']) && (isset($this->snapshotPrincipals[$rule['principal_type'] . ':' . $rule['principal_id']]) || $rule['effect'] === 'allow')));
+                    $rules = array_map(static fn (array $rule): array => array_intersect_key($rule, array_flip(['principal_type', 'principal_id', 'permission', 'effect'])), $rules);
+                    $reason = ($level === 0 ? 'Bezpośrednie ACL strony. ' : 'ACL dziedziczone z poziomu ' . $level . '. ') . ($decision ? 'Dopasowane allow.' : 'Dopasowane deny lub brak członkostwa na liście allow.');
+                    if (!$allowed && $decision) $reason .= ' Dostęp nadal blokuje przestrzeń lub uprawnienie globalne.';
+                    break;
+                }
+                if (!(bool) ($current['inherit_acl'] ?? true)) break;
+                $current = $this->snapshotPages[(int) ($current['parent_id'] ?? 0)] ?? null; $level++;
+            }
+        }
+        return ['allowed' => $allowed, 'effect' => $allowed ? 'allow' : 'deny', 'reason' => $reason, 'origin' => $origin, 'rules' => $rules];
     }
 
     public function canView(array $page, array $space): bool
@@ -71,7 +110,7 @@ final class PageAclService
         bool $superAdmin = false,
         bool $hasPageViewPermission = true
     ): bool {
-        $spaceAccess = new SpaceAccessService($this->app);
+        $spaceAccess = new SpaceAccessService($this->app, $this->lockingReads);
         if (!($this->usesSnapshot($space, $userId) ? $this->snapshotAccess['view'] : $spaceAccess->canViewFor($space, $userId, $superAdmin))) {
             return false;
         }
@@ -135,6 +174,7 @@ final class PageAclService
         bool $superAdmin = false,
         bool $hasPermission = true
     ): bool {
+        if (($space['status'] ?? 'active') !== 'active' || ($space['deleted_at'] ?? null) !== null) return false;
         if (!$hasPermission) {
             return false;
         }
@@ -147,7 +187,7 @@ final class PageAclService
             return false;
         }
 
-        $spaceAccess = new SpaceAccessService($this->app);
+        $spaceAccess = new SpaceAccessService($this->app, $this->lockingReads);
         $baseAllowed = $this->usesSnapshot($space, $userId) ? $this->snapshotAccess[$permission === 'page.view' ? 'view' : 'edit'] : ($permission === 'page.view'
             ? $spaceAccess->canViewFor($space, $userId, $superAdmin)
             : $spaceAccess->canEditFor($space, $userId, $superAdmin));
@@ -306,8 +346,9 @@ final class PageAclService
             $page = $db->fetchOne('SELECT space_id FROM pages WHERE id = ?', [$pageId]);
             if ($page === null) throw new \InvalidArgumentException('Page not found.');
             $db->fetchOne('SELECT id FROM spaces WHERE id = ? FOR UPDATE', [$page['space_id']]);
-            $fresh = $db->fetchOne('SELECT id FROM pages WHERE id = ? AND deleted_at IS NULL FOR UPDATE', [$pageId]);
+            $fresh = $db->fetchOne('SELECT id, space_id FROM pages WHERE id = ? AND deleted_at IS NULL FOR UPDATE', [$pageId]);
             if ($fresh === null) throw new \InvalidArgumentException('Page not found.');
+            if ((int) $fresh['space_id'] !== (int) $page['space_id']) throw new \DomainException('Strona została przeniesiona. Odśwież jej uprawnienia.');
             return $operation();
         });
     }

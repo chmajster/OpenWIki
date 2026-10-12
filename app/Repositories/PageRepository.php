@@ -35,9 +35,10 @@ final class PageRepository
     public function redirectTarget(int $spaceId, string $oldSlug): ?array
     {
         return \OpenWiki\Wiki\ContentService::storedSource($this->database->fetchOne(
-            'SELECT p.*
+            'SELECT p.*, s.space_key
              FROM page_redirects r
              INNER JOIN pages p ON p.id = r.page_id
+             INNER JOIN spaces s ON s.id = p.space_id AND s.deleted_at IS NULL
              WHERE r.space_id = :space_id AND r.old_slug = :old_slug AND p.deleted_at IS NULL
              LIMIT 1',
             ['space_id' => $spaceId, 'old_slug' => $oldSlug]

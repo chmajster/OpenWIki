@@ -71,5 +71,6 @@ $notificationCount = $currentUser === null
 <main class="page-shell">
     <?= $content ?>
 </main>
+<?php if (($structureEnabled ?? false) && $currentUser !== null && ($app->auth()->can('page.move') || $app->auth()->can('page.create'))): require __DIR__ . '/../partials/structure-dialog.php'; endif; ?>
 </body>
 </html>

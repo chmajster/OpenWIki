@@ -37,7 +37,7 @@ final class EditorDraftMigrationTest extends TestCase
             $db->execute('INSERT INTO draft_autosaves (page_id, user_id, content_html, content_markdown, content_format, base_version, updated_at) VALUES (?, ?, "<p><strong>Zażółć</strong></p>", NULL, "visual", 1, UTC_TIMESTAMP())', [$page, $user]);
             $inconsistent = $db->insert('INSERT INTO pages (space_id, title, slug, content_html, content_format, content_markdown, author_id, owner_id, status, version, created_at, updated_at) VALUES (?, "Old missing source", "missing-source", "<p>Only preserved HTML</p>", "markdown", NULL, ?, ?, "draft", 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())', [$space, $user, $user]);
             $runner = new MigrationRunner($db, dirname(__DIR__, 2) . '/database/migrations');
-            self::assertSame(['005_editor_drafts_and_revision_metadata', '006_durable_editor', '007_page_operation_capacity', '008_security_boundaries'], $runner->migrate());
+            self::assertSame(['005_editor_drafts_and_revision_metadata', '006_durable_editor', '007_page_operation_capacity', '008_security_boundaries', '009_space_management', '010_structure_operations'], $runner->migrate());
             self::assertSame('longtext', $db->fetchOne('SELECT DATA_TYPE AS data_type FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = "editor_page_operations" AND COLUMN_NAME = "result_json"')['data_type']);
             self::assertSame([], $runner->migrate());
             $migrated = $db->fetchOne('SELECT content_html, document_json FROM pages WHERE id = ?', [$page]);

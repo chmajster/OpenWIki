@@ -22,6 +22,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             <div>
                 <div class="breadcrumbs">
                     <a href="/spaces/<?= rawurlencode($space['space_key']) ?>"><?= $e($space['name']) ?></a>
+                    <?php foreach ($breadcrumbs as $crumb): ?><span>/</span><?php if ($crumb['url'] === null): ?><span><?= $e($crumb['title']) ?></span><?php else: ?><a href="<?= $e($crumb['url']) ?>"><?= $e($crumb['title']) ?></a><?php endif; ?><?php endforeach; ?>
                     <span>/</span>
                     <span><?= $e($page['title']) ?></span>
                 </div>
@@ -50,6 +51,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                     <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/permissions"><?= $e($t('Permissions')) ?></a>
                 <?php endif; ?>
                 <details class="page-menu" data-close-on-escape><summary class="button button--ghost"><?= $e($t('More actions')) ?></summary><div class="menu-items">
+                <?php if ($canMove || $canCopy): ?><button type="button" class="button button--ghost" data-structure-page="<?= $e(json_encode(['id' => (int) $page['id'], 'title' => $page['title'], 'version' => (int) $page['version'], 'parent_id' => $visibleParentId, 'space_id' => (int) $space['id'], 'can_move' => $canMove, 'can_copy' => $canCopy], JSON_THROW_ON_ERROR)) ?>">Przenieś lub kopiuj</button><?php endif; ?>
                 <?php if ($currentUser !== null): ?>
                     <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/favorite">
                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">

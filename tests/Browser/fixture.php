@@ -31,7 +31,7 @@ if (($argv[1] ?? '') === 'seed') {
         $users[] = ['id' => $id, 'username' => $username, 'password' => $password];
     }
     $spaceKey = 'BROWSER-' . strtoupper($suffix);
-    $spaceId = (new SpaceRepository($database))->create(['name' => 'Browser regression', 'space_key' => $spaceKey, 'description' => null, 'owner_id' => $users[0]['id'], 'visibility' => 'private']);
+    $spaceId = (new SpaceRepository($database))->create(['name' => 'Browser regression', 'space_key' => $spaceKey, 'description' => null, 'owner_id' => $users[0]['id'], 'visibility' => 'restricted']);
     $limitedRole = $database->insert('INSERT INTO roles (name, slug, is_system, created_at, updated_at) VALUES (?, ?, 0, UTC_TIMESTAMP(), UTC_TIMESTAMP())', ['Limited browser ' . $suffix, 'limited-browser-' . $suffix]);
     foreach (['page.view', 'page.edit', 'page.create', 'attachment.view'] as $name) {
         $database->execute('INSERT IGNORE INTO permissions (name, description, created_at) VALUES (?, ?, UTC_TIMESTAMP())', [$name, $name]);
@@ -52,7 +52,7 @@ if (($argv[1] ?? '') === 'seed') {
         $database->execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [$users[$index]['id'], $id]);
         foreach ($index === 3 ? ['space.view'] : ['space.view', 'space.edit'] as $name) $database->execute('INSERT INTO space_acl (space_id, principal_type, principal_id, permission, effect) VALUES (?, "user", ?, ?, "allow")', [$spaceId, $users[$index]['id'], $name]);
     }
-    $scopes = ['pages:read', 'pages:write', 'spaces:read', 'users:read', 'users:write', 'roles:read', 'roles:write', 'groups:read', 'groups:write'];
+    $scopes = ['pages:read', 'pages:write', 'spaces:read', 'spaces:write', 'attachments:read', 'attachments:write', 'users:read', 'users:write', 'roles:read', 'roles:write', 'groups:read', 'groups:write'];
     $token = (new ApiTokenService($database))->create($users[0]['id'], 'Browser tests', $scopes, null)['token'];
     $delegateToken = (new ApiTokenService($database))->create($users[4]['id'], 'Browser security tests', $scopes, null)['token'];
     $wildcardPermissionId = (int) $database->fetchOne('SELECT id FROM permissions WHERE name = "*"')['id'];
@@ -97,6 +97,13 @@ if (($argv[1] ?? '') === 'seed') {
 } elseif (($argv[1] ?? '') === 'cleanup') {
     $data = json_decode(file_get_contents(dirname(__DIR__, 2) . '/storage/temp/editor-browser.json'), true, 512, JSON_THROW_ON_ERROR);
     $database->execute('DELETE FROM spaces WHERE id = ?', [$data['spaceId']]);
+    foreach ($data['users'] as $user) {
+        foreach ($database->fetchAll('SELECT p.id FROM pages p INNER JOIN spaces s ON s.id = p.space_id WHERE s.owner_id = ?', [$user['id']]) as $page) {
+            $files = new \OpenWiki\Attachments\AttachmentService($database, dirname(__DIR__, 2)); $files->purgeStorageKeys($files->storageKeysForPage((int) $page['id']));
+        }
+        $database->execute('DELETE FROM spaces WHERE owner_id = ?', [$user['id']]);
+    }
+    $database->execute('DELETE FROM user_groups WHERE slug LIKE "space-browser-%"');
     foreach ($data['users'] as $user) {
         $database->execute('DELETE FROM audit_logs WHERE user_id = ?', [$user['id']]);
         $database->execute('DELETE FROM users WHERE id = ?', [$user['id']]);

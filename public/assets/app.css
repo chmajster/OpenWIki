@@ -1142,8 +1142,26 @@ dialog .button { margin: 8px 8px 0 0; }
 .language-form select { width: auto; padding: 6px; }
 .sidebar-toggle { cursor: pointer; font-weight: 600; padding-bottom: 14px; }
 .sidebar-body { display: grid; gap: 14px; }
+.tree-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.tree-row .page-tree__link { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tree-toggle, .tree-operation { flex: 0 0 28px; padding: 3px; min-height: 32px; border: 0; background: transparent; color: var(--text); cursor: pointer; }
+.tree-toggle:disabled { opacity: .4; cursor: default; }
+[role=treeitem]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.page-tree [role=group] { margin-left: 14px; }
+.tree-search { display: grid; gap: 6px; margin-bottom: 12px; }
+.form-grid fieldset { display: grid; gap: 16px; min-width: 0; border: 0; padding: 0; }
+[data-space-settings] { display: block; }
+[data-space-settings] fieldset { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+[data-space-settings] fieldset > .form-help { grid-column: 1 / -1; }
+[data-principal-picker] { min-width: 0; }
+.structure-dialog { width: min(680px, calc(100vw - 24px)); max-height: 90dvh; overflow: auto; padding: 24px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); }
+.structure-dialog::backdrop { background: #0008; }
+.structure-dialog form { display: grid; gap: 14px; }
+.structure-dialog label { display: grid; gap: 5px; }
+.structure-dialog .dialog-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 @media (min-width: 861px) { .sidebar-toggle { display: none; } }
 @media (max-width: 860px) {
+ [data-space-settings] fieldset { grid-template-columns: 1fr; }
  .wiki-sidebar { max-height: none; margin-bottom: 18px; width: 100%; }
  .wiki-sidebar:not([open]) .sidebar-toggle { padding-bottom: 0; }
  .sidebar-body { max-height: 65dvh; overflow: auto; }

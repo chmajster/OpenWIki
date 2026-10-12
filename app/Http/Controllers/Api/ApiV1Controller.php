@@ -76,54 +76,7 @@ final class ApiV1Controller extends Controller
 
     public function createSpace(Request $request): Response
     {
-        [$context, $failure] = $this->apiAuth($request, 'spaces:write', 'space.create');
-        if ($failure !== null) {
-            return $failure;
-        }
-
-        try {
-            $name = trim((string) $request->input('name', ''));
-            if ($name === '' || mb_strlen($name) > 191) {
-                throw new \InvalidArgumentException('Space name is required and may contain at most 191 characters.');
-            }
-
-            $keyInput = trim((string) $request->input('space_key', ''));
-            $key = (new Slugger())->spaceKey($keyInput === '' ? $name : $keyInput);
-            $visibility = (string) $request->input('visibility', 'private');
-            if (!in_array($visibility, ['public', 'private', 'restricted'], true)) {
-                throw new \InvalidArgumentException('Invalid space visibility.');
-            }
-
-            $id = (new SpaceRepository($this->app->database()))->create([
-                'name' => $name,
-                'space_key' => $key,
-                'description' => mb_substr(trim((string) $request->input('description', '')), 0, 5000) ?: null,
-                'owner_id' => (int) $context['user']['id'],
-                'visibility' => $visibility,
-            ]);
-
-            $space = (new SpaceRepository($this->app->database()))->findByKey($key);
-
-            (new AuditLogger($this->app->database()))->log(
-                'SPACE_CREATED',
-                'space',
-                $id,
-                (int) $context['user']['id'],
-                $request,
-                null,
-                ['name' => $name, 'space_key' => $key, 'visibility' => $visibility]
-            );
-
-            return Response::json(['data' => $this->spaceResource($space ?? ['id' => $id, 'name' => $name, 'space_key' => $key, 'description' => null, 'visibility' => $visibility, 'status' => 'active', 'created_at' => null, 'updated_at' => null])], 201);
-        } catch (\InvalidArgumentException $exception) {
-            return $this->error('validation_error', $exception->getMessage(), 422);
-        } catch (\Throwable $exception) {
-            if (str_contains(strtolower($exception->getMessage()), 'duplicate')) {
-                return $this->error('conflict', 'A space with this key already exists.', 409);
-            }
-            error_log('[OpenWiki API space] ' . $exception->getMessage());
-            return $this->error('server_error', 'Unable to create space.', 500);
-        }
+        return $this->spaceMutation($request, null, 'create');
     }
 
     public function space(Request $request, string $id): Response
@@ -155,157 +108,12 @@ final class ApiV1Controller extends Controller
 
     public function updateSpace(Request $request, string $id): Response
     {
-        [$context, $failure] = $this->apiAuth($request, 'spaces:write', 'space.edit');
-        if ($failure !== null) {
-            return $failure;
-        }
-
-        $spaceId = $this->positiveId($id);
-        if ($spaceId === null) {
-            return $this->error('not_found', 'Space not found.', 404);
-        }
-
-        $space = $this->app->database()->fetchOne(
-            'SELECT * FROM spaces WHERE id = :id AND deleted_at IS NULL LIMIT 1',
-            ['id' => $spaceId]
-        );
-        if ($space === null) {
-            return $this->error('not_found', 'Space not found.', 404);
-        }
-
-        if (!(new SpaceAccessService($this->app))->canEditFor(
-            $space,
-            (int) $context['user']['id'],
-            $this->isSuperAdmin($context)
-        )) {
-            return $this->error('forbidden', 'You cannot edit this Space.', 403);
-        }
-
-        try {
-            $name = trim((string) $request->input('name', $space['name']));
-            if ($name === '' || mb_strlen($name) > 191) {
-                throw new \InvalidArgumentException(
-                    'Space name is required and may contain at most 191 characters.'
-                );
-            }
-
-            $description = trim((string) $request->input(
-                'description',
-                (string) ($space['description'] ?? '')
-            ));
-            if (mb_strlen($description) > 5000) {
-                throw new \InvalidArgumentException(
-                    'Space description may contain at most 5000 characters.'
-                );
-            }
-
-            $visibility = (string) $request->input('visibility', $space['visibility']);
-            if (!in_array($visibility, ['public', 'private', 'restricted'], true)) {
-                throw new \InvalidArgumentException('Invalid Space visibility.');
-            }
-
-            $before = [
-                'name' => $space['name'],
-                'description' => $space['description'],
-                'visibility' => $space['visibility'],
-            ];
-
-            $this->app->database()->execute(
-                'UPDATE spaces
-                 SET name = :name,
-                     description = :description,
-                     visibility = :visibility,
-                     updated_at = UTC_TIMESTAMP()
-                 WHERE id = :id AND deleted_at IS NULL',
-                [
-                    'name' => $name,
-                    'description' => $description === '' ? null : $description,
-                    'visibility' => $visibility,
-                    'id' => $spaceId,
-                ]
-            );
-
-            $updated = $this->app->database()->fetchOne(
-                'SELECT * FROM spaces WHERE id = :id AND deleted_at IS NULL LIMIT 1',
-                ['id' => $spaceId]
-            );
-            if ($updated === null) {
-                throw new \RuntimeException('Updated Space cannot be resolved.');
-            }
-
-            (new AuditLogger($this->app->database()))->log(
-                'SPACE_UPDATED',
-                'space',
-                $spaceId,
-                (int) $context['user']['id'],
-                $request,
-                $before,
-                [
-                    'name' => $updated['name'],
-                    'description' => $updated['description'],
-                    'visibility' => $updated['visibility'],
-                ]
-            );
-
-            return Response::json(['data' => $this->spaceResource($updated)]);
-        } catch (\InvalidArgumentException $exception) {
-            return $this->error('validation_error', $exception->getMessage(), 422);
-        } catch (\Throwable $exception) {
-            error_log('[OpenWiki API space update] ' . $exception->getMessage());
-            return $this->error('server_error', 'Unable to update Space.', 500);
-        }
+        return $this->spaceMutation($request, $id, 'update');
     }
 
     public function deleteSpace(Request $request, string $id): Response
     {
-        [$context, $failure] = $this->apiAuth($request, 'spaces:write', 'space.delete');
-        if ($failure !== null) {
-            return $failure;
-        }
-
-        $spaceId = $this->positiveId($id);
-        if ($spaceId === null) {
-            return $this->error('not_found', 'Space not found.', 404);
-        }
-
-        $space = $this->app->database()->fetchOne(
-            'SELECT * FROM spaces WHERE id = :id AND deleted_at IS NULL LIMIT 1',
-            ['id' => $spaceId]
-        );
-        if ($space === null) {
-            return $this->error('not_found', 'Space not found.', 404);
-        }
-
-        if (!(new SpaceAccessService($this->app))->canEditFor(
-            $space,
-            (int) $context['user']['id'],
-            $this->isSuperAdmin($context)
-        )) {
-            return $this->error('forbidden', 'You cannot delete this Space.', 403);
-        }
-
-        $this->app->database()->execute(
-            'UPDATE spaces
-             SET deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
-             WHERE id = :id AND deleted_at IS NULL',
-            ['id' => $spaceId]
-        );
-
-        (new AuditLogger($this->app->database()))->log(
-            'SPACE_DELETED',
-            'space',
-            $spaceId,
-            (int) $context['user']['id'],
-            $request,
-            [
-                'name' => $space['name'],
-                'space_key' => $space['space_key'],
-                'visibility' => $space['visibility'],
-            ],
-            ['deleted' => true]
-        );
-
-        return new Response('', 204);
+        return $this->spaceMutation($request, $id, 'delete');
     }
 
     public function pages(Request $request): Response
@@ -369,9 +177,10 @@ final class ApiV1Controller extends Controller
 
         $total = count($filtered);
         $slice = array_slice($filtered, $offset, $perPage);
+        $parents = $this->visibleParents($slice, $context);
 
         return Response::json([
-            'data' => array_map([$this, 'pageListResource'], $slice),
+            'data' => array_map(fn (array $row): array => $this->pageListResource($row, $context, $parents), $slice),
             'meta' => $this->paginationMeta($page, $perPage, $total),
         ]);
     }
@@ -393,7 +202,7 @@ final class ApiV1Controller extends Controller
             return $this->error('not_found', 'Page not found.', 404);
         }
 
-        return Response::json(['data' => $this->pageResource($row)]);
+        return Response::json(['data' => $this->pageResource($row, $context)]);
     }
 
     public function createPage(Request $request): Response
@@ -420,7 +229,7 @@ final class ApiV1Controller extends Controller
                 $this->pageWritePolicy($space, $context),
                 $tokens->hasScope($context, 'attachments:write') && $tokens->hasPermission($context, 'attachment.upload')
             );
-            return Response::json(['data' => $this->pageResource($saved)], 201);
+            return Response::json(['data' => $this->pageResource($saved, $context)], 201);
         } catch (\DomainException $exception) {
             return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
@@ -471,7 +280,7 @@ final class ApiV1Controller extends Controller
                 $this->pageWritePolicy($space, $context),
                 $tokens->hasScope($context, 'attachments:write') && $tokens->hasPermission($context, 'attachment.upload')
             );
-            return Response::json(['data' => $this->pageResource($saved)], 200);
+            return Response::json(['data' => $this->pageResource($saved, $context)], 200);
         } catch (\DomainException $exception) {
             return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
@@ -1945,11 +1754,12 @@ final class ApiV1Controller extends Controller
 
         $metadata = new WikiMetadataService($this->app->database());
         $pages = [];
-        foreach ($metadata->pagesForTag((string) $tag['slug']) as $row) {
+        $tagRows = $metadata->pagesForTag((string) $tag['slug']); $parents = $this->visibleParents($tagRows, $context);
+        foreach ($tagRows as $row) {
             if (!$this->canViewPage($context, $row)) {
                 continue;
             }
-            $pages[] = $this->pageListResource($row);
+            $pages[] = $this->pageListResource($row, $context, $parents);
         }
 
         return Response::json([
@@ -2977,6 +2787,99 @@ final class ApiV1Controller extends Controller
         return [$context, null];
     }
 
+    private function spaceMutation(Request $request, ?string $id, string $action): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'spaces:write');
+        if ($failure !== null) return $failure;
+        try {
+            $service = new \OpenWiki\Spaces\SpaceService($this->app);
+            $actor = (int) $context['user']['id'];
+            if ($action === 'create') $space = $service->create((array) $request->input(), $actor, $request, $context['permissions']);
+            else {
+                $spaceId = $this->positiveId((string) $id) ?? throw new \OutOfBoundsException('Nie znaleziono przestrzeni.');
+                if ($action === 'delete') { $service->delete($spaceId, $actor, $request, $context['permissions']); return new Response('', 204); }
+                $space = $service->update($spaceId, (array) $request->input(), $actor, $request, $context['permissions']);
+            }
+            return Response::json(['data' => $this->spaceResource($space)], $action === 'create' ? 201 : 200);
+        } catch (\Throwable $error) { return $this->spaceError($error); }
+    }
+
+    private function spaceError(\Throwable $error): Response
+    {
+        if ($error instanceof \OpenWiki\Spaces\SpaceConflict) return $this->error('conflict', $error->getMessage(), 409);
+        if ($error instanceof \OutOfBoundsException) return $this->error('not_found', $error->getMessage(), 404);
+        if ($error instanceof \DomainException) return $this->error('forbidden', $error->getMessage(), 403);
+        if ($error instanceof \InvalidArgumentException) return $this->error('validation_error', $error->getMessage(), 422);
+        error_log('[OpenWiki space operation] ' . $error->getMessage());
+        return $this->error('server_error', 'Nie udało się wykonać operacji przestrzeni.', 500);
+    }
+
+    public function spaceAccess(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, $request->method() === 'GET' ? 'spaces:read' : 'spaces:write');
+        if ($failure !== null) return $failure;
+        try {
+            $service = new \OpenWiki\Spaces\SpaceService($this->app);
+            $space = $service->find($this->positiveId($id) ?? throw new \OutOfBoundsException('Nie znaleziono przestrzeni.'));
+            $actor = new \OpenWiki\Spaces\SpaceActor($this->app->database(), (int) $context['user']['id'], $context['permissions']);
+            $service->assertAllowed($space, $actor, 'space.manage_access');
+            if ($request->method() !== 'GET') $space = $service->rule((int) $space['id'], (array) $request->input(), $actor->id, $request,
+                $request->input('delete_id') === null ? null : ($this->positiveId((string) $request->input('delete_id')) ?? throw new \InvalidArgumentException('Nieprawidłowa reguła.')), $context['permissions']);
+            $userId = $request->query('user_id');
+            return Response::json(['data' => ['space' => $this->spaceResource($space), 'rules' => $service->entries((int) $space['id']),
+                'effective' => $service->effective($space, $userId === null || $userId === '' ? null : ($this->positiveId((string) $userId) ?? throw new \InvalidArgumentException('Nieprawidłowy użytkownik.')), $request->query('page_id') === null ? null : ($this->positiveId((string) $request->query('page_id')) ?? throw new \InvalidArgumentException('Nieprawidłowa strona.')), $actor)]]);
+        } catch (\Throwable $error) { return $this->spaceError($error); }
+    }
+
+    public function spacePrincipals(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'spaces:read');
+        if ($failure !== null) return $failure;
+        try {
+            $service = new \OpenWiki\Spaces\SpaceService($this->app);
+            $space = $service->find($this->positiveId($id) ?? throw new \OutOfBoundsException('Nie znaleziono przestrzeni.'));
+            $actor = new \OpenWiki\Spaces\SpaceActor($this->app->database(), (int) $context['user']['id'], $context['permissions']);
+            $type = $request->query('type', 'user'); $query = $request->query('q', '');
+            if (!is_string($type) || !is_string($query)) throw new \InvalidArgumentException('Nieprawidłowe wyszukiwanie.');
+            if (!$service->allowed($space, $actor, 'space.manage_access') && !($type === 'user' && $service->allowed($space, $actor, 'space.manage_owner'))) throw new \DomainException('Brak uprawnienia do wyszukiwania adresatów.');
+            return Response::json(['data' => $service->principals($type, $query)]);
+        } catch (\Throwable $error) { return $this->spaceError($error); }
+    }
+
+    public function spaceTree(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'spaces:read', 'space.view');
+        if ($failure !== null) return $failure;
+        try {
+            $space = (new \OpenWiki\Spaces\SpaceService($this->app))->find($this->positiveId($id) ?? throw new \OutOfBoundsException('Nie znaleziono przestrzeni.'));
+            $parent = $request->query('parent_id');
+            $parentId = $parent === null ? null : ($this->positiveId((string) $parent) ?? throw new \OutOfBoundsException('Nie znaleziono gałęzi.'));
+            return Response::json(['data' => (new \OpenWiki\Spaces\DocumentationTreeService($this->app))->branch($space, (int) $context['user']['id'],
+                $this->isSuperAdmin($context), $this->contextHasPermission($context, 'page.view'), $this->contextHasPermission($context, 'page.move'),
+                $parentId, (string) $request->query('q', ''), max(0, (int) $request->query('offset', 0)), $this->contextHasPermission($context, 'page.create'), $request->query('siblings_only') === '1')]);
+        } catch (\Throwable $error) { return $this->spaceError($error); }
+    }
+
+    public function structurePreview(Request $request, string $id): Response { return $this->structureOperation($request, $id, true); }
+    public function structureCommit(Request $request, string $id): Response { return $this->structureOperation($request, $id, false); }
+
+    private function structureOperation(Request $request, string $id, bool $preview): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'pages:write');
+        if ($failure !== null) return $failure;
+        try {
+            $pageId = $this->positiveId($id) ?? throw new \OutOfBoundsException('Nie znaleziono strony.');
+            $service = new \OpenWiki\Spaces\StructureService($this->app); $input = (array) $request->input();
+            $tokens = new \OpenWiki\Auth\ApiTokenService($this->app->database());
+            if (($input['action'] ?? 'move') === 'copy' && (!$tokens->hasScope($context, 'attachments:read') || !$tokens->hasScope($context, 'attachments:write'))) {
+                // This ceiling is checked against the selected subtree inside the locked plan.
+                $input['copy_attachments_allowed'] = false;
+            } else $input['copy_attachments_allowed'] = true;
+            return Response::json(['data' => $preview ? $service->preview($pageId, $input, (int) $context['user']['id'], $context['permissions'])
+                : $service->execute($pageId, $input, (int) $context['user']['id'], $request, $context['permissions'])]);
+        } catch (\Throwable $error) { return $this->spaceError($error); }
+    }
+
     private function resolveSpace(Request $request): array|Response
     {
         $repository = new SpaceRepository($this->app->database());
@@ -3210,6 +3113,10 @@ final class ApiV1Controller extends Controller
             'name' => $space['name'],
             'key' => $space['space_key'],
             'description' => $space['description'] ?? null,
+            'icon' => $space['icon'] ?? null,
+            'owner_id' => (int) $space['owner_id'],
+            'home_page_id' => isset($space['home_page_id']) ? (int) $space['home_page_id'] : null,
+            'version' => (int) ($space['management_version'] ?? 1),
             'visibility' => $space['visibility'],
             'status' => $space['status'],
             'created_at' => $space['created_at'] ?? null,
@@ -3310,12 +3217,17 @@ final class ApiV1Controller extends Controller
         ];
     }
 
-    private function pageListResource(array $page): array
+    private function pageListResource(array $page, array $context, ?array $parents = null): array
     {
+        $parentId = $page['parent_id'] === null ? null : (int) $page['parent_id'];
+        if ($parentId !== null) {
+            $parents ??= $this->visibleParents([$page], $context);
+            if (!isset($parents[$parentId])) $parentId = null;
+        }
         return [
             'id' => (int) $page['id'],
             'space_id' => (int) $page['space_id'],
-            'parent_id' => $page['parent_id'] === null ? null : (int) $page['parent_id'],
+            'parent_id' => $parentId,
             'title' => $page['title'],
             'slug' => $page['slug'],
             'status' => $page['status'],
@@ -3329,10 +3241,26 @@ final class ApiV1Controller extends Controller
         ];
     }
 
-    private function pageResource(array $page): array
+    private function visibleParents(array $rows, array $context): array
+    {
+        $ids = array_values(array_unique(array_filter(array_column($rows, 'parent_id'))));
+        if ($ids === []) return [];
+        return $this->app->database()->transaction(function () use ($ids, $context): array {
+            $parents = $this->app->database()->fetchAll('SELECT p.id, p.space_id, p.parent_id, p.inherit_acl, p.status, p.owner_id, p.author_id, s.space_key, s.name AS space_name, s.visibility AS space_visibility, s.owner_id AS space_owner_id, s.status AS space_status, s.deleted_at AS space_deleted_at FROM pages p INNER JOIN spaces s ON s.id = p.space_id WHERE p.deleted_at IS NULL AND p.id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')', $ids);
+            $services = []; $visible = [];
+            foreach ($parents as $parent) {
+                $space = $this->spaceFromPage($parent); $spaceId = (int) $space['id'];
+                if (!isset($services[$spaceId])) { $services[$spaceId] = new PageAclService($this->app); $services[$spaceId]->snapshot($space, (int) $context['user']['id'], $this->isSuperAdmin($context)); }
+                if ($services[$spaceId]->canViewFor($parent, $space, (int) $context['user']['id'], $this->isSuperAdmin($context), $this->contextHasPermission($context, 'page.view'))) $visible[(int) $parent['id']] = true;
+            }
+            return $visible;
+        });
+    }
+
+    private function pageResource(array $page, array $context): array
     {
         $page = (new \OpenWiki\Wiki\ContentService())->safeProjection($page);
-        return $this->pageListResource($page) + [
+        return $this->pageListResource($page, $context) + [
             'content_format' => $page['content_format'],
             'content_html' => $page['content_html'],
             'document' => ['version' => \OpenWiki\Wiki\ContentService::SCHEMA_VERSION, 'format' => $page['content_format'],

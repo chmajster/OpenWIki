@@ -183,7 +183,7 @@ final class WikiMetadataService
             $db->execute('DELETE FROM page_links WHERE source_page_id = :page_id', ['page_id' => $pageId]);
 
             foreach ($unique as $reference) {
-                $target = $this->resolveTarget($spaceId, $reference);
+                $target = $this->resolveLinkTarget($spaceId, $reference);
                 $db->execute(
                     'INSERT INTO page_links
                      (source_page_id, target_page_id, target_reference, is_broken, created_at)
@@ -210,7 +210,7 @@ final class WikiMetadataService
         );
 
         foreach ($links as $link) {
-            $target = $this->resolveTarget($spaceId, (string) $link['target_reference']);
+            $target = $this->resolveLinkTarget($spaceId, (string) $link['target_reference']);
             $this->database->execute(
                 'UPDATE page_links
                  SET target_page_id = :target_page_id, is_broken = :is_broken
@@ -321,6 +321,11 @@ final class WikiMetadataService
                     $localHost = parse_url((string) Env::get('APP_URL', ''), PHP_URL_HOST);
                     $path = $host === null || (is_string($host) && is_string($localHost) && strcasecmp($host, $localHost) === 0)
                         ? parse_url($href, PHP_URL_PATH) : null;
+                    if (is_string($path) && preg_match('#^/spaces/([^/]+)/(?:pages|wiki)/([^/]+)$#u', $path, $match) && rawurldecode($match[1]) !== $spaceKey) {
+                        $other = $this->database->fetchOne('SELECT id FROM spaces WHERE space_key = ? AND deleted_at IS NULL', [rawurldecode($match[1])]);
+                        $target = $other === null ? null : $this->resolveTarget((int) $other['id'], rawurldecode($match[2]));
+                        if ($target !== null) $references['@page:' . $target['id']] = '@page:' . $target['id'];
+                    }
                     $prefix = '/spaces/' . rawurlencode($spaceKey) . '/';
                     if (is_string($path) && str_starts_with($path, $prefix)) {
                         $suffix = substr($path, strlen($prefix));
@@ -393,5 +398,11 @@ final class WikiMetadataService
 
             $parent->removeChild($child);
         }
+    }
+
+    private function resolveLinkTarget(int $spaceId, string $reference): ?array
+    {
+        if (preg_match('/^@page:([1-9][0-9]*)$/D', $reference, $match)) return $this->database->fetchOne('SELECT p.id, p.title, p.slug FROM pages p INNER JOIN spaces s ON s.id = p.space_id AND s.deleted_at IS NULL WHERE p.id = ? AND p.deleted_at IS NULL', [(int) $match[1]]);
+        return $this->resolveTarget($spaceId, $reference);
     }
 }

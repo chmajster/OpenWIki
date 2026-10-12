@@ -37,9 +37,14 @@ final class AdministrationPolicy
             $lock = $db->fetchOne('SELECT name FROM security_locks WHERE name = "administration" FOR UPDATE');
             if ($lock === null) throw new \RuntimeException('The administration lock migration is required.');
             $before = self::activeSuperIds($db);
+            $managed = \OpenWiki\Spaces\SpaceManagerInvariant::managedIds($db);
             $result = $operation($db);
             if ($before !== [] && self::activeSuperIds($db) === []) {
                 throw new \DomainException('The last active Super Admin account must remain active and retain full permissions.');
+            }
+            $surviving = array_column($db->fetchAll('SELECT id FROM spaces WHERE deleted_at IS NULL FOR UPDATE'), 'id');
+            if (array_diff(array_intersect($managed, $surviving), \OpenWiki\Spaces\SpaceManagerInvariant::managedIds($db)) !== []) {
+                throw new \DomainException('Nie można odciąć ostatniego aktywnego zarządzającego przestrzenią. Najpierw przekaż zarządzanie lub właściciela.');
             }
             return $result;
         });

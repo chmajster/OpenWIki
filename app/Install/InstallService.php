@@ -308,7 +308,7 @@ final class InstallService
     {
         $permissions = [
             '*',
-            'space.view', 'space.create', 'space.edit', 'space.delete',
+            'space.view', 'space.create', 'space.edit', 'space.delete', 'space.manage_access', 'space.manage_owner', 'space.archive',
             'page.view', 'page.create', 'page.edit', 'page.delete', 'page.publish', 'page.archive', 'page.move',
             'attachment.upload', 'attachment.delete',
             'comment.create', 'comment.delete',
@@ -343,8 +343,8 @@ final class InstallService
 
         $rolePermissionMap = [
             'super-admin' => ['*'],
-            'admin' => ['space.view','space.create','space.edit','space.delete','page.view','page.create','page.edit','page.delete','page.publish','page.archive','page.move','attachment.upload','attachment.delete','comment.create','comment.delete','user.manage','group.manage','role.manage','audit.view','settings.manage','template.manage','api.manage','webhook.manage'],
-            'space-admin' => ['space.view','space.edit','page.view','page.create','page.edit','page.delete','page.publish','page.archive','page.move','attachment.upload','attachment.delete','comment.create','comment.delete'],
+            'admin' => ['space.view','space.create','space.edit','space.delete','space.manage_access','space.manage_owner','space.archive','page.view','page.create','page.edit','page.delete','page.publish','page.archive','page.move','attachment.upload','attachment.delete','comment.create','comment.delete','user.manage','group.manage','role.manage','audit.view','settings.manage','template.manage','api.manage','webhook.manage'],
+            'space-admin' => ['space.view','space.edit','space.manage_access','space.manage_owner','space.archive','page.view','page.create','page.edit','page.delete','page.publish','page.archive','page.move','attachment.upload','attachment.delete','comment.create','comment.delete'],
             'editor' => ['space.view','page.view','page.create','page.edit','page.publish','page.move','attachment.upload','comment.create'],
             'author' => ['space.view','page.view','page.create','page.edit','attachment.upload','comment.create'],
             'viewer' => ['space.view','page.view','comment.create'],
