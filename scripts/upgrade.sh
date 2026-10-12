@@ -42,11 +42,13 @@ upgrade_pause() {
       configure_nginx
       systemctl stop "$PHP_FPM_SERVICE"
     fi
-    local attempt pid command busy worker_directory
+    local attempt pid command busy worker_directory worker_binary
     for attempt in {1..60}; do
       busy=0
       while read -r pid command; do
         [[ "$command" == *php* && "$command" == *'bin/console'* ]] || continue
+        worker_binary=$(readlink -f "/proc/$pid/exe" 2>/dev/null || true)
+        [[ "${worker_binary##*/}" =~ ^php([0-9]+(\.[0-9]+)*)?$ ]] || continue
         worker_directory=$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)
         if [[ "$command" == *"$INSTALL_DIR"* || "$worker_directory" == "$INSTALL_DIR" || "$worker_directory" == "$INSTALL_DIR/.openwiki/releases/"* ]]; then busy=1; fi
       done < <(ps -eo pid=,args=)
