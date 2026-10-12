@@ -51,6 +51,7 @@ $router->post('/account/mfa/confirm', [MfaController::class, 'confirm']);
 
 $router->get('/', [DashboardController::class, 'index']);
 $router->get('/search', [SearchController::class, 'index']);
+$router->get('/search/suggest', [SearchController::class, 'suggest']);
 
 $router->get('/spaces/create', [SpaceController::class, 'create']);
 $router->get('/structure/destinations', [\OpenWiki\Http\Controllers\StructureController::class, 'destinations']);
@@ -246,6 +247,7 @@ $router->post('/admin/ldap', [LdapAdminController::class, 'save']);
 $router->post('/admin/ldap/test', [LdapAdminController::class, 'test']);
 
 $router->get('/admin/system', [SystemAdminController::class, 'index']);
+$router->post('/admin/system/search-index', [SystemAdminController::class, 'rebuildSearch']);
 
 $router->get('/admin/templates', [TemplateAdminController::class, 'index']);
 $router->get('/admin/templates/create', [TemplateAdminController::class, 'create']);

@@ -20,6 +20,16 @@ final class SystemAdminController extends Controller
         return $this->render('admin/system/index', [
             'title' => 'System information',
             'system' => (new SystemInfoService($this->app))->snapshot(),
+            'searchIndex' => (new \OpenWiki\Search\SearchIndexer($this->app->database()))->status(),
         ]);
+    }
+
+    public function rebuildSearch(Request $request): Response
+    {
+        if (($failure = $this->authorize($request, 'settings.manage')) !== null) return $failure;
+        if (($failure = $this->verifyCsrf($request)) !== null) return $failure;
+        (new \OpenWiki\Search\SearchIndexer($this->app->database()))->enqueue();
+        \OpenWiki\Core\Session::flash('success', 'Przebudowa indeksu jest w kolejce. Worker przetwarza ją partiami.');
+        return Response::redirect('/admin/system');
     }
 }

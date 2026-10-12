@@ -30,6 +30,7 @@ final class SearchFeatureTest extends TestCase
         ]);
         (new MigrationRunner($this->database, dirname(__DIR__, 2) . '/database/migrations'))->migrate();
         $this->database->pdo()->beginTransaction();
+        $this->database->execute('DELETE FROM settings WHERE setting_key = "search.rebuild"');
     }
 
     protected function tearDown(): void
@@ -126,20 +127,20 @@ final class SearchFeatureTest extends TestCase
             'updated_to' => '',
         ];
 
-        $pages = $repository->searchPages('Firewall', $filters);
+        $pages = $repository->candidates('Firewall', 'page', $filters, true);
         self::assertNotEmpty($pages);
         self::assertSame($pageId, (int) $pages[0]['id']);
 
-        self::assertNotEmpty($repository->searchPages('security-' . $suffix));
-        self::assertNotEmpty($repository->searchSpaces('Networking', ['space' => 'NET-']));
-        self::assertNotEmpty($repository->searchUsers('alice-' . $suffix, ['author' => 'alice-']));
-        self::assertNotEmpty($repository->searchComments('nftables', $filters));
-        self::assertNotEmpty($repository->searchAttachments('diagram-' . $suffix, $filters));
-        self::assertNotEmpty($repository->searchTags('security-' . $suffix));
+        self::assertNotEmpty($repository->candidates('security-' . $suffix, 'page', [], true));
+        self::assertNotEmpty($repository->candidates('Networking', 'space', ['space' => 'NET-'], true));
+        self::assertNotEmpty($repository->candidates('alice-' . $suffix, 'user', ['author' => 'alice-'], true));
+        self::assertNotEmpty($repository->candidates('nftables', 'comment', $filters, true));
+        self::assertNotEmpty($repository->candidates('diagram-' . $suffix, 'attachment', $filters, true));
+        self::assertNotEmpty($repository->candidates('security-' . $suffix, 'tag', [], true));
 
         $futureFilters = $filters;
         $futureFilters['created_from'] = '2099-01-01 00:00:00';
-        self::assertSame([], $repository->searchPages('Firewall', $futureFilters));
+        self::assertSame([], $repository->candidates('Firewall', 'page', $futureFilters, true));
     }
 
     private function createUser(string $username, string $firstName, string $lastName): int

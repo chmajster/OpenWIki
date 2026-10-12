@@ -15,7 +15,6 @@ use OpenWiki\Images\ImageService;
 use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
-use OpenWiki\Repositories\SearchRepository;
 use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Security\RateLimiter;
 use OpenWiki\Wiki\CommentService;
@@ -607,269 +606,17 @@ final class ApiV1Controller extends Controller
 
     public function search(Request $request): Response
     {
-        [$context, $failure] = $this->apiAuth(
-            $request,
-            'search:read',
-            'page.view'
-        );
-        if ($failure !== null) {
-            return $failure;
-        }
-
-        $query = trim((string) $request->query('q', ''));
-        if ($query === '') {
-            return $this->error('validation_error', 'q is required.', 422);
-        }
-        if (mb_strlen($query) > 200) {
-            return $this->error(
-                'validation_error',
-                'q may contain at most 200 characters.',
-                422
-            );
-        }
-
-        $type = strtolower(trim((string) $request->query('type', 'page')));
-        $types = [
-            'page',
-            'all',
-            'space',
-            'user',
-            'comment',
-            'attachment',
-            'tag',
-        ];
-        if (!in_array($type, $types, true)) {
-            return $this->error(
-                'validation_error',
-                'Invalid search type.',
-                422
-            );
-        }
-
+        [$context, $failure] = $this->apiAuth($request, 'search:read', 'page.view');
+        if ($failure !== null) return $failure;
         try {
-            $filters = $this->apiSearchFilters($request);
-        } catch (\InvalidArgumentException $exception) {
-            return $this->error(
-                'validation_error',
-                $exception->getMessage(),
-                422
-            );
+            $input = \OpenWiki\Search\SearchInput::fromRequest($request, 'page');
+            if ($input['query'] === '') throw new \InvalidArgumentException('q is required.');
+        } catch (\InvalidArgumentException $error) {
+            return $this->error('validation_error', $error->getMessage(), 422);
         }
-
-        [$page, $perPage, $offset] = $this->pagination($request);
-        $repository = new SearchRepository($this->app->database());
-        $results = [];
-
-        if ($type === 'page' || $type === 'all') {
-            foreach (
-                $repository->searchPages($query, $filters, 200)
-                as $row
-            ) {
-                if (!$this->canViewSearchRow($context, $row)) {
-                    continue;
-                }
-
-                $results[] = [
-                    'type' => 'page',
-                    'id' => (int) $row['id'],
-                    'title' => $row['title'],
-                    'slug' => $row['slug'],
-                    'space' => [
-                        'id' => (int) $row['space_id'],
-                        'key' => $row['space_key'],
-                        'name' => $row['space_name'],
-                    ],
-                    'status' => $row['status'],
-                    'updated_at' => $row['updated_at'],
-                    'relevance' => (int) $row['relevance'],
-                    'snippet' => mb_substr(
-                        trim((string) $row['content_text']),
-                        0,
-                        240
-                    ),
-                ];
-            }
-        }
-
-        if (
-            ($type === 'space' || $type === 'all')
-            && $filters['author'] === ''
-            && $filters['tag'] === ''
-        ) {
-            $spaceAccess = new SpaceAccessService($this->app);
-            foreach (
-                $repository->searchSpaces($query, $filters, 100)
-                as $row
-            ) {
-                if (!$spaceAccess->canViewFor(
-                    $row,
-                    (int) $context['user']['id'],
-                    $this->isSuperAdmin($context)
-                )) {
-                    continue;
-                }
-
-                $results[] = [
-                    'type' => 'space',
-                    'id' => (int) $row['id'],
-                    'name' => $row['name'],
-                    'key' => $row['space_key'],
-                    'description' => $row['description'],
-                    'visibility' => $row['visibility'],
-                    'status' => $row['status'],
-                    'updated_at' => $row['updated_at'],
-                    'relevance' => (int) $row['relevance'],
-                ];
-            }
-        }
-
-        if (
-            ($type === 'user' || $type === 'all')
-            && $filters['space'] === ''
-            && $filters['tag'] === ''
-        ) {
-            foreach (
-                $repository->searchUsers($query, $filters, 100)
-                as $row
-            ) {
-                $results[] = [
-                    'type' => 'user',
-                    'id' => (int) $row['id'],
-                    'username' => $row['username'],
-                    'first_name' => $row['first_name'],
-                    'last_name' => $row['last_name'],
-                    'status' => $row['status'],
-                    'auth_source' => $row['auth_source'],
-                    'updated_at' => $row['updated_at'],
-                    'relevance' => (int) $row['relevance'],
-                ];
-            }
-        }
-
-        if ($type === 'comment' || $type === 'all') {
-            foreach (
-                $repository->searchComments($query, $filters, 150)
-                as $row
-            ) {
-                if (!$this->canViewSearchRow($context, $row)) {
-                    continue;
-                }
-
-                $plain = html_entity_decode(
-                    strip_tags((string) $row['body_html']),
-                    ENT_QUOTES | ENT_HTML5,
-                    'UTF-8'
-                );
-
-                $results[] = [
-                    'type' => 'comment',
-                    'id' => (int) $row['comment_id'],
-                    'page_id' => (int) $row['id'],
-                    'page_title' => $row['title'],
-                    'space' => [
-                        'key' => $row['space_key'],
-                        'name' => $row['space_name'],
-                    ],
-                    'author' => $row['comment_author_username'],
-                    'snippet' => mb_substr(trim($plain), 0, 240),
-                    'updated_at' => $row['updated_at'],
-                    'relevance' => (int) $row['relevance'],
-                ];
-            }
-        }
-
-        if ($type === 'attachment' || $type === 'all') {
-            foreach (
-                $repository->searchAttachments(
-                    $query,
-                    $filters,
-                    150
-                ) as $row
-            ) {
-                if (!$this->canViewSearchRow($context, $row)) {
-                    continue;
-                }
-
-                $results[] = [
-                    'type' => 'attachment',
-                    'id' => (int) $row['attachment_id'],
-                    'name' => $row['attachment_name'],
-                    'mime_type' => $row['mime_type'],
-                    'size_bytes' => (int) $row['size_bytes'],
-                    'page_id' => (int) $row['id'],
-                    'page_title' => $row['title'],
-                    'space' => [
-                        'key' => $row['space_key'],
-                        'name' => $row['space_name'],
-                    ],
-                    'updated_at' => $row['updated_at'],
-                    'relevance' => (int) $row['relevance'],
-                ];
-            }
-        }
-
-        if ($type === 'tag' || $type === 'all') {
-            $metadata = new WikiMetadataService(
-                $this->app->database()
-            );
-
-            foreach ($repository->searchTags($query, 100) as $row) {
-                $visible = 0;
-                foreach (
-                    $metadata->pagesForTag((string) $row['slug'])
-                    as $tagPage
-                ) {
-                    if ($this->canViewPage($context, $tagPage)) {
-                        $visible++;
-                    }
-                }
-
-                if ($visible === 0) {
-                    continue;
-                }
-
-                $results[] = [
-                    'type' => 'tag',
-                    'id' => (int) $row['id'],
-                    'name' => $row['name'],
-                    'slug' => $row['slug'],
-                    'page_count' => $visible,
-                    'updated_at' => $row['created_at'],
-                    'relevance' => (int) $row['relevance'],
-                ];
-            }
-        }
-
-        usort(
-            $results,
-            static function (array $left, array $right): int {
-                $relevance = (int) $right['relevance']
-                    <=> (int) $left['relevance'];
-                if ($relevance !== 0) {
-                    return $relevance;
-                }
-
-                return strcmp(
-                    (string) ($right['updated_at'] ?? ''),
-                    (string) ($left['updated_at'] ?? '')
-                );
-            }
-        );
-
-        $total = count($results);
-
-        return Response::json([
-            'data' => array_slice(
-                $results,
-                $offset,
-                $perPage
-            ),
-            'meta' => $this->paginationMeta(
-                $page,
-                $perPage,
-                $total
-            ) + ['type' => $type],
-        ]);
+        return Response::json((new \OpenWiki\Search\SearchService($this->app->database()))->search(
+            $input, (int) $context['user']['id'], $context['permissions']
+        ));
     }
 
     public function users(Request $request): Response
@@ -2949,37 +2696,6 @@ final class ApiV1Controller extends Controller
         );
     }
 
-    private function canViewSearchRow(array $context, array $row): bool
-    {
-        $page = [
-            'id' => (int) $row['id'],
-            'space_id' => (int) $row['space_id'],
-            'parent_id' => $row['parent_id'] === null
-                ? null
-                : (int) $row['parent_id'],
-            'inherit_acl' => (int) $row['inherit_acl'],
-            'status' => $row['status'],
-            'owner_id' => (int) $row['owner_id'],
-            'author_id' => (int) $row['author_id'],
-        ];
-        $space = [
-            'id' => (int) $row['space_id'],
-            'owner_id' => (int) $row['space_owner_id'],
-            'visibility' => $row['visibility'],
-            'status' => $row['space_status'],
-            'deleted_at' => $row['space_deleted_at'],
-        ];
-
-        return (new PageAclService($this->app))->canViewFor(
-            $page,
-            $space,
-            (int) $context['user']['id'],
-            $this->isSuperAdmin($context),
-            $this->contextHasPermission($context, 'page.view'),
-            $context['permissions']
-        );
-    }
-
     private function canViewPage(array $context, array $page): bool
     {
         return $this->requestAcl->canViewFor(
@@ -3038,62 +2754,6 @@ final class ApiV1Controller extends Controller
     private function isSuperAdmin(array $context): bool
     {
         return in_array('*', $context['permissions'] ?? [], true);
-    }
-
-    private function apiSearchFilters(Request $request): array
-    {
-        $filters = [
-            'space' => mb_substr(
-                trim((string) $request->query('space', '')),
-                0,
-                191
-            ),
-            'author' => mb_substr(
-                trim((string) $request->query('author', '')),
-                0,
-                100
-            ),
-            'tag' => mb_substr(
-                trim((string) $request->query('tag', '')),
-                0,
-                100
-            ),
-        ];
-
-        foreach ([
-            'created_from' => false,
-            'created_to' => true,
-            'updated_from' => false,
-            'updated_to' => true,
-        ] as $field => $endOfDay) {
-            $value = trim((string) $request->query($field, ''));
-            if ($value === '') {
-                $filters[$field] = '';
-                continue;
-            }
-
-            if (
-                preg_match(
-                    '/^(\d{4})-(\d{2})-(\d{2})$/',
-                    $value,
-                    $match
-                ) !== 1
-                || !checkdate(
-                    (int) $match[2],
-                    (int) $match[3],
-                    (int) $match[1]
-                )
-            ) {
-                throw new \InvalidArgumentException(
-                    'Invalid date filter: ' . $field . '.'
-                );
-            }
-
-            $filters[$field] = $value
-                . ($endOfDay ? ' 23:59:59' : ' 00:00:00');
-        }
-
-        return $filters;
     }
 
     private function pagination(Request $request): array

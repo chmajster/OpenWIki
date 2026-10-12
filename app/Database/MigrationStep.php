@@ -42,6 +42,14 @@ final class MigrationStep
         ];
     }
 
+    public static function fulltext(string $table, string $name, array $columns): array
+    {
+        $step = self::index($table, $name, $columns);
+        $step['sql'] = str_replace('ADD INDEX', 'ADD FULLTEXT INDEX', $step['sql']);
+        $step['check'] = str_replace("INDEX_TYPE = 'BTREE'", "INDEX_TYPE = 'FULLTEXT'", $step['check']);
+        return $step;
+    }
+
     private static function identifier(string $name): void
     {
         if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/D', $name)) throw new \InvalidArgumentException('Invalid migration identifier.');

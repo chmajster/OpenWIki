@@ -43,7 +43,9 @@ final class ConsoleApplication
                 'user:disable' => $this->userDisable($argv[2] ?? null),
                 'admin:reset-password' => $this->adminResetPassword($argv[2] ?? null),
                 'backup:create' => $this->backupCreate(),
-                'search:index' => $this->searchIndex(),
+                'search:index' => $this->searchIndex(in_array('--wait', $argv, true)),
+                'search:status' => $this->searchStatus(),
+                'search:work' => $this->searchWork(),
                 default => $this->unknown($command),
             };
         } catch (\Throwable $exception) {
@@ -78,7 +80,9 @@ Commands:
   admin:reset-password <user>
                         Generate a temporary password and force change on next login
   backup:create         Create a database, attachments and configuration backup
-  search:index          Rebuild searchable plain-text page content
+  search:index [--wait] Queue a bounded search rebuild; optionally wait for completion
+  search:status         Show persistent index rebuild progress
+  search:work           Process one queued search batch (also handled by cron:run)
   help                  Show this help
 
 TEXT);
@@ -272,6 +276,8 @@ TEXT);
         fwrite(STDOUT, '[INFO] Temporary files removed: ' . $tempRemoved . PHP_EOL);
 
         $webhooks = (new WebhookService($database))->processDue(25);
+        $search = (new SearchIndexer($database))->processDue();
+        fwrite(STDOUT, '[INFO] Search index: ' . $search['state'] . ' ' . $search['scanned'] . '/' . $search['total'] . PHP_EOL);
         fwrite(
             STDOUT,
             '[INFO] Webhook deliveries: processed=' . $webhooks['processed']
@@ -376,21 +382,35 @@ TEXT);
         return 0;
     }
 
-    private function searchIndex(): int
+    private function searchIndex(bool $wait = false): int
     {
         $app = Application::boot($this->basePath);
         if (!$app->installed()) {
             throw new \RuntimeException('OpenWiki is not installed.');
         }
 
-        fwrite(STDOUT, '[1/2] Rebuilding page search content' . PHP_EOL);
-        $result = (new SearchIndexer($app->database()))->rebuild();
-
-        fwrite(STDOUT, '[2/2] Search index refresh completed' . PHP_EOL);
-        fwrite(STDOUT, '[ OK ] Scanned: ' . $result['scanned'] . PHP_EOL);
-        fwrite(STDOUT, '[INFO] Updated: ' . $result['updated'] . PHP_EOL);
-        fwrite(STDOUT, '[INFO] Unchanged: ' . $result['unchanged'] . PHP_EOL);
+        $indexer = new SearchIndexer($app->database());
+        $result = $indexer->enqueue();
+        do {
+            fwrite(STDOUT, $result['state'] . ': ' . $result['scanned'] . '/' . $result['total'] . PHP_EOL);
+            if (!$wait || !in_array($result['state'], ['queued', 'running'], true)) break;
+            $result = $indexer->processDue();
+        } while (true);
+        if ($result['state'] === 'failed') return 1;
         return 0;
+    }
+
+    private function searchStatus(): int
+    {
+        fwrite(STDOUT, json_encode((new SearchIndexer(Application::boot($this->basePath)->database()))->status(), JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL);
+        return 0;
+    }
+
+    private function searchWork(): int
+    {
+        $state = (new SearchIndexer(Application::boot($this->basePath)->database()))->processDue();
+        fwrite(STDOUT, json_encode($state, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL);
+        return $state['state'] === 'failed' ? 1 : 0;
     }
 
     private function userCreate(): int
