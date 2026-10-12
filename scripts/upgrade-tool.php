@@ -70,6 +70,19 @@ try {
         exit($result['ready'] ? 0 : 1);
     }
     if ($command === 'database-name') { echo Env::get('DB_DATABASE'); exit(0); }
+    if ($command === 'app-host') {
+        $host = (string) parse_url(Env::get('APP_URL', 'http://localhost') ?? 'http://localhost', PHP_URL_HOST);
+        if ($host === '' || !preg_match('/^[a-zA-Z0-9.\-:\[\]]+$/D', $host)) throw new RuntimeException('Invalid application hostname.');
+        echo $host;
+        exit(0);
+    }
+    if ($command === 'nginx') {
+        $input = (string) file_get_contents($argv[4]);
+        $prepared = \OpenWiki\Upgrade\NginxUpgradeConfig::prepare($input, $instance, $argv[3], is_file($code . '/app/Upgrade/WriteGate.php'));
+        if (file_put_contents($directory . '/nginx.pending', $prepared) === false) throw new RuntimeException('Cannot prepare preserved Nginx configuration.');
+        chmod($directory . '/nginx.pending', 0600);
+        exit(0);
+    }
     if ($command === 'manifest') { ReadinessService::manifest($code); exit(0); }
     // Recovery can only operate while the shell coordinator holds the exclusive gate.
     if (!WriteGate::maintenance($code) || !is_readable($directory . '/owner')

@@ -31,6 +31,21 @@ upgrade_switch() {
   APP_DIR="$INSTALL_DIR/current"
 }
 
+upgrade_nginx() {
+  local conf
+  if [[ "$PKG_FAMILY" == apt ]]; then conf="/etc/nginx/sites-available/$NGINX_SITE";
+  else conf="/etc/nginx/conf.d/$NGINX_SITE.conf"; fi
+  upgrade_tool nginx "$APP_DIR" "$conf"
+  cp -p "$conf" "$INSTALL_DIR/.openwiki/nginx.previous"
+  chmod 0600 "$INSTALL_DIR/.openwiki/nginx.previous"
+  cp "$INSTALL_DIR/.openwiki/nginx.pending" "$conf"
+  if ! nginx -t; then
+    cp "$INSTALL_DIR/.openwiki/nginx.previous" "$conf"
+    fail "Nowa konfiguracja Nginx jest nieprawidłowa; zachowano poprzednią."
+  fi
+  systemctl reload nginx
+}
+
 upgrade_pause() {
   touch "$INSTALL_DIR/.openwiki/maintenance"
   chmod 0644 "$INSTALL_DIR/.openwiki/maintenance"
@@ -39,7 +54,7 @@ upgrade_pause() {
     # pause only OpenWiki's cron entry before capturing the database/storage.
     [[ ! -f "$CRON_FILE" ]] || mv "$CRON_FILE" "$INSTALL_DIR/.openwiki/cron.paused"
     if systemctl is-active --quiet "$PHP_FPM_SERVICE"; then
-      configure_nginx
+      upgrade_nginx
       systemctl stop "$PHP_FPM_SERVICE"
     fi
     local attempt pid command busy worker_directory worker_binary
@@ -73,8 +88,8 @@ upgrade_runtime() {
     # Start FPM to recreate its socket; the maintenance marker still denies traffic.
     systemctl start "$PHP_FPM_SERVICE"
     configure_selinux
-    configure_nginx
-    configure_cron
+    upgrade_nginx
+    if [[ -f "$INSTALL_DIR/.openwiki/cron.paused" ]]; then mv "$INSTALL_DIR/.openwiki/cron.paused" "$CRON_FILE"; fi
   fi
 }
 
@@ -98,7 +113,10 @@ upgrade_open_and_verify() {
   flock -u 8
   unset OPENWIKI_UPGRADE_OWNER
   if [[ ${UPGRADE_MANAGED_HOST:-1} == 1 ]]; then
-    if ! curl --fail --silent --show-error --max-time 15 http://127.0.0.1/health >/dev/null ||
+    local host
+    host=$(upgrade_tool app-host "$APP_DIR")
+    if ! curl --fail --silent --show-error --location --max-redirs 3 --max-time 15 -H "Host: $host" http://127.0.0.1/health -o "$INSTALL_DIR/.openwiki/health.json" ||
+       ! php -r '$v=json_decode(file_get_contents($argv[1]), true); exit(($v["status"] ?? null) === "ok" && ($v["checks"]["database"] ?? false) === true && ($v["checks"]["storage"] ?? false) === true ? 0 : 1);' "$INSTALL_DIR/.openwiki/health.json" ||
        ! runuser -u "$WEB_USER" -- php "$APP_DIR/bin/console" cron:run; then
       upgrade_pause
       return 1
