@@ -49,7 +49,7 @@ final class MacroService
             $html = implode('', $segments);
         }
 
-        if (isset($page['published_revision']) && ((bool) ($space['review_workflow'] ?? false) || (int) $page['published_revision'] < (int) ($page['version'] ?? 0))) $html = RevisionAccessService::bindFiles($html, (int) $page['published_revision']);
+        if (isset($page['published_revision']) && ((bool) ($space['review_workflow'] ?? false) || (int) $page['published_revision'] < (int) ($page['version'] ?? 0))) $html = (new RevisionAccessService($this->app->database()))->renderedHtml($html, (int) $page['id'], (int) $page['published_revision']);
         return [
             'html' => $html,
             'toc' => $toc,

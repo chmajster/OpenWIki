@@ -13,11 +13,13 @@ final class RevisionDiffTest extends TestCase
         self::assertStringContainsString('href="/attachments/12/download?revision=3"', $rendered);
         self::assertStringContainsString('href="https://example.test/attachments/12/download"', $rendered);
         self::assertSame($rendered, \OpenWiki\Wiki\RevisionAccessService::bindFiles($rendered, 3));
+        self::assertSame($source, \OpenWiki\Wiki\RevisionAccessService::bindFiles($source, 3, [99]));
+        self::assertSame($rendered, \OpenWiki\Wiki\RevisionAccessService::bindFiles($source, 3, [12]));
     }
 
     public function testDiffReconstructsBothVersionsAndHandlesLargeChanges(): void
     {
-        foreach ([["a\nb\nc", "a\nx\nc"], ['', '<script>unsafe</script>'], [str_repeat("old\n", 600), str_repeat("new\n", 600)], ['same', 'same']] as [$a, $b]) {
+        foreach ([["a\nb\nc", "a\nx\nc"], ['', '<script>unsafe</script>'], [str_repeat("old\n", 600), str_repeat("new\n", 600)], [str_repeat("old\n", 50000), str_repeat("new\n", 50000)], ['same', 'same']] as [$a, $b]) {
             $diff = RevisionDiff::lines($a, $b);
             self::assertSame($a, implode("\n", array_column(array_filter($diff, static fn (array $r): bool => $r[0] !== 'added'), 1)));
             self::assertSame($b, implode("\n", array_column(array_filter($diff, static fn (array $r): bool => $r[0] !== 'removed'), 1)));

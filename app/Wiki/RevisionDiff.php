@@ -7,8 +7,10 @@ final class RevisionDiff
     /** Bounded LCS; large changed regions remain a complete, escaped delete/insert diff. */
     public static function lines(string $before, string $after): array
     {
-        $a = explode("\n", str_replace("\r\n", "\n", $before));
-        $b = explode("\n", str_replace("\r\n", "\n", $after));
+        $before = str_replace("\r\n", "\n", $before); $after = str_replace("\r\n", "\n", $after);
+        // Keep pathological newline-heavy documents from allocating millions of row arrays.
+        if (substr_count($before, "\n") + substr_count($after, "\n") > 20000) return $before === $after ? [['same', $before]] : [['removed', $before], ['added', $after]];
+        $a = explode("\n", $before); $b = explode("\n", $after);
         $prefix = []; $suffix = [];
         $start = 0; $endA = count($a); $endB = count($b);
         while ($start < $endA && $start < $endB && $a[$start] === $b[$start]) $prefix[] = ['same', $a[$start++]];

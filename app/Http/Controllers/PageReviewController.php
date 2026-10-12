@@ -23,7 +23,7 @@ final class PageReviewController extends Controller
         $acl = new PageAclService($this->app);
         if ($page === null || !$acl->canReadWorking($page, $space)) return $this->render('errors/404', ['title' => 'Nie znaleziono dokumentu'], 404);
         $head = (new ContentService())->safeProjection($repo->working($page));
-        $head['content_html'] = \OpenWiki\Wiki\RevisionAccessService::bindFiles($head['content_html'], (int) $page['version']);
+        $head['content_html'] = (new \OpenWiki\Wiki\RevisionAccessService($this->app->database()))->renderedHtml($head['content_html'], (int) $page['id'], (int) $page['version']);
         $revision = $repo->revision((int) $page['id'], (int) $page['version']);
         $decisionsPage = max(1, min(1000000, (int) $request->query('decisions_page', 1)));
         $reviews = new PageReviewService($this->app->database());
