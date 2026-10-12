@@ -237,21 +237,29 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
                 const data = await requestJson(root.dataset.usersUrl + '?document_key=' + encodeURIComponent(snapshot().documentKey) + '&q=' + encodeURIComponent(match[2]));
                 if (sequence !== querySequence) return;
                 candidates = data.users.map((user) => ['@' + user.username, () => focus().insertContent({type: 'text', text: '@' + user.username + ' '}).run()]);
-            } catch (error) { report(error.message); candidates = []; }
+            } catch (error) { if (sequence !== querySequence) return; report(error.message); candidates = []; }
         }
         renderMenu();
     };
-    let menuTimer;
-    editor.on('transaction', ({transaction}) => { if (transaction.docChanged || transaction.selectionSet) { clearTimeout(menuTimer); menuTimer = setTimeout(updateMenu, 120); } });
+    let menuTimer = null;
+    const dismissMenu = () => {
+        ++querySequence; clearTimeout(menuTimer); menuTimer = null; menu.hidden = true; range = null;
+    };
+    editor.on('transaction', ({transaction}) => {
+        if (transaction.docChanged || transaction.selectionSet) {
+            dismissMenu();
+            menuTimer = setTimeout(() => { menuTimer = null; updateMenu(); }, 120);
+        }
+    });
     root.addEventListener('keydown', (event) => {
         if (!event.target.closest('[data-visual-editor]')) return;
         if (canEdit() && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); event.stopPropagation(); q('[data-open-find]').click(); return; }
         if (event.altKey && event.shiftKey && ['ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); event.stopPropagation(); const block = selectedBlock(); if (block) moveBlock(block.index + (event.key === 'ArrowUp' ? -1 : 1)); return; }
+        if (event.key === 'Escape' && (range || menuTimer !== null || !menu.hidden)) { event.preventDefault(); event.stopPropagation(); dismissMenu(); return; }
         if (menu.hidden || event.target.closest('dialog')) return;
-        if (['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(event.key)) {
+        if (['ArrowUp', 'ArrowDown', 'Enter'].includes(event.key)) {
             event.preventDefault(); event.stopPropagation();
-            if (event.key === 'Escape') { menu.hidden = true; range = null; }
-            else if (event.key === 'Enter') menu.children[active]?.click();
+            if (event.key === 'Enter') menu.children[active]?.click();
             else { active = (active + (event.key === 'ArrowUp' ? -1 : 1) + candidates.length) % candidates.length; renderMenu(); }
         }
     }, true);

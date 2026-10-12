@@ -33,6 +33,9 @@ zapisuje pomiary oraz obrazy dla widoków desktopowych i mobilnych.
 formatowania, usunięcie, undo/redo, anulowanie, fokus i ponowny odczyt przy
 360/1440 px. Obejmuje też odrzucenie nadmiernego wklejenia bez utraty dokumentu
 oraz rozdzielenie skrótów treści Visual, metadanych i Markdown.
+Opóźnione odpowiedzi prawdziwego endpointu podpowiedzi sprawdzają zamknięcie
+przez Escape i zmianę zaznaczenia. Wcięcia list są dostępne zgodnie z aktualnym
+kontekstem i mają sprawdzony zapis.
 Testy PHP weryfikują niezależnie sanitizer, renderer, konwersję, rewizje,
 uprawnienia i wspólne skutki domenowe zapisu.
 

@@ -16,11 +16,14 @@ const paste = async (page, text, html = '') => {
         element.dispatchEvent(new ClipboardEvent('paste', {bubbles: true, cancelable: true, clipboardData}));
     }, {text, html});
 };
+const errors = [];
 test.beforeEach(async ({page}) => {
+    errors.length = 0; page.on('pageerror', error => errors.push(error.message));
     await page.goto('/login'); await page.locator('[name=identifier]').fill(fixture().users[0].username);
     await page.locator('[name=password]').fill(fixture().users[0].password);
     await page.locator('form[action="/login"] button[type=submit]').click(); await expect(page).toHaveURL('/');
 });
+test.afterEach(() => expect(errors).toEqual([]));
 
 for (const width of [360, 1440]) test('link labels, editing, removal and keyboard focus round trip at ' + width + 'px', async ({page, request}) => {
     await page.setViewportSize({width, height: 900});
@@ -31,6 +34,7 @@ for (const width of [360, 1440]) test('link labels, editing, removal and keyboar
     await editor(page).press('ControlOrMeta+k');
     await expect(page.locator('[data-link-text]')).toHaveValue('Original label');
     await page.locator('[data-link-text]').fill('Updated label'); await page.locator('[data-link-url]').fill('https://example.test/first');
+    await page.screenshot({path: 'storage/temp/daily-editor-link-' + width + '.png'});
     await page.locator('[data-link-insert]').click();
     await expect(editor(page).locator('a')).toHaveText('Updated label'); await expect(editor(page)).toBeFocused();
     await editor(page).press('ControlOrMeta+z'); await expect(editor(page).locator('a')).toHaveCount(0);
@@ -86,4 +90,40 @@ test('editor shortcuts respect metadata fields and the active Markdown source', 
     await expect(page.locator('[data-link-dialog]')).not.toBeVisible(); await expect(page.locator('#global-search')).toBeFocused();
     await expect(page.locator('[data-markdown-editor]')).toHaveValue('## Current Markdown');
     await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content] h2')).toHaveText('Current Markdown');
+});
+
+test('a late mention response cannot reopen a dismissed menu or use an old selection', async ({page, request}) => {
+    const doc = await create(request, '<p>Keep the document</p>'); await page.goto(path(doc) + '/edit');
+    let release, arrived, delayed, requested;
+    const holdNext = () => {
+        delayed = new Promise(resolve => { release = resolve; });
+        requested = new Promise(resolve => { arrived = resolve; });
+    };
+    holdNext();
+    await page.route('**/editor-users?*', async route => {
+        const response = await route.fetch(); arrived(); await delayed; await route.fulfill({response});
+    });
+    await editor(page).press('ControlOrMeta+End'); await page.keyboard.type(' @' + fixture().users[0].username.slice(0, 18));
+    await requested; await editor(page).press('Escape');
+    const returned = page.waitForResponse(response => response.url().includes('/editor-users?'));
+    release(); await returned;
+    await expect(page.locator('[data-command-menu]')).toBeHidden();
+    holdNext(); await editor(page).press('ControlOrMeta+End'); await requested;
+    await editor(page).press('ControlOrMeta+Home'); await page.keyboard.type('New start ');
+    const secondReturned = page.waitForResponse(response => response.url().includes('/editor-users?'));
+    release(); await secondReturned; await page.unroute('**/editor-users?*');
+    await expect(page.locator('[data-command-menu]')).toBeHidden();
+    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content]')).toContainText('New start Keep the document');
+});
+
+test('list indentation tools show when the selected list item can actually move', async ({page, request}) => {
+    const doc = await create(request, '<p>Plain text</p><ul><li>First item</li><li>Second item</li></ul>');
+    await page.goto(path(doc) + '/edit'); await editor(page).press('ControlOrMeta+Home');
+    await expect(page.locator('[data-rich-command=sink]')).toBeDisabled(); await expect(page.locator('[data-rich-command=lift]')).toBeDisabled();
+    await editor(page).locator('li').first().click(); await expect(page.locator('[data-rich-command=sink]')).toBeDisabled();
+    await editor(page).locator('li').nth(1).click(); await expect(page.locator('[data-rich-command=sink]')).toBeEnabled();
+    await page.locator('[data-rich-command=sink]').click(); await expect(editor(page).locator('ul ul li')).toHaveText('Second item');
+    await expect(page.locator('[data-rich-command=lift]')).toBeEnabled(); await page.locator('[data-rich-command=lift]').click();
+    await expect(editor(page).locator('ul ul')).toHaveCount(0); await page.locator('[data-save-button]').click();
+    await expect(page.locator('[data-document-content] li')).toHaveCount(2);
 });

@@ -20,7 +20,11 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
         root.querySelectorAll('[data-insert-table], [data-open-link], [data-open-code], [data-open-callout], [data-open-macro], [data-image-picker], [data-attachment-picker], [data-heading]').forEach((control) => { control.disabled = !canEdit(); });
         root.querySelectorAll('[data-rich-command]').forEach((button) => {
             const name = button.dataset.richCommand;
-            button.disabled = !canEdit() || (['undo', 'redo'].includes(name) && !editor.can()[name]());
+            const listType = editor.isActive('taskItem') ? 'taskItem' : 'listItem';
+            const available = ['sink', 'lift'].includes(name)
+                ? editor.can()[name === 'sink' ? 'sinkListItem' : 'liftListItem'](listType)
+                : !['undo', 'redo'].includes(name) || editor.can()[name]();
+            button.disabled = !canEdit() || !available;
             if (!['undo', 'redo', 'sink', 'lift'].includes(name)) button.setAttribute('aria-pressed', String(editor.isActive(name)));
         });
         root.querySelectorAll('[data-table-command]').forEach((button) => { button.disabled = !canEdit() || !editor.can()[button.dataset.tableCommand](); });
