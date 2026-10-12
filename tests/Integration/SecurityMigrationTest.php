@@ -26,8 +26,11 @@ final class SecurityMigrationTest extends TestCase
             $before = $db->fetchOne('SELECT * FROM pages WHERE id = ?', [$page]);
             $acl = $db->fetchAll('SELECT * FROM page_acl WHERE page_id = ?', [$page]);
             $revision = $db->fetchOne('SELECT * FROM page_revisions WHERE page_id = ?', [$page]);
-            $migration = require dirname(__DIR__, 2) . '/database/migrations/008_security_boundaries.php';
-            for ($attempt = 0; $attempt < 2; $attempt++) foreach ($migration['up'] as $sql) $db->pdo()->exec($sql);
+            // Simulate loss of the version receipt after committed DDL. Recovery
+            // inspects the schema and preserves already completed steps.
+            $db->execute('DELETE FROM schema_migrations WHERE version = "008_security_boundaries"');
+            self::assertSame(['008_security_boundaries'], $runner->migrate());
+            self::assertSame([], $runner->migrate());
             self::assertSame($before, $db->fetchOne('SELECT * FROM pages WHERE id = ?', [$page]));
             self::assertSame($acl, $db->fetchAll('SELECT * FROM page_acl WHERE page_id = ?', [$page]));
             self::assertSame($revision, $db->fetchOne('SELECT * FROM page_revisions WHERE page_id = ?', [$page]));

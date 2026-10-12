@@ -26,7 +26,7 @@ final class EditorDraftMigrationTest extends TestCase
             $db->pdo()->exec('CREATE TABLE schema_migrations (version VARCHAR(191) PRIMARY KEY, applied_at DATETIME NOT NULL)');
             foreach (glob(dirname(__DIR__, 2) . '/database/migrations/00[1-4]_*.php') as $file) {
                 $migration = require $file;
-                foreach ($migration['up'] as $sql) $db->pdo()->exec($sql);
+                foreach ($migration['up'] as $step) $db->pdo()->exec(is_array($step) ? $step['sql'] : $step);
                 $db->execute('INSERT INTO schema_migrations VALUES (?, UTC_TIMESTAMP())', [$migration['version']]);
             }
             $user = $db->insert('INSERT INTO users (username, email, password_hash, status, auth_source, created_at, updated_at) VALUES ("legacy", "legacy@example.test", "unused", "active", "local", UTC_TIMESTAMP(), UTC_TIMESTAMP())');

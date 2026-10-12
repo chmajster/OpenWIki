@@ -2,16 +2,18 @@
 
 declare(strict_types=1);
 
+use OpenWiki\Database\MigrationStep;
+
 return [
     'version' => '006_durable_editor',
     'up' => [
-        'ALTER TABLE pages ADD COLUMN document_json MEDIUMTEXT NULL',
-        'ALTER TABLE page_revisions ADD COLUMN document_json MEDIUMTEXT NULL',
-        "UPDATE pages SET document_json = JSON_OBJECT('version', 1, 'format', IF(content_format = 'markdown' AND COALESCE(content_markdown, '') = '' AND content_html <> '', 'visual', content_format), 'source', IF(content_format = 'markdown' AND COALESCE(content_markdown, '') <> '', content_markdown, content_html))",
-        "UPDATE page_revisions SET document_json = JSON_OBJECT('version', 1, 'format', IF(content_format = 'markdown' AND COALESCE(content_markdown, '') = '' AND content_html <> '', 'visual', content_format), 'source', IF(content_format = 'markdown' AND COALESCE(content_markdown, '') <> '', content_markdown, content_html))",
-        'ALTER TABLE page_editor_drafts ADD COLUMN draft_version BIGINT UNSIGNED NOT NULL DEFAULT 0',
+        MigrationStep::column('pages', 'document_json', 'MEDIUMTEXT NULL'),
+        MigrationStep::column('page_revisions', 'document_json', 'MEDIUMTEXT NULL'),
+        "UPDATE pages SET document_json = JSON_OBJECT('version', 1, 'format', IF(content_format = 'markdown' AND COALESCE(content_markdown, '') = '' AND content_html <> '', 'visual', content_format), 'source', IF(content_format = 'markdown' AND COALESCE(content_markdown, '') <> '', content_markdown, content_html)) WHERE document_json IS NULL",
+        "UPDATE page_revisions SET document_json = JSON_OBJECT('version', 1, 'format', IF(content_format = 'markdown' AND COALESCE(content_markdown, '') = '' AND content_html <> '', 'visual', content_format), 'source', IF(content_format = 'markdown' AND COALESCE(content_markdown, '') <> '', content_markdown, content_html)) WHERE document_json IS NULL",
+        MigrationStep::column('page_editor_drafts', 'draft_version', 'BIGINT UNSIGNED NOT NULL DEFAULT 0'),
         <<<'SQL'
-CREATE TABLE editor_draft_operations (
+CREATE TABLE IF NOT EXISTS editor_draft_operations (
     space_id BIGINT UNSIGNED NOT NULL,
     user_id BIGINT UNSIGNED NOT NULL,
     document_key VARCHAR(80) NOT NULL,
@@ -26,7 +28,7 @@ CREATE TABLE editor_draft_operations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL,
         <<<'SQL'
-CREATE TABLE editor_recovery_points (
+CREATE TABLE IF NOT EXISTS editor_recovery_points (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     space_id BIGINT UNSIGNED NOT NULL,
     user_id BIGINT UNSIGNED NOT NULL,
@@ -43,7 +45,7 @@ CREATE TABLE editor_recovery_points (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL,
         <<<'SQL'
-CREATE TABLE editor_page_operations (
+CREATE TABLE IF NOT EXISTS editor_page_operations (
     user_id BIGINT UNSIGNED NOT NULL,
     operation_id CHAR(36) NOT NULL,
     request_hash CHAR(64) NOT NULL,
@@ -54,7 +56,7 @@ CREATE TABLE editor_page_operations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL,
         <<<'SQL'
-CREATE TABLE editor_draft_files (
+CREATE TABLE IF NOT EXISTS editor_draft_files (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     space_id BIGINT UNSIGNED NOT NULL,
     user_id BIGINT UNSIGNED NOT NULL,
