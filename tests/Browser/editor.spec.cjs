@@ -592,7 +592,6 @@ test('page link search, macro results and editor endpoints enforce actual ACL', 
     await api(request, 'patch', 'pages/' + parent.id, {base_version: 1, content_html: '<p>{{child-pages}}</p>'});
     const {execFileSync} = require('node:child_process');
     const {phpArguments} = require('./php-command.cjs');
-    execFileSync('php', [...phpArguments, 'tests/Browser/fixture.php', 'acl-search-scale', String(hidden.id)]);
     const visibleChild = await create(request, unique('Visible child'), {parent_id: hidden.id});
     const ownerCsrf = await page.locator('[name=_token]').first().inputValue();
     await page.request.post(pathFor(visibleChild) + '/permissions/inheritance', {form: {_token: ownerCsrf, inherit_acl: '0'}});
@@ -600,6 +599,7 @@ test('page link search, macro results and editor endpoints enforce actual ACL', 
     const limited = await context.newPage();
     observeErrors(limited);
     await login(limited, 2);
+    execFileSync('php', [...phpArguments, 'tests/Browser/fixture.php', 'acl-search-scale', String(hidden.id)]);
     await limited.goto(pathFor(parent));
     await expect(limited.locator('[data-document-content]')).not.toContainText(hidden.title);
     await limited.goto(pathFor(parent) + '/edit');
@@ -618,10 +618,11 @@ test('page link search, macro results and editor endpoints enforce actual ACL', 
     await limited.goto(pathFor(visibleChild) + '/edit');
     await expect(limited.locator('[name=parent_id]')).toHaveValue(String(hidden.id));
     await editor(limited).fill('Edited without moving out of the restricted parent');
-    await limited.locator('[data-save-button]').click();
+    await Promise.all([limited.waitForURL(pathFor(visibleChild)), limited.locator('[data-save-button]').click()]);
     await expect(limited.locator('[data-document-content]')).toContainText('Edited without moving');
     expect((await api(request, 'get', 'pages/' + visibleChild.id)).parent_id).toBe(hidden.id);
     await context.close();
+    execFileSync('php', [...phpArguments, 'tests/Browser/fixture.php', 'acl-search-cleanup', String(hidden.id)]);
 });
 
 test('Polish interface, mobile tree, account menu and keyboard form work together', async ({page, request}) => {

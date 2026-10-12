@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace OpenWiki\Tests\Integration;
 
 use OpenWiki\Core\Application;
+use OpenWiki\Core\Session;
 use OpenWiki\Database\MigrationRunner;
 use OpenWiki\Permissions\PageAclService;
+use OpenWiki\Repositories\PageRepository;
 use PHPUnit\Framework\TestCase;
 
 final class PageAclServiceTest extends TestCase
@@ -147,6 +149,46 @@ final class PageAclServiceTest extends TestCase
 
         self::assertTrue($service->canViewFor($page, $space, $memberId, false, true));
         self::assertFalse($service->canViewFor($page, $space, $otherId, false, true));
+    }
+
+    public function testBulkReadMatchesIndividualAclAndDoesNotReuseAnotherSpaceOrStaleRules(): void
+    {
+        [$ownerId, $allowedId, $otherId] = $this->createUsers();
+        $firstSpace = $this->createPublicSpace($ownerId);
+        $secondSpace = $this->createPublicSpace($ownerId);
+        $parent = $this->createPage((int) $firstSpace['id'], $ownerId, null);
+        $child = $this->createPage((int) $firstSpace['id'], $ownerId, (int) $parent['id']);
+        for ($index = 0; $index < 14; $index++) $this->createPage((int) $firstSpace['id'], $ownerId, (int) $parent['id']);
+        $otherPage = $this->createPage((int) $secondSpace['id'], $ownerId, null);
+        $service = new PageAclService($this->app);
+        $service->addRule((int) $parent['id'], 'user', $allowedId, 'page.view', 'allow', true);
+        $service->addRule((int) $otherPage['id'], 'user', $otherId, 'page.view', 'allow', true);
+
+        $roleId = $this->createRoleWithPermission('bulk-viewer-' . bin2hex(random_bytes(3)), 'page.view');
+        $this->app->database()->execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [$allowedId, $roleId]);
+        $previousSession = $_SESSION ?? [];
+        Session::put('user_id', $allowedId);
+        try {
+            $repository = new PageRepository($this->app->database());
+            $expected = array_values(array_filter($repository->tree((int) $firstSpace['id']), fn (array $page): bool => $service->canView($page, $firstSpace)));
+            $questionsBefore = (int) $this->app->database()->fetchOne('SHOW SESSION STATUS LIKE "Questions"')['Value'];
+            $actual = $service->visiblePages($firstSpace, fn (): array => $repository->tree((int) $firstSpace['id']));
+            $questionsAfter = (int) $this->app->database()->fetchOne('SHOW SESSION STATUS LIKE "Questions"')['Value'];
+            self::assertLessThanOrEqual(20, $questionsAfter - $questionsBefore, 'Tree filtering must batch ACL queries rather than query each page.');
+            $service->visiblePages($firstSpace, function () use ($service, $otherPage, $secondSpace): array {
+                self::assertFalse($service->canView($otherPage, $secondSpace));
+                return [];
+            });
+            self::assertSame($expected, $actual);
+            self::assertCount(16, $actual);
+            self::assertFalse($service->canView($otherPage, $secondSpace));
+
+            $service->addRule((int) $parent['id'], 'user', $allowedId, 'page.view', 'deny', true);
+            self::assertFalse($service->canView($child, $firstSpace));
+            self::assertSame([], $service->visiblePages($firstSpace, fn (): array => [$parent, $child]));
+        } finally {
+            $_SESSION = $previousSession;
+        }
     }
 
     private function createUsers(): array
