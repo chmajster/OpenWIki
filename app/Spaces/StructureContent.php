@@ -65,10 +65,12 @@ final class StructureContent
         $dom = new \DOMDocument('1.0', 'UTF-8'); $previous = libxml_use_internal_errors(true);
         $dom->loadHTML('<!doctype html><meta charset="utf-8"><div id="structure-content-root">' . $page['content_html'] . '</div>'); libxml_clear_errors(); libxml_use_internal_errors($previous);
         $root = $dom->getElementById('structure-content-root');
-        $walk = function (\DOMNode $node) use (&$walk, $rewriteUrl, $wiki, $dom): void {
+        $walk = function (\DOMNode $node) use (&$walk, $rewriteUrl, $wiki, $dom, $assets): void {
             if ($node instanceof \DOMElement) {
                 if (in_array(strtolower($node->tagName), ['code', 'pre'], true)) return;
                 foreach (['href', 'src'] as $attribute) if ($node->hasAttribute($attribute)) $node->setAttribute($attribute, $rewriteUrl($node->getAttribute($attribute)));
+                $attachment = $assets['/attachments/' . $node->getAttribute('data-attachment-id')] ?? null;
+                if ($attachment !== null && preg_match('~^/attachments/([1-9][0-9]*)$~D', $attachment, $match)) $node->setAttribute('data-attachment-id', $match[1]);
                 if (strtolower($node->tagName) === 'a') return;
             }
             foreach (iterator_to_array($node->childNodes) as $child) {

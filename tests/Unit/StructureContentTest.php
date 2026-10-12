@@ -30,11 +30,12 @@ final class StructureContentTest extends TestCase
 
     public function testVisualRewritePreservesEscapedTextCodeStructureAndProtectedImageVariants(): void
     {
-        $source = '<p>&lt;em&gt;literal&lt;/em&gt; [[Root &amp; child]] [[Hidden]]</p><pre><code>[[Root &amp; child]]</code></pre><figure><img src="/attachments/2/thumbnail?width=120" alt="Alt"><figcaption>Caption</figcaption></figure><table><tbody><tr><td><a href="/spaces/SOURCE/pages/old-root#heading">Alias</a></td></tr></tbody></table>';
+        $source = '<p>&lt;em&gt;literal&lt;/em&gt; [[Root &amp; child]] [[Hidden]]</p><pre><code>[[Root &amp; child]]</code></pre><figure><img src="/attachments/2/thumbnail?width=120" data-attachment-id="2" alt="Alt"><figcaption>Caption</figcaption></figure><table><tbody><tr><td><a href="/spaces/SOURCE/pages/old-root#heading">Alias</a></td></tr></tbody></table>';
         $content = $this->transform()->transform(['content_format' => 'visual', 'content_html' => $source]);
         self::assertStringContainsString('&lt;em&gt;literal&lt;/em&gt;', $content['html']); self::assertStringContainsString('/spaces/DEST/pages/copied#heading', $content['html']);
         self::assertStringContainsString('<code>[[Root &amp; child]]</code>', $content['html']); self::assertStringContainsString('/attachments/20/thumbnail?width=120', $content['html']);
         self::assertStringContainsString('<figcaption>Caption</figcaption>', $content['html']); self::assertStringContainsString('<table>', $content['html']);
         self::assertStringNotContainsString('secret-slug', $content['html']);
+        self::assertStringContainsString('data-attachment-id="20"', $content['html']);
     }
 }

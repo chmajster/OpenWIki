@@ -154,7 +154,7 @@ final class SpaceManagementTest extends TestCase
             $child = $writer->save($source, null, ['title' => 'Child', 'parent_id' => $root['id'], 'status' => 'published', 'content_format' => 'markdown', 'content_markdown' => "[[Root]]\n\n`[[Root]]`\n\n```php\n[[Root]]\n```"], $owner);
             $files = new \OpenWiki\Attachments\AttachmentService($db, $app->basePath()); $path = tempnam(sys_get_temp_dir(), 'wiki-copy-'); file_put_contents($path, 'first version');
             $attachment = $files->createFromSource((int) $root['id'], $owner, $path, 'note.txt'); file_put_contents($path, 'second version'); $files->addVersionFromSource($attachment, $owner, $path, 'note.txt'); unlink($path);
-            $writer->save($source, $root, ['base_version' => 1, 'content_html' => '<p>[[Child]] <a href="/attachments/' . $attachment . '/download">Plik</a></p>'], $owner);
+            $writer->save($source, $root, ['base_version' => 1, 'content_html' => '<p>[[Child]] <a href="/attachments/' . $attachment . '/download" data-attachment-id="' . $attachment . '">Plik</a></p>'], $owner);
             $spaces->update((int) $source['id'], ['status' => 'archived'], $owner, $this->request());
             $service = new \OpenWiki\Spaces\StructureService($app); $input = ['action' => 'copy', 'scope' => 'subtree', 'destination_space_id' => (int) $destination['id'], 'base_version' => 2];
             $preview = $service->preview((int) $root['id'], $input, $owner); $input += ['preview_token' => $preview['preview_token'], 'operation_id' => '33333333-3333-4333-8333-333333333333'];
@@ -170,6 +170,7 @@ final class SpaceManagementTest extends TestCase
                 self::assertNotSame($files->find($attachment)['storage_key'], $copyAttachment['storage_key']); self::assertCount(2, $files->versions((int) $copyAttachment['id']));
                 self::assertSame('second version', file_get_contents($files->currentPath($copyAttachment)));
                 self::assertStringContainsString('/attachments/' . $copyAttachment['id'] . '/download', $newRoot['content_html']);
+                self::assertStringContainsString('data-attachment-id="' . $copyAttachment['id'] . '"', $newRoot['content_html']);
                 self::assertSame(['tag'], array_column((new \OpenWiki\Wiki\WikiMetadataService($db))->tagsForPage($result['id']), 'name'));
                 self::assertSame($result, $service->execute((int) $root['id'], $input, $owner, $this->request()));
             } finally { foreach ([$root['id'], ...array_values($result['mapping'])] as $page) $files->purgeStorageKeys($files->storageKeysForPage((int) $page)); }

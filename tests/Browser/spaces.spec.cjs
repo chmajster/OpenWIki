@@ -80,12 +80,20 @@ test('drag and drop requires a preview and denied commit leaves the visible tree
 test('phone tree, copy dialog and cross-space access preview preserve document readback', async ({page, request}) => {
     await page.setViewportSize({width: 390, height: 844});
     const source = await createSpace(request), target = await createSpace(request, 'private'), root = await createPage(request, source, 'Phone root'), child = await createPage(request, source, 'Phone child', {parent_id: root.id});
+    const upload = await request.post('/api/v1/attachments', {headers: {Authorization: 'Bearer ' + fixture().token}, multipart: {page_id: String(root.id), attachment: {name: 'diagram.png', mimeType: 'image/png', buffer: Buffer.from(fixture().imageBase64, 'base64')}}});
+    expect(upload.ok(), await upload.text()).toBeTruthy(); const attachment = (await upload.json()).data;
+    await api(request, 'patch', `pages/${root.id}`, {base_version: root.version, content_html: `<p>Dokumentacja</p><figure><img src="/attachments/${attachment.id}/preview" data-attachment-id="${attachment.id}" alt="Schemat" width="96" height="96"><figcaption>Podpis schematu</figcaption></figure>`});
     await page.goto(`/spaces/${source.key}`); const panel = page.locator('[data-page-panel]'); await expect(panel).not.toHaveAttribute('open', ''); await panel.locator('summary').click(); await expect(node(page, root.id)).toBeVisible();
     await node(page, root.id).locator('.tree-operation').click(); await expect(dialog(page)).toBeVisible(); await expect(dialog(page).locator('[name=action]')).toBeEnabled();
     await dialog(page).locator('[name=action]').selectOption('copy'); await dialog(page).locator('[name=destination_space_id]').selectOption(String(target.id)); await dialog(page).locator('[name=title]').fill('Phone copied'); await prepare(page);
     await expect(dialog(page).locator('[data-structure-effects]')).toContainText('Gość'); await page.screenshot({path: 'storage/temp/space-operation-phone.png'}); await commit(page);
     const copies = await api(request, 'get', `pages?space=${target.key}`), copied = copies.find(item => item.title === 'Phone copied'), copiedChild = copies.find(item => item.title === child.title); expect(copiedChild.parent_id).toBe(copied.id);
     await page.goto(pathFor(target, copied)); await expect(page.locator('[data-document-content]')).toContainText('Dokumentacja'); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+    const image = page.locator('[data-document-content] img'), copiedAttachment = await image.getAttribute('data-attachment-id'); expect(copiedAttachment).not.toBe(String(attachment.id));
+    await expect(image).toHaveAttribute('alt', 'Schemat'); await expect(page.locator('figcaption')).toHaveText('Podpis schematu');
+    await expect.poll(() => image.evaluate(img => img.complete && img.naturalWidth > 0)).toBeTruthy();
+    await page.goto(pathFor(target, copied) + '/edit'); await expect(page.locator('[data-rich-editor] img')).toHaveAttribute('data-attachment-id', copiedAttachment);
+    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content] img')).toHaveAttribute('data-attachment-id', copiedAttachment); await expect(page.locator('figcaption')).toHaveText('Podpis schematu');
 });
 
 test('visible child of hidden parent does not disclose parent metadata to guests', async ({page, request, browser}) => {
