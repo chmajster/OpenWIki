@@ -177,6 +177,7 @@ local_mode() {
       info "Kreator wymaga dostępnego serwera MySQL/MariaDB i danych konta z odpowiednimi uprawnieniami." ;;
     ready) ok "Serwer lokalny działa. Aplikacja, baza i katalog danych są dostępne." ;;
     database_error) fail "Serwer odpowiada, ale /health zgłasza problem z bazą. Sprawdź dostępność MySQL/MariaDB oraz istniejące DB_* w .env; konfiguracja i dane nie zostały zmienione." ;;
+    configuration_error) fail "Istnieje installed.lock bez prawidłowego APP_KEY. Przywróć konfigurację .env istniejącej instancji; dane nie zostały zmienione." ;;
     storage_error) fail "Serwer odpowiada, ale /health zgłasza problem z katalogiem danych storage/." ;;
     schema_error) fail "Serwer odpowiada, ale schemat nie jest zgodny z wydaniem. Sprawdź php bin/console db:status i wznów aktualizację; aplikacja nie jest gotowa." ;;
     maintenance) fail "Trwa aktualizacja i zapisy są zablokowane. Sprawdź --upgrade-status i użyj --resume." ;;

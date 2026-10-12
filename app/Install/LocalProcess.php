@@ -9,6 +9,9 @@ final class LocalProcess
     public function __construct(private readonly string $root)
     {
         $this->file = $root . '/.openwiki/local/state.json';
+        foreach ([$root . '/.openwiki', $root . '/.openwiki/local', $this->file] as $path) {
+            if (is_link($path)) throw new \RuntimeException('Stan lokalnego serwera nie może być dowiązaniem symbolicznym. Żaden proces nie został zatrzymany.');
+        }
     }
 
     public function read(): array

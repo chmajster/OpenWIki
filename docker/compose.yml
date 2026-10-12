@@ -125,7 +125,7 @@ services:
       - node-modules:/app/node_modules
       - composer-cache:/composer-cache
       - npm-cache:/npm-cache
-    command: ['chown -R "$$OPENWIKI_UID:$$OPENWIKI_GID" /app/vendor /app/node_modules /composer-cache /npm-cache']
+    command: ['for directory in /app/vendor /app/node_modules /composer-cache /npm-cache; do if [ "$$(stat -c %u:%g "$$directory")" != "$$OPENWIKI_UID:$$OPENWIKI_GID" ]; then chown -R "$$OPENWIKI_UID:$$OPENWIKI_GID" "$$directory"; fi; done']
 
 volumes:
   database:

@@ -48,6 +48,24 @@ final class RuntimePathsTest extends TestCase
         putenv('OPENWIKI_STORAGE_DIR=relative');
         $this->expectExceptionMessage('absolute directory'); RuntimePaths::storage('/app');
     }
+    public function testAnInstalledMarkerWithoutAKeyIsAnErrorAndNeverAFreshWizard(): void
+    {
+        $root = sys_get_temp_dir() . '/openwiki-config-' . bin2hex(random_bytes(6));
+        mkdir($root . '/storage', 0700, true);
+        file_put_contents($root . '/storage/installed.lock', '{}');
+        $key = getenv('APP_KEY');
+        putenv('APP_KEY='); putenv('OPENWIKI_CONFIG_DIR=' . $root); putenv('OPENWIKI_STORAGE_DIR=' . $root . '/storage');
+        try {
+            $app = Application::boot(dirname(__DIR__, 2), false);
+            $state = (new \OpenWiki\System\ReadinessService($app))->check();
+            self::assertSame('configuration_error', $state['status']); self::assertFalse($state['ready']);
+            $response = (new \OpenWiki\Http\Controllers\InstallerController($app))->index(new \OpenWiki\Core\Request('GET', '/install', [], [], [], []));
+            self::assertSame(503, $response->status()); self::assertStringNotContainsString('name="db_host"', $response->body());
+        } finally {
+            $key === false ? putenv('APP_KEY') : putenv('APP_KEY=' . $key);
+            unlink($root . '/storage/installed.lock'); rmdir($root . '/storage'); rmdir($root);
+        }
+    }
     public function testRuntimeStateDoesNotEnableTheSystemUpgradeGate(): void
     {
         $root = sys_get_temp_dir() . '/openwiki-gate-' . bin2hex(random_bytes(6));

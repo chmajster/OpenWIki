@@ -20,7 +20,32 @@ docker_validate_address() {
   [[ "$OPENWIKI_PORT" =~ ^[0-9]{1,5}$ ]] && ((10#$OPENWIKI_PORT >= 1 && 10#$OPENWIKI_PORT <= 65535)) || fail "Port musi mieścić się w zakresie 1–65535."
   OPENWIKI_PORT=$((10#$OPENWIKI_PORT))
   [[ "$OPENWIKI_HOST" == localhost ]] && OPENWIKI_HOST=127.0.0.1
-  [[ "$OPENWIKI_HOST" =~ ^[0-9.]+$ || "$OPENWIKI_HOST" =~ ^[a-fA-F0-9:.]+$ ]] || fail "Host musi być adresem IPv4, IPv6 albo localhost."
+  local address="$OPENWIKI_HOST" segment count=0 octets=() segments=()
+  if [[ "$address" == *.* ]]; then
+    local ipv4="${address##*:}"
+    [[ "$ipv4" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Nieprawidłowy adres IPv4: $OPENWIKI_HOST."
+    IFS=. read -r -a octets <<< "$ipv4"
+    [[ ${#octets[@]} == 4 ]] || fail "Nieprawidłowy adres IPv4: $OPENWIKI_HOST."
+    for segment in "${octets[@]}"; do
+      [[ "$segment" =~ ^(0|[1-9][0-9]{0,2})$ ]] && ((10#$segment <= 255)) || fail "Nieprawidłowy adres IPv4: $OPENWIKI_HOST."
+    done
+    [[ "$address" == *:* ]] || return 0
+    address="${address%:*}:0:0"
+  fi
+  [[ "$address" =~ ^[a-fA-F0-9:]+$ && "$address" == *:* && "$address" != *:::* ]] || fail "Host musi być poprawnym adresem IPv4, IPv6 albo localhost."
+  [[ "$address" != :* || "$address" == ::* ]] || fail "Nieprawidłowy adres IPv6: $OPENWIKI_HOST."
+  [[ "$address" != *: || "$address" == *:: ]] || fail "Nieprawidłowy adres IPv6: $OPENWIKI_HOST."
+  IFS=: read -r -a segments <<< "$address"
+  for segment in "${segments[@]}"; do
+    [[ -n "$segment" ]] || continue
+    [[ "$segment" =~ ^[a-fA-F0-9]{1,4}$ ]] || fail "Nieprawidłowy adres IPv6: $OPENWIKI_HOST."
+    count=$((count + 1))
+  done
+  if [[ "$address" == *::* ]]; then
+    [[ "${address#*::}" != *::* && "$count" -lt 8 ]] || fail "Nieprawidłowy adres IPv6: $OPENWIKI_HOST."
+  else
+    [[ "$address" != :* && "$address" != *: && "$count" == 8 ]] || fail "Nieprawidłowy adres IPv6: $OPENWIKI_HOST."
+  fi
 }
 
 docker_summary() {
@@ -34,15 +59,16 @@ docker_summary() {
 }
 
 docker_check_port() {
-  local id owner
+  local id owner owned_binding
   while read -r id; do
     [[ -n "$id" ]] || continue
     owner=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$id")
     [[ "$owner" == "$COMPOSE_PROJECT_NAME" ]] || fail "Port $OPENWIKI_PORT jest publikowany przez inny kontener. Wybierz --port; obcy kontener nie został zatrzymany."
   done < <(docker ps --filter "publish=$OPENWIKI_PORT" --format '{{.ID}}')
   # Native listeners, when ss is available. Docker performs the definitive bind again at startup.
-  if command -v ss >/dev/null && [[ -z $(docker_compose ps -q --status running web) ]]; then
-    if ss -H -ltn "sport = :$OPENWIKI_PORT" | read -r _; then
+  owned_binding=$(docker_compose port web 80 2>/dev/null || true)
+  if command -v ss >/dev/null && [[ "$owned_binding" != *":$OPENWIKI_PORT" ]]; then
+    if [[ -n $(ss -H -ltn "sport = :$OPENWIKI_PORT") ]]; then
       fail "Port $OPENWIKI_PORT jest zajęty. Wybierz --port; żaden obcy proces nie został zatrzymany."
     fi
   fi
@@ -77,6 +103,9 @@ docker_prepare() {
 docker_start() {
   info "[4/4] Uruchomienie PHP, WWW, bazy i workera."
   if ! docker_compose up -d --wait --wait-timeout 120 db php web worker; then
+    local failed_state
+    failed_state=$(docker_compose exec -T php php scripts/container-runtime.php state 2>/dev/null) || failed_state=process_error
+    docker_summary "$failed_state"
     fail "Usługi nie wystartowały. Sprawdź port $OPENWIKI_PORT i --docker --logs. Obce procesy nie zostały zatrzymane; dane i wolumeny zachowano."
   fi
   local deadline=$((SECONDS + 60)) state=pending
@@ -95,12 +124,18 @@ docker_mode() {
   docker compose version >/dev/null 2>&1 || fail "Brak Docker Compose v2 (docker compose)."
   docker info >/dev/null 2>&1 || fail "Docker nie jest dostępny. Uruchom Docker Engine/Desktop i sprawdź prawa dostępu."
   DOCKER_STATE="$SCRIPT_DIR/.openwiki/docker"
+  local state_path
+  for state_path in "$SCRIPT_DIR/.openwiki" "$DOCKER_STATE" "$DOCKER_STATE/compose.env" "$DOCKER_STATE/runtime" "$DOCKER_STATE/runtime/.env" "$DOCKER_STATE/runtime/storage"; do
+    [[ ! -L "$state_path" ]] || fail "Stan Dockera nie może być dowiązaniem symbolicznym: $state_path. Nie zmieniono danych."
+  done
   local fingerprint key value saved_fingerprint="" saved_host="" saved_port=""
   fingerprint=$(printf '%s' "$SCRIPT_DIR" | sha256sum); fingerprint=${fingerprint%% *}
   export OPENWIKI_STATE_ID="$fingerprint" COMPOSE_PROJECT_NAME="openwiki-${fingerprint:0:20}"
   export OPENWIKI_PROJECT_DIR="$SCRIPT_DIR" OPENWIKI_RUNTIME_DIR="$DOCKER_STATE/runtime"
   export OPENWIKI_UID="$(id -u)" OPENWIKI_GID="$(id -g)"
   export OPENWIKI_HOST="$LOCAL_HOST" OPENWIKI_PORT="$LOCAL_PORT"
+  docker_validate_address
+  unset OPENWIKI_DB_PASSWORD OPENWIKI_DB_ROOT_PASSWORD
   if [[ -f "$DOCKER_STATE/compose.env" ]]; then
     while IFS='=' read -r key value; do
       case "$key" in
@@ -122,8 +157,9 @@ docker_mode() {
     fail "Brak przygotowanej instancji Docker. Uruchom --docker."
   else
     [[ ! -d "$DOCKER_STATE/runtime" ]] || fail "Istnieją dane runtime bez compose.env. Przywróć konfigurację; nie utworzono nowej bazy ani haseł."
+    ! docker volume inspect "${COMPOSE_PROJECT_NAME}_database" >/dev/null 2>&1 || fail "Istnieje wolumen bazy bez compose.env. Przywróć konfigurację; nie generowano nowych haseł."
     umask 077
-    mkdir -p -- "$DOCKER_STATE/runtime/storage"
+    mkdir -p -- "$DOCKER_STATE"
     export OPENWIKI_DB_PASSWORD="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
     export OPENWIKI_DB_ROOT_PASSWORD="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
   fi
@@ -142,6 +178,9 @@ docker_mode() {
     if [[ -n $(docker_compose ps -q --status running php) ]]; then
       state=$(docker_compose exec -T php php scripts/container-runtime.php state) || state=http_error
       worker=$(docker_compose exec -T php php scripts/container-runtime.php worker-status) || worker=unavailable
+      local diagnostics
+      diagnostics=$(docker_compose exec -T php php scripts/container-runtime.php diagnostics) || diagnostics=unavailable
+      info "Diagnostyka HTTP/bazy/aplikacji/workera: $diagnostics"
     fi
     docker_summary "$state"; info "Zadania okresowe: $worker"; return 0
   fi
@@ -154,13 +193,23 @@ docker_mode() {
     docker_compose stop db php web worker
     ok "Instancja Docker zatrzymana; dane i wolumeny zachowane."; docker_summary stopped; return
   fi
+  # Persist first-time credentials before any fallible port/build operation.
+  # Existing settings are updated only after a successful port preflight.
+  [[ -f "$DOCKER_STATE/compose.env" ]] || docker_save_settings
   docker_check_port
+  if [[ ! -d "$OPENWIKI_RUNTIME_DIR" ]] && docker volume inspect "${COMPOSE_PROJECT_NAME}_database" >/dev/null 2>&1; then
+    fail "Brak katalogu runtime dla istniejącego wolumenu bazy. Przywróć konfigurację, klucz i storage z kopii."
+  fi
+  mkdir -p -- "$OPENWIKI_RUNTIME_DIR/storage"
   docker_save_settings
   docker_compose config --quiet
   if [[ "$RUNTIME_ACTION" == prepare || "$RUNTIME_ACTION" == rebuild || "$RUNTIME_ACTION" == no-start ]]; then
     docker_compose stop php web worker
     docker_prepare
   elif ! docker image inspect "${COMPOSE_PROJECT_NAME}-php:local" >/dev/null 2>&1; then
+    docker_prepare
+  elif ! docker_compose run --rm --no-deps php sh -c 'php scripts/local-runtime.php php-ready && php scripts/local-runtime.php assets-ready'; then
+    docker_compose stop php web worker
     docker_prepare
   fi
   if [[ "$RUNTIME_ACTION" == no-start ]]; then

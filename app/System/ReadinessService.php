@@ -29,6 +29,7 @@ final class ReadinessService
         }
         $ready = !in_array(false, $checks, true);
         $status = !$checks['application'] ? 'setup_required' : (!$checks['maintenance'] ? 'maintenance' : ($ready ? 'ok' : 'degraded'));
+        if (!$checks['application'] && is_file($this->app->basePath('storage/installed.lock'))) $status = 'configuration_error';
         return ['status' => $status, 'checks' => $checks, 'schema' => $schema, 'ready' => $ready];
     }
 

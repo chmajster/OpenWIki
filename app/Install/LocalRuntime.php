@@ -123,6 +123,7 @@ final class LocalRuntime
         if ($health === null) return 'pending';
         if (!$health['identity']) return 'wrong_server';
         $data = json_decode($health['body'], true);
+        if (($data['status'] ?? '') === 'configuration_error') return 'configuration_error';
         if ($health['status'] === 503 && ($data['status'] ?? null) === 'setup_required') {
             $wizard = $get('/install');
             return $wizard !== null && $wizard['identity'] && $wizard['status'] === 200 && str_contains($wizard['body'], 'name="db_host"') ? 'setup' : 'installer_error';

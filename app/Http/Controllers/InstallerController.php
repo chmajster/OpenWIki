@@ -18,6 +18,9 @@ final class InstallerController extends Controller
         if ($this->app->installed()) {
             return Response::redirect('/');
         }
+        if (is_file($this->app->basePath('storage/installed.lock'))) {
+            return Response::json(['error' => ['code' => 'configuration_error', 'message' => 'Instancja jest już zainstalowana. Przywróć jej konfigurację i APP_KEY; nie uruchamiaj kreatora ponownie.']], 503);
+        }
 
         $service = new InstallService($this->app->basePath());
 

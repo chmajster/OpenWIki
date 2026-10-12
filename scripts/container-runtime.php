@@ -10,16 +10,30 @@ use OpenWiki\Core\RuntimePaths;
 $root = dirname(__DIR__);
 Env::load(RuntimePaths::configuration($root));
 $heartbeat = RuntimePaths::storage($root, 'worker-state.json');
-$state = static function () use ($root): string {
-    if (is_file(RuntimePaths::storage($root, 'installed.lock')) && strlen(Env::get('APP_KEY', '') ?? '') < 32) return 'configuration_error';
-    try { Database::fromEnvironment()->fetchOne('SELECT 1 AS ok'); }
-    catch (Throwable) { return 'database_error'; }
-    $get = static function (string $path): array {
+$get = static function (string $path): array {
         $curl = curl_init('http://web' . $path);
         curl_setopt_array($curl, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 1, CURLOPT_TIMEOUT => 3, CURLOPT_PROXY => '']);
         $body = curl_exec($curl); $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE); curl_close($curl);
         return [$status, $body];
-    };
+};
+$database = null;
+$connection = static function () use (&$database): ?Database {
+    try {
+        if ($database === null) { $database = Database::fromEnvironment(); $database->fetchOne('SELECT 1 AS ok'); }
+        return $database;
+    } catch (Throwable) { return null; }
+};
+$state = static function () use ($root, $get, $connection): string {
+    $installed = is_file(RuntimePaths::storage($root, 'installed.lock'));
+    $key = Env::get('APP_KEY', '') ?? '';
+    if (($installed && strlen($key) < 32) || (!$installed && $key !== '')) return 'configuration_error';
+    $db = $connection();
+    if ($db === null) return 'database_error';
+    if (!$installed) {
+        // A lost marker/configuration must not expose a completed database as a fresh wizard.
+        $table = $db->fetchOne("SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'");
+        if ((int) $table['n'] !== 0 && (int) $db->fetchOne('SELECT COUNT(*) AS n FROM users')['n'] !== 0) return 'configuration_error';
+    }
     [$status, $body] = $get('/health');
     $data = is_string($body) ? json_decode($body, true) : null;
     if ($status === 200 && ($data['status'] ?? '') === 'ok') return 'ready';
@@ -34,6 +48,12 @@ $state = static function () use ($root): string {
 };
 switch ($argv[1] ?? '') {
     case 'state': echo $state(); break;
+    case 'diagnostics':
+        [$live, $body] = $get('/health/live');
+        echo json_encode(['http' => $live === 200 && (json_decode((string) $body, true)['status'] ?? '') === 'alive',
+            'database' => $connection() !== null, 'application' => $state(),
+            'worker' => is_file($heartbeat) ? json_decode((string) file_get_contents($heartbeat), true) : ['state' => 'waiting']], JSON_THROW_ON_ERROR);
+        break;
     case 'heartbeat':
         $temporary = $heartbeat . '.' . getmypid() . '.tmp';
         if (file_put_contents($temporary, json_encode(['state' => $argv[2] ?? 'failed', 'time' => time()], JSON_THROW_ON_ERROR)) === false || !rename($temporary, $heartbeat)) exit(1);

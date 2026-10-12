@@ -61,7 +61,9 @@ class Instance:
     def command(self, args, success=True, timeout=900):
         result = subprocess.run(args, cwd=self.elsewhere, env=self.environment, text=True,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
-        self.log.write(result.stdout); self.log.flush()
+        # Compose config contains generated passwords; inspect it in memory only.
+        self.log.write('[INFO] Compose configuration inspected privately.\n' if 'config' in args and '--format' in args else result.stdout)
+        self.log.flush()
         if success and result.returncode != 0:
             # Preserve diagnostics privately; do not dump environment or credentials into CI.
             destination = PROJECT / 'storage/temp/docker-runtime-last.log'
@@ -152,8 +154,11 @@ def run():
             browser = client()
             status, body, _ = http(browser, url + '/health')
             check(status == 503 and json.loads(body)['status'] == 'setup_required', 'Unconfigured application distinguishes setup from failure')
+            if os.getenv('OPENWIKI_DOCKER_BROWSER_TEST') == '1':
+                subprocess.run(['node', str(PROJECT / 'tests/Docker/wizard-browser.cjs'), url], cwd=PROJECT, check=True)
             status, body, _ = http(browser, url + '/install')
             check(status == 200 and b'PHP' in body and b'value="db"' in body, 'Existing wizard has prepared Docker database defaults')
+            (root / '.openwiki/docker/runtime/.env').write_text('APP_NAME="Preinstallation configuration"\n')
             secret = dict(line.split('=', 1) for line in (root / '.openwiki/docker/compose.env').read_text().splitlines())['OPENWIKI_DB_PASSWORD']
             check(secret.encode() not in body, 'Wizard does not disclose the generated database password')
             status, payload, _ = http(browser, url + '/install/test-database', {'_token': csrf(body), 'db_host': 'untrusted.invalid', 'db_password': 'ignored'})
@@ -209,24 +214,30 @@ def run():
             instance.php('file_put_contents("/app/resources/views/auth/login.php", "<span>Container PHP mutation</span>", FILE_APPEND);')
             check('Container PHP mutation' in login.read_text() and b'Container PHP mutation' in http(client(), url + '/login')[1], 'Container writes through the code bind are visible on the host and HTTP')
             print('Docker test: lifecycle, data persistence and asset rebuild', flush=True)
-            check('stan: ready' in instance.cli('--status').stdout, 'Status reports application readiness without host services')
+            check('Stan aplikacji: ready' in instance.cli('--status').stdout, 'Status reports application readiness without host services')
             check(instance.cli('--logs').returncode == 0, 'Logs belong to this Compose project')
             instance.cli('--stop')
-            check('stan: stopped' in instance.cli('--status').stdout, 'Stopped status uses saved configuration')
+            check('Stan aplikacji: stopped' in instance.cli('--status').stdout, 'Stopped status uses saved configuration')
             instance.cli('--restart')
             check(http(browser, url + '/spaces/RUNTIME/pages/runtime-page')[1].find(b'Preserved runtime document') >= 0, 'Page survives container recreation')
             check(http(browser, url + attachment_path)[1] == b'Preserved Docker attachment', 'Attachment and session survive restart')
             instance.cli()
             check((root / '.openwiki/docker/runtime/.env').read_bytes() == saved_env and (root / '.openwiki/docker/runtime/storage/installed.lock').read_bytes() == saved_lock, 'Repeat preserves key, configuration and installation lock')
             check((root / '.openwiki/docker/compose.env').read_bytes() == saved_compose, 'Repeat preserves generated database passwords')
+            reordered = instance.command([shutil.which('bash'), str(root / 'install.sh'), '--status', '--docker'])
+            check('Stan aplikacji: ready' in reordered.stdout, 'Flag order selects Docker status without system diagnostics')
             manifest = root / 'public/assets/editor-manifest.json'
             before = json.loads(manifest.read_text())['input']
             source = root / 'resources/js/document-reader.js'; source.write_text(source.read_text() + '\n// runtime source change\n')
+            instance.cli()
+            check(json.loads(manifest.read_text())['input'] != before, 'Repeated docker preparation detects a changed editor source')
+            before = json.loads(manifest.read_text())['input']
+            source.write_text(source.read_text() + '\n// second source change\n')
             instance.cli('--rebuild')
             check(json.loads(manifest.read_text())['input'] != before, 'Changed editor source is included in rebuild')
             check(http(browser, url + attachment_path)[1] == b'Preserved Docker attachment' and (root / '.openwiki/docker/runtime/.env').read_bytes() == saved_env, 'Rebuild preserves database, files and key')
             instance.cli('--no-start')
-            check('stan: stopped' in instance.cli('--status').stdout, 'no-start leaves application services stopped')
+            check('Stan aplikacji: stopped' in instance.cli('--status').stdout, 'no-start leaves application services stopped')
             instance.cli('--start')
             check(http(browser, url + '/health')[0] == 200, 'start restores ready services')
             with socket.socket() as listener:
@@ -234,11 +245,26 @@ def run():
                 collision = instance.cli('--port', str(BASE_PORT + 2), success=False)
                 check(collision.returncode != 0 and 'Port' in collision.stdout, 'Occupied port is rejected with a specific diagnostic')
                 check(listener.fileno() >= 0 and http(browser, url + '/health')[0] == 200, 'Port conflict leaves foreign listener and current instance running')
-            for args in [['--local'], ['--start', '--stop'], ['--port', '65536'], ['--host', '127.0.0.1;id'], ['--install-dir', '/tmp/forbidden']]:
+            for args in [['--local'], ['--start', '--stop'], ['--port', '65536'], ['--host', '127.0.0.1;id'], ['--host', '127.0.0.999'], ['--host', '127.0.0.1.'], ['--host', '1::2:'], ['--install-dir', '/tmp/forbidden']]:
                 check(instance.cli(*args, success=False).returncode != 0, 'Conflicting or invalid parameters rejected: ' + ' '.join(args))
+            configuration = root / '.openwiki/docker/runtime/.env'
+            backup = configuration.with_suffix('.test-backup')
+            configuration.rename(backup)
+            try:
+                check('configuration_error' in instance.cli('--status').stdout, 'Lost configuration is a recoverable error, not a fresh installation')
+                check(http(client(), url + '/install')[0] == 503, 'A completed instance with a lost key cannot reopen the wizard')
+            finally:
+                backup.rename(configuration)
             second_root = temporary / 'second/Open Wiki'; copy_project(second_root)
             second = Instance(second_root, elsewhere, tools); instances.append(second)
+            with socket.socket() as listener:
+                listener.bind(('127.0.0.1', BASE_PORT + 2)); listener.listen()
+                failed = second.cli('--port', str(BASE_PORT + 2), success=False)
+                check(failed.returncode != 0 and 'Port' in failed.stdout, 'First preparation rejects an occupied port without starting services')
+            credentials = dict(line.split('=', 1) for line in (second_root / '.openwiki/docker/compose.env').read_text().splitlines())['OPENWIKI_DB_PASSWORD']
             second.cli('--no-start', '--port', str(BASE_PORT + 1))
+            check(dict(line.split('=', 1) for line in (second_root / '.openwiki/docker/compose.env').read_text().splitlines())['OPENWIKI_DB_PASSWORD'] == credentials,
+                'Retry after initial port failure preserves the first generated credentials')
             check(second.project != instance.project and not second.compose('ps', '-q', '--status', 'running').stdout.strip(), 'Same directory name has separate identity and no-start leaves no running services')
             second.cli('--start')
             check(json.loads(http(client(), 'http://127.0.0.1:' + str(BASE_PORT + 1) + '/health')[1])['status'] == 'setup_required', 'Second copy has a new database and independent installation state')
