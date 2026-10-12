@@ -150,7 +150,7 @@ final class SpaceService
             $acl = new PageAclService($this->app);
             if ($viewer === null || $page === null || !$acl->canViewFor($page, $space, $viewer->id, $viewer->can('*'), $viewer->can('page.view'))) throw new \OutOfBoundsException('Nie znaleziono strony.');
             $acl->snapshot($space, $id, $actor?->can('*') ?? false);
-            foreach (['page.view', 'page.edit', 'page.create', 'page.move', 'page.publish', 'page.archive', 'attachment.view', 'attachment.upload'] as $permission) $result[$permission] = $acl->explainFor($page, $space, $permission, $id, $actor?->can('*') ?? false, $actor?->can($permission) ?? false);
+            foreach (['page.view', 'page.edit', 'page.create', 'page.move', 'page.publish', 'page.archive'] as $permission) $result[$permission] = $acl->explainFor($page, $space, $permission, $id, $actor?->can('*') ?? false, $actor?->can($permission) ?? false);
         }
         return $result;
         });

@@ -155,6 +155,7 @@ final class SpaceManagementTest extends TestCase
             $files = new \OpenWiki\Attachments\AttachmentService($db, $app->basePath()); $path = tempnam(sys_get_temp_dir(), 'wiki-copy-'); file_put_contents($path, 'first version');
             $attachment = $files->createFromSource((int) $root['id'], $owner, $path, 'note.txt'); file_put_contents($path, 'second version'); $files->addVersionFromSource($attachment, $owner, $path, 'note.txt'); unlink($path);
             $writer->save($source, $root, ['base_version' => 1, 'content_html' => '<p>[[Child]] <a href="/attachments/' . $attachment . '/download">Plik</a></p>'], $owner);
+            $spaces->update((int) $source['id'], ['status' => 'archived'], $owner, $this->request());
             $service = new \OpenWiki\Spaces\StructureService($app); $input = ['action' => 'copy', 'scope' => 'subtree', 'destination_space_id' => (int) $destination['id'], 'base_version' => 2];
             $preview = $service->preview((int) $root['id'], $input, $owner); $input += ['preview_token' => $preview['preview_token'], 'operation_id' => '33333333-3333-4333-8333-333333333333'];
             $result = $service->execute((int) $root['id'], $input, $owner, $this->request());

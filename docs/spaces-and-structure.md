@@ -4,6 +4,8 @@ Przestrzeń publiczna udostępnia opublikowane strony także gościom, z uwzglę
 
 Archiwum pozostaje czytelne zgodnie z tymi samymi zasadami odczytu, lecz blokuje zmiany stron i załączników. Przywrócenie przestrzeni wymaga uprawnienia do archiwizacji. Zmiana dostępu i właściciela wymaga osobnych uprawnień. Nie można pozostawić przestrzeni bez aktywnego zarządzającego; zmiany kont, ról i grup również muszą zachowywać tę zasadę.
 
+Z archiwum można kopiować dostępne dokumenty i załączniki do aktywnej przestrzeni. Kopiowanie nie zmienia źródła; przenoszenie z archiwum wymaga wcześniejszego przywrócenia przestrzeni.
+
 Przeniesienie zachowuje identyfikatory, rewizje, załączniki i lokalne ACL stron. Dziedziczenie wynika z nowego rodzica i przestrzeni; skutki dla dostępu wymagają podglądu i świadomego zatwierdzenia. Kopiowanie tworzy nowe strony i niezależne załączniki z nową historią rozpoczynającą się od pierwszej rewizji. Źródłowe snapshoty rewizji pozostają niezmienione. Linki wewnętrzne kopiowanego poddrzewa wskazują kopie; pozostałe wskazują dotychczasowe dokumenty. Przeniesienie zachowuje odnośniki przez przekierowania starych adresów. Operacje UI i API korzystają z tych samych usług, kontroli wersji, blokad, audytu i zdarzeń.
 
 Drzewo doładowuje gałęzie, pamięta rozwinięcia osobno dla użytkownika i przestrzeni oraz obsługuje wyszukiwanie, klawiaturę i dialogi operacji. Widoczne dziecko ukrytego rodzica jest prezentowane jako korzeń bez identyfikatora, tytułu i innych metadanych rodzica. Breadcrumbs pokazują dostępne poziomy; niedostępne poziomy mają neutralny opis bez metadanych.
