@@ -1,108 +1,61 @@
 <?php
-
 declare(strict_types=1);
-
 namespace OpenWiki\Permissions;
 
 use OpenWiki\Core\Application;
 
 final class SpaceAccessService
 {
-    public function __construct(private readonly Application $app)
-    {
-    }
+    public function __construct(private readonly Application $app) {}
 
     public function canView(array $space): bool
     {
-        $user = $this->app->auth()->user();
-
-        return $this->canViewFor(
-            $space,
-            $user === null ? null : (int) $user['id'],
-            $this->app->auth()->can('*')
-        );
+        return $this->canViewFor($space, $this->app->auth()->user()['id'] ?? null, $this->app->auth()->can('*'));
     }
 
     public function canEdit(array $space): bool
     {
-        $user = $this->app->auth()->user();
-        if ($user === null) {
-            return false;
-        }
-
-        return $this->canEditFor($space, (int) $user['id'], $this->app->auth()->can('*'));
+        $id = $this->app->auth()->user()['id'] ?? null;
+        return $id !== null && $this->canEditFor($space, (int) $id, $this->app->auth()->can('*'));
     }
 
     public function canViewFor(array $space, ?int $userId, bool $superAdmin = false): bool
     {
-        if (($space['deleted_at'] ?? null) !== null || ($space['status'] ?? 'active') !== 'active') {
-            return false;
-        }
-
-        if ($userId === null) {
-            return ($space['visibility'] ?? 'private') === 'public';
-        }
-
-        if ($superAdmin || (int) $space['owner_id'] === $userId) {
-            return true;
-        }
-
-        $decision = $this->aclDecision((int) $space['id'], $userId, 'space.view');
-        if ($decision === false) {
-            return false;
-        }
-
-        if (($space['visibility'] ?? 'private') === 'public') {
-            return true;
-        }
-
-        return $decision === true;
+        return $this->explainFor($space, $userId, 'space.view', $superAdmin)['allowed'];
     }
 
     public function canEditFor(array $space, int $userId, bool $superAdmin = false): bool
     {
-        if (($space['deleted_at'] ?? null) !== null || ($space['status'] ?? 'active') !== 'active') {
-            return false;
-        }
-
-        if ($superAdmin || (int) $space['owner_id'] === $userId) {
-            return true;
-        }
-
-        return $this->aclDecision((int) $space['id'], $userId, 'space.edit') === true;
+        return ($space['status'] ?? 'active') === 'active' && $this->explainFor($space, $userId, 'space.edit', $superAdmin)['allowed'];
     }
 
-    private function aclDecision(int $spaceId, int $userId, string $permission): ?bool
+    public function canManageFor(array $space, int $id, string $permission, bool $super = false, bool $global = true): bool
     {
-        $rows = $this->app->database()->fetchAll(
-            'SELECT a.effect
-             FROM space_acl a
-             WHERE a.space_id = ?
-               AND a.permission = ?
-               AND (
-                    (a.principal_type = "user" AND a.principal_id = ?)
-                    OR (a.principal_type = "group" AND EXISTS (
-                        SELECT 1 FROM group_users gu
-                        WHERE gu.group_id = a.principal_id AND gu.user_id = ?
-                    ))
-                    OR (a.principal_type = "role" AND EXISTS (
-                        SELECT 1 FROM user_roles ur
-                        WHERE ur.role_id = a.principal_id AND ur.user_id = ?
-                    ))
-               )',
-            [$spaceId, $permission, $userId, $userId, $userId]
-        );
+        return $this->explainFor($space, $id, $permission, $super, $global)['allowed'];
+    }
 
-        if ($rows === []) {
-            return null;
-        }
+    public function explainFor(array $space, ?int $id, string $permission = 'space.view', bool $super = false, bool $global = true): array
+    {
+        $rules = $id === null ? [] : $this->app->database()->fetchAll(
+            'SELECT a.id, a.principal_type, a.principal_id, a.permission, a.effect FROM space_acl a WHERE a.space_id = ? AND a.permission = ? AND (
+                (a.principal_type = "user" AND a.principal_id = ?) OR
+                (a.principal_type = "group" AND EXISTS (SELECT 1 FROM group_users gu WHERE gu.group_id = a.principal_id AND gu.user_id = ?)) OR
+                (a.principal_type = "role" AND EXISTS (SELECT 1 FROM user_roles ur WHERE ur.role_id = a.principal_id AND ur.user_id = ?))) ORDER BY a.id',
+            [$space['id'], $permission, $id, $id, $id]);
+        return self::evaluate($space, $id, $permission, $super, $global, $rules);
+    }
 
-        foreach ($rows as $row) {
-            if ($row['effect'] === 'deny') {
-                return false;
-            }
-        }
-
-        return true;
+    public static function evaluate(array $space, ?int $id, string $permission, bool $super, bool $global, array $rules): array
+    {
+        $result = static fn (bool $allow, string $reason, array $rules = []): array => ['allowed' => $allow, 'effect' => $allow ? 'allow' : 'deny', 'reason' => $reason, 'rules' => $rules];
+        if (($space['deleted_at'] ?? null) !== null) return $result(false, 'Przestrzeń została usunięta.');
+        if ($permission !== 'space.view' && (!$global || $id === null)) return $result(false, 'Brak wymaganego uprawnienia globalnego.');
+        if ($super) return $result(true, 'Uprawnienia superadministratora.');
+        if ($id !== null && (int) $space['owner_id'] === $id) return $result(true, 'Właściciel przestrzeni.');
+        if ($space['visibility'] === 'private') return $result(false, 'Przestrzeń prywatna: dostęp właściciela i superadministratora.');
+        if (in_array('deny', array_column($rules, 'effect'), true)) return $result(false, 'Dopasowane deny ma pierwszeństwo przed allow.', $rules);
+        if ($rules !== []) return $result(true, 'Dopasowane allow użytkownika, grupy lub roli.', $rules);
+        if ($permission === 'space.view' && $space['visibility'] === 'public') return $result(true, 'Publiczny odczyt; ACL strony może go ograniczyć.');
+        return $result(false, 'Brak pasującego zezwolenia ACL.');
     }
 }

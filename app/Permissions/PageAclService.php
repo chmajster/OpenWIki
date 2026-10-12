@@ -51,6 +51,16 @@ final class PageAclService
     {
     }
 
+    /** Evaluate a proposed tree without mutating persisted pages or issuing per-page queries. */
+    public function simulate(array $space, array $pages, array $rules, ?int $user, array $principals, bool $view, bool $edit): void
+    {
+        $this->snapshotSpace = (int) $space['id']; $this->snapshotUser = $user;
+        $this->snapshotPages = array_column($pages, null, 'id'); $this->snapshotRules = [];
+        foreach ($rules as $rule) $this->snapshotRules[(int) $rule['page_id']][$rule['permission']][] = $rule;
+        $this->snapshotPrincipals = $principals;
+        $this->snapshotAccess = ['view' => $view, 'edit' => $edit];
+    }
+
     public function canView(array $page, array $space): bool
     {
         $user = $this->app->auth()->user();
@@ -135,6 +145,7 @@ final class PageAclService
         bool $superAdmin = false,
         bool $hasPermission = true
     ): bool {
+        if (($space['status'] ?? 'active') !== 'active' || ($space['deleted_at'] ?? null) !== null) return false;
         if (!$hasPermission) {
             return false;
         }

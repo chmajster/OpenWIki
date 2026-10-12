@@ -110,8 +110,10 @@ final class PageController extends Controller
         if ($page === null) {
             $redirect = $repository->redirectTarget((int) $space['id'], $slug);
             if ($redirect !== null) {
+                $redirectSpace = (new SpaceRepository($this->app->database()))->findByKey((string) ($redirect['space_key'] ?? $space['space_key']));
+                if ($redirectSpace === null || !(new PageAclService($this->app))->canView($redirect, $redirectSpace)) return $this->render('errors/404', ['title' => 'Page not found'], 404);
                 return Response::redirect(
-                    '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($redirect['slug']),
+                    '/spaces/' . rawurlencode($redirectSpace['space_key']) . '/pages/' . rawurlencode($redirect['slug']),
                     301
                 );
             }
@@ -152,8 +154,11 @@ final class PageController extends Controller
             'title' => $page['title'],
             'space' => $space,
             'page' => $page,
-            'pages' => $this->visibleTree($space),
+            'pages' => [],
+            'breadcrumbs' => (new \OpenWiki\Spaces\DocumentationTreeService($this->app))->breadcrumbs($space, $page, $user['id'] ?? null, $this->app->auth()->can('*'), $this->app->auth()->can('page.view')),
             'canEdit' => $pageAccess->canEdit($page, $space),
+            'canMove' => $pageAccess->can($page, $space, 'page.move'),
+            'canCopy' => $user !== null && $this->app->auth()->can('page.create'),
             'canManagePermissions' => $pageAccess->canEdit($page, $space),
             'canDeletePage' => $user !== null && $pageAccess->can($page, $space, 'page.delete'),
             'isFavorite' => $user !== null && $engagement->isFavorite((int) $user['id'], (int) $page['id']),

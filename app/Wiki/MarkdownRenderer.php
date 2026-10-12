@@ -56,6 +56,21 @@ final class MarkdownRenderer
         return $result . $rewrite($chunk);
     }
 
+    /** Rewrites prose only, preserving code block/span bytes during structure operations. */
+    public function transformProse(string $source, callable $rewrite): string
+    {
+        $document = (new \League\CommonMark\Parser\MarkdownParser($this->environment))->parse($source); $protected = [];
+        foreach ($document->iterator() as $node) if ($node instanceof \League\CommonMark\Extension\CommonMark\Node\Block\FencedCode || $node instanceof \League\CommonMark\Extension\CommonMark\Node\Block\IndentedCode) {
+            for ($line = $node->getStartLine(); $line <= $node->getEndLine(); $line++) $protected[$line] = true;
+        }
+        $chunk = ''; $result = '';
+        $apply = static fn (string $text): string => preg_replace_callback('/(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)|[^`]+|`/u', static fn (array $match): string => str_starts_with($match[0], '`') ? $match[0] : $rewrite($match[0]), $text) ?? $text;
+        foreach (preg_split('/(?<=\n)/', $source) as $index => $line) {
+            if (isset($protected[$index + 1])) { $result .= $apply($chunk) . $line; $chunk = ''; } else $chunk .= $line;
+        }
+        return $result . $apply($chunk);
+    }
+
     public function render(string $markdown): string
     {
         $html = trim((string) $this->converter->convert($markdown));

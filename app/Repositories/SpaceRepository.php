@@ -24,14 +24,14 @@ final class SpaceRepository
     {
         if ($superAdmin) {
             return $this->database->fetchAll(
-                'SELECT * FROM spaces WHERE deleted_at IS NULL AND status = "active" ORDER BY name ASC'
+                'SELECT * FROM spaces WHERE deleted_at IS NULL ORDER BY status, name ASC'
             );
         }
 
         if ($userId === null) {
             return $this->database->fetchAll(
                 'SELECT * FROM spaces
-                 WHERE deleted_at IS NULL AND status = "active" AND visibility = "public"
+                 WHERE deleted_at IS NULL AND visibility = "public"
                  ORDER BY name ASC'
             );
         }
@@ -40,11 +40,10 @@ final class SpaceRepository
             'SELECT s.*
              FROM spaces s
              WHERE s.deleted_at IS NULL
-               AND s.status = "active"
                AND (
                     s.visibility = "public"
                     OR s.owner_id = ?
-                    OR EXISTS (
+                    OR (s.visibility = "restricted" AND EXISTS (
                         SELECT 1
                         FROM space_acl a
                         WHERE a.space_id = s.id
@@ -61,9 +60,9 @@ final class SpaceRepository
                                   WHERE ur.role_id = a.principal_id AND ur.user_id = ?
                               ))
                           )
-                    )
+                    ))
                )
-               AND NOT EXISTS (
+               AND (s.owner_id = ? OR NOT EXISTS (
                     SELECT 1
                     FROM space_acl d
                     WHERE d.space_id = s.id
@@ -80,9 +79,9 @@ final class SpaceRepository
                               WHERE ur2.role_id = d.principal_id AND ur2.user_id = ?
                           ))
                       )
-               )
+               ))
              ORDER BY s.name ASC',
-            [$userId, $userId, $userId, $userId, $userId, $userId, $userId]
+            [$userId, $userId, $userId, $userId, $userId, $userId, $userId, $userId]
         );
     }
 

@@ -31,7 +31,7 @@ if (($argv[1] ?? '') === 'seed') {
         $users[] = ['id' => $id, 'username' => $username, 'password' => $password];
     }
     $spaceKey = 'BROWSER-' . strtoupper($suffix);
-    $spaceId = (new SpaceRepository($database))->create(['name' => 'Browser regression', 'space_key' => $spaceKey, 'description' => null, 'owner_id' => $users[0]['id'], 'visibility' => 'private']);
+    $spaceId = (new SpaceRepository($database))->create(['name' => 'Browser regression', 'space_key' => $spaceKey, 'description' => null, 'owner_id' => $users[0]['id'], 'visibility' => 'restricted']);
     $limitedRole = $database->insert('INSERT INTO roles (name, slug, is_system, created_at, updated_at) VALUES (?, ?, 0, UTC_TIMESTAMP(), UTC_TIMESTAMP())', ['Limited browser ' . $suffix, 'limited-browser-' . $suffix]);
     foreach (['page.view', 'page.edit', 'page.create', 'attachment.view'] as $name) {
         $database->execute('INSERT IGNORE INTO permissions (name, description, created_at) VALUES (?, ?, UTC_TIMESTAMP())', [$name, $name]);

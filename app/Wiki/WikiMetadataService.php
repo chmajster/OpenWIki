@@ -227,6 +227,7 @@ final class WikiMetadataService
     public function resolveTarget(int $spaceId, string $reference): ?array
     {
         $reference = trim($reference);
+        if (preg_match('/^@page:([1-9][0-9]*)$/D', $reference, $match)) return $this->database->fetchOne('SELECT p.id, p.title, p.slug FROM pages p INNER JOIN spaces s ON s.id = p.space_id AND s.deleted_at IS NULL WHERE p.id = ? AND p.deleted_at IS NULL', [(int) $match[1]]);
         if ($reference === '') {
             return null;
         }
@@ -321,6 +322,11 @@ final class WikiMetadataService
                     $localHost = parse_url((string) Env::get('APP_URL', ''), PHP_URL_HOST);
                     $path = $host === null || (is_string($host) && is_string($localHost) && strcasecmp($host, $localHost) === 0)
                         ? parse_url($href, PHP_URL_PATH) : null;
+                    if (is_string($path) && preg_match('#^/spaces/([^/]+)/(?:pages|wiki)/([^/]+)$#u', $path, $match) && rawurldecode($match[1]) !== $spaceKey) {
+                        $other = $this->database->fetchOne('SELECT id FROM spaces WHERE space_key = ? AND deleted_at IS NULL', [rawurldecode($match[1])]);
+                        $target = $other === null ? null : $this->resolveTarget((int) $other['id'], rawurldecode($match[2]));
+                        if ($target !== null) $references['@page:' . $target['id']] = '@page:' . $target['id'];
+                    }
                     $prefix = '/spaces/' . rawurlencode($spaceKey) . '/';
                     if (is_string($path) && str_starts_with($path, $prefix)) {
                         $suffix = substr($path, strlen($prefix));

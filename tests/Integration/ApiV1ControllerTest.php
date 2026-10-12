@@ -189,7 +189,7 @@ final class ApiV1ControllerTest extends TestCase
             $this->request('GET', '/api/v1/spaces/' . $spaceId),
             (string) $spaceId
         );
-        self::assertSame(200, $response->status());
+        self::assertSame(200, $response->status(), $response->body());
         self::assertSame($spaceId, (int) $this->data($response)['id']);
 
         $response = $controller->updateSpace(
@@ -204,7 +204,7 @@ final class ApiV1ControllerTest extends TestCase
             ),
             (string) $spaceId
         );
-        self::assertSame(200, $response->status());
+        self::assertSame(200, $response->status(), $response->body());
         self::assertSame(
             'restricted',
             $this->data($response)['visibility']

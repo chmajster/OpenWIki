@@ -88,6 +88,8 @@ final class AttachmentService
 
     public function adopt(int $pageId, int $uploaderId, array $stored): int
     {
+        return $this->database->transaction(function () use ($pageId, $uploaderId, $stored): int {
+        $this->writablePage($pageId);
         $id = $this->database->insert('INSERT INTO attachments (page_id, uploader_id, name, storage_key, mime_type, size_bytes, current_version, created_at, updated_at)
             VALUES (:page, :user, :name, :key, :mime, :size, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())',
             ['page' => $pageId, 'user' => $uploaderId, 'name' => $stored['name'], 'key' => $stored['storage_key'], 'mime' => $stored['mime_type'], 'size' => $stored['size_bytes']]);
@@ -95,6 +97,7 @@ final class AttachmentService
             VALUES (:id, 1, :key, :mime, :size, :sha, :user, UTC_TIMESTAMP())',
             ['id' => $id, 'key' => $stored['storage_key'], 'mime' => $stored['mime_type'], 'size' => $stored['size_bytes'], 'sha' => $stored['sha256'], 'user' => $uploaderId]);
         return $id;
+        });
     }
 
     public function stagedPath(string $key): string { return $this->safeStoredPath($key); }
@@ -127,8 +130,10 @@ final class AttachmentService
         $stored = $this->persist($sourcePath, $originalName, $uploaded);
 
         try {
-            $version = (int) $attachment['current_version'] + 1;
-            $this->database->transaction(function (Database $db) use ($attachmentId, $uploaderId, $version, $stored): void {
+            $version = $this->database->transaction(function (Database $db) use ($attachmentId, $uploaderId, $attachment, $stored): int {
+                $this->writablePage((int) $attachment['page_id']);
+                $fresh = $db->fetchOne('SELECT current_version FROM attachments WHERE id = ? AND deleted_at IS NULL FOR UPDATE', [$attachmentId]) ?? throw new \DomainException('Załącznik został usunięty.');
+                $version = (int) $fresh['current_version'] + 1;
                 $db->execute(
                     'INSERT INTO attachment_versions
                      (attachment_id, version_number, storage_key, mime_type, size_bytes, sha256, uploader_id, created_at)
@@ -158,6 +163,7 @@ final class AttachmentService
                         'id' => $attachmentId,
                     ]
                 );
+                return $version;
             });
 
             return $version;
@@ -178,6 +184,7 @@ final class AttachmentService
 
         try {
             return $this->database->transaction(function (Database $db) use ($pageId, $uploaderId, $stored): int {
+                $this->writablePage($pageId);
                 $attachmentId = $db->insert(
                     'INSERT INTO attachments
                      (page_id, uploader_id, name, storage_key, mime_type, size_bytes, current_version, created_at, updated_at, deleted_at)
@@ -219,21 +226,36 @@ final class AttachmentService
     public function rename(int $attachmentId, string $name): bool
     {
         $name = $this->safeName($name);
-
+        return $this->database->transaction(function () use ($attachmentId, $name): bool {
+        $attachment = $this->find($attachmentId); if ($attachment === null) return false;
+        $this->writablePage((int) $attachment['page_id']);
         return $this->database->execute(
             'UPDATE attachments SET name = :name, updated_at = UTC_TIMESTAMP()
              WHERE id = :id AND deleted_at IS NULL',
             ['name' => $name, 'id' => $attachmentId]
         ) === 1;
+        });
     }
 
     public function delete(int $attachmentId): bool
     {
+        return $this->database->transaction(function () use ($attachmentId): bool {
+        $attachment = $this->find($attachmentId); if ($attachment === null) return false;
+        $this->writablePage((int) $attachment['page_id']);
         return $this->database->execute(
             'UPDATE attachments SET deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
              WHERE id = :id AND deleted_at IS NULL',
             ['id' => $attachmentId]
         ) === 1;
+        });
+    }
+
+    private function writablePage(int $id): void
+    {
+        $page = $this->database->fetchOne('SELECT space_id FROM pages WHERE id = ? AND deleted_at IS NULL', [$id]) ?? throw new \DomainException('Strona nie jest dostępna do zapisu.');
+        $space = $this->database->fetchOne('SELECT status, deleted_at FROM spaces WHERE id = ? FOR UPDATE', [$page['space_id']]);
+        $fresh = $this->database->fetchOne('SELECT space_id FROM pages WHERE id = ? AND deleted_at IS NULL FOR UPDATE', [$id]);
+        if ($space === null || $space['deleted_at'] !== null || $space['status'] !== 'active' || $fresh === null || (int) $fresh['space_id'] !== (int) $page['space_id']) throw new \DomainException('Przestrzeń jest tylko do odczytu lub strona została przeniesiona.');
     }
 
     public function currentPath(array $attachment): string
