@@ -94,6 +94,30 @@ final class AdministrativeDelegationTest extends TestCase
         }
     }
 
+    public function testLdapRoleSynchronizationCannotRemoveTheLastSuperAdminOrEnableADisabledAccount(): void
+    {
+        $service = new LdapService($this->db);
+        $slug = $this->root->role($this->rootRole)['slug'];
+        $profile = ['username' => 'ldap-' . $this->suffix, 'email' => 'ldap-' . $this->suffix . '@example.test',
+            'first_name' => 'LDAP', 'last_name' => 'Root', 'groups' => ['Root group'], 'group_mapping' => ['Root group' => $slug]];
+        $id = $service->provision($profile);
+        $this->root->disableUser($this->rootId);
+        $profile['groups'] = [];
+        $this->denied(fn () => $service->provision($profile));
+        self::assertNotNull($this->db->fetchOne('SELECT role_id FROM user_roles WHERE user_id = ? AND role_id = ?', [$id, $this->rootRole]));
+    }
+
+    public function testDisabledLdapIdentityRemainsDisabledWhenProfileIsProvisionedAgain(): void
+    {
+        $service = new LdapService($this->db);
+        $profile = ['username' => 'ldap-' . $this->suffix, 'email' => 'ldap-' . $this->suffix . '@example.test',
+            'first_name' => 'LDAP', 'last_name' => 'Disabled', 'groups' => [], 'group_mapping' => []];
+        $id = $service->provision($profile);
+        $this->root->disableUser($id);
+        $this->denied(fn () => $service->provision($profile));
+        self::assertSame('disabled', $this->root->user($id)['status']);
+    }
+
     public function testConcurrentRequestsCannotDisableBothRemainingSuperAccountsWithOldSnapshots(): void
     {
         if (!str_ends_with((string) getenv('OPENWIKI_TEST_DB_DATABASE'), '_test')) self::markTestSkipped('Committed race fixtures require a dedicated test database.');

@@ -32,6 +32,16 @@ final class ContentSecurityTest extends TestCase
         self::assertSame('<p>retained</p>', json_decode($safe['document_json'], true)['source']);
     }
 
+    public function testUnicodeAnchorsAndHistoricalMarkdownMarkupRemainReadable(): void
+    {
+        $safe = (new \OpenWiki\Wiki\ContentService())->safeProjection(['content_format' => 'markdown',
+            'content_markdown' => '# Zażółć', 'content_html' => '<h1 id="zażółć" class="nagłówek">Zażółć</h1><p>{{status:Legacy}}</p>']);
+        self::assertStringContainsString('id="zażółć"', $safe['content_html']);
+        self::assertStringContainsString('class="nagłówek"', $safe['content_html']);
+        self::assertStringContainsString('{{status:Legacy}}', $safe['content_html']);
+        self::assertSame('# Zażółć', $safe['content_markdown']);
+    }
+
     public function testSanitizerRemovesScriptsHandlersAndUnsafeUrls(): void
     {
         $input = '<p onclick="alert(1)">Safe<script>alert(1)</script><a href="javascript:alert(2)">link</a></p>';

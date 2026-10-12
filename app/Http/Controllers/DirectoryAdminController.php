@@ -180,7 +180,7 @@ final class DirectoryAdminController extends Controller
         try {
             $password = $this->service()->resetPassword($userId);
         } catch (\DomainException $exception) {
-            return $this->render('errors/403', ['title' => $exception->getMessage()], 403);
+            return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
         }
         Session::flash('admin_new_password', ['user_id' => $userId, 'password' => $password]);
         $this->audit('USER_PASSWORD_RESET', 'user', $userId, $request, null, ['force_password_change' => true]);
@@ -202,7 +202,7 @@ final class DirectoryAdminController extends Controller
         try {
             $this->service()->resetMfa($userId);
         } catch (\DomainException $exception) {
-            return $this->render('errors/403', ['title' => $exception->getMessage()], 403);
+            return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
         }
         $this->audit('USER_MFA_RESET', 'user', $userId, $request);
         Session::flash('success', 'MFA reset for user.');
@@ -230,7 +230,7 @@ final class DirectoryAdminController extends Controller
         try {
             $deleted = $before !== null && $this->service()->softDeleteUser($userId);
         } catch (\DomainException $exception) {
-            return $this->render('errors/403', ['title' => $exception->getMessage()], 403);
+            return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
         }
         if (!$deleted) {
             return $this->render('errors/404', ['title' => 'User not found'], 404);
@@ -325,7 +325,7 @@ final class DirectoryAdminController extends Controller
             $this->audit('GROUP_DELETED', 'group', $groupId, $request, $before, ['deleted' => true]);
             Session::flash('success', 'Group deleted.');
         } catch (\DomainException $exception) {
-            return $this->render('errors/403', ['title' => $exception->getMessage()], 403);
+            return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
         } catch (\InvalidArgumentException $exception) {
             Session::flash('error', $exception->getMessage());
         }
@@ -417,7 +417,7 @@ final class DirectoryAdminController extends Controller
             $this->audit('ROLE_DELETED', 'role', $roleId, $request, $before, ['deleted' => true]);
             Session::flash('success', 'Role deleted.');
         } catch (\DomainException $exception) {
-            return $this->render('errors/403', ['title' => $exception->getMessage()], 403);
+            return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
         } catch (\InvalidArgumentException $exception) {
             Session::flash('error', $exception->getMessage());
         }

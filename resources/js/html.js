@@ -12,7 +12,7 @@ export const sanitizeHtml = (html, policy) => {
                     || /^https?:/i.test(url) || (tag === 'a' && /^mailto:/i.test(url))
                     || (tag === 'img' && /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/i.test(url))));
                 const controlled = !policy.values?.[attr.name] || policy.values[attr.name].includes(attr.value);
-                const pattern = !policy.patterns?.[attr.name] || new RegExp(policy.patterns[attr.name] + '(?![\\s\\S])').test(attr.value);
+                const pattern = !policy.patterns?.[attr.name] || new RegExp(policy.patterns[attr.name] + '(?![\\s\\S])', 'u').test(attr.value);
                 const range = !policy.ranges?.[attr.name] || (/^-?[0-9]{1,19}$/.test(attr.value)
                     && Number(attr.value) >= policy.ranges[attr.name][0] && Number(attr.value) <= policy.ranges[attr.name][1]);
                 const widths = attr.name !== 'colwidth' || (/^(0|[1-9][0-9]{0,3})(,(0|[1-9][0-9]{0,3})){0,29}$/.test(attr.value) && attr.value.split(',').every(value => Number(value) <= 1600));

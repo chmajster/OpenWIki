@@ -65,7 +65,7 @@ final class MfaAdminController extends Controller
 
             Session::flash('success', 'MFA policy updated.');
         } catch (\DomainException $exception) {
-            return $this->render('errors/403', ['title' => $exception->getMessage()], 403);
+            return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
         } catch (\InvalidArgumentException $exception) {
             Session::flash('error', $exception->getMessage());
         } catch (\Throwable $exception) {

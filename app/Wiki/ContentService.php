@@ -55,6 +55,11 @@ final class ContentService
         if ($row === null) return null;
         $content = $this->normalize((string) ($row['content_format'] ?? (($row['content_markdown'] ?? null) !== null ? 'markdown' : 'visual')),
             (string) ($row['content_html'] ?? ''), (string) ($row['content_markdown'] ?? ''), false);
+        // Historical Markdown HTML is a rendered snapshot. Filter it without replacing
+        // its supported structure/macros with output from a newer renderer.
+        if ($content['format'] === 'markdown' && (string) ($row['content_html'] ?? '') !== '') {
+            $content['html'] = $this->sanitizer->sanitize((string) $row['content_html']);
+        }
         $row['content_format'] = $content['format'];
         $row['content_html'] = $content['html'];
         $row['content_markdown'] = $content['markdown'];

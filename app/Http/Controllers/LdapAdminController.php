@@ -52,7 +52,7 @@ final class LdapAdminController extends Controller
             Session::flash('success', 'LDAP / Active Directory settings saved.');
             return Response::redirect('/admin/ldap');
         } catch (\DomainException $exception) {
-            return $this->render('errors/403', ['title' => $exception->getMessage()], 403);
+            return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->renderForm((array) $request->input(), $exception->getMessage(), null, 422);
         } catch (\Throwable $exception) {
@@ -83,7 +83,7 @@ final class LdapAdminController extends Controller
                 (string) $result['message']
             );
         } catch (\DomainException $exception) {
-            return $this->render('errors/403', ['title' => $exception->getMessage()], 403);
+            return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->renderForm((array) $request->input(), $exception->getMessage(), null, 422);
         } catch (\Throwable $exception) {

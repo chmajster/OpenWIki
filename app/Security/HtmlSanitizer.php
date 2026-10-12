@@ -33,8 +33,8 @@ final class HtmlSanitizer
         'data-type' => ['taskList', 'taskItem'], 'data-checked' => ['true', 'false'],
     ];
     private const PATTERNS = [
-        'id' => '^[A-Za-z0-9_:.\\-]{1,200}$',
-        'class' => '^[A-Za-z0-9_:.+ \\-]{0,500}$',
+        'id' => '^[\\p{L}\\p{N}_:.\\-]{1,200}$',
+        'class' => '^[\\p{L}\\p{N}_:.+ \\-]{0,500}$',
         'rel' => '^(?:(?:noopener|noreferrer|nofollow|ugc|sponsored) ?)*$',
         'data-language' => '^[A-Za-z0-9_+.\\-]{0,50}$',
         'data-file-type' => '^[A-Za-z0-9.+\\-]+/[A-Za-z0-9.+\\-]+$',
@@ -128,7 +128,7 @@ final class HtmlSanitizer
                         $toRemove[] = $attribute->name;
                     }
                     if (isset(self::VALUES[$name]) && !in_array($attribute->value, self::VALUES[$name], true)) $toRemove[] = $attribute->name;
-                    if (isset(self::PATTERNS[$name]) && !preg_match('~' . self::PATTERNS[$name] . '~D', $attribute->value)) $toRemove[] = $attribute->name;
+                    if (isset(self::PATTERNS[$name]) && !preg_match('~' . self::PATTERNS[$name] . '~uD', $attribute->value)) $toRemove[] = $attribute->name;
                     if (isset(self::RANGES[$name]) && (!preg_match('/^-?[0-9]{1,19}$/D', $attribute->value)
                         || (float) $attribute->value < self::RANGES[$name][0] || (float) $attribute->value > self::RANGES[$name][1])) $toRemove[] = $attribute->name;
                     if ($name === 'colwidth' && (!preg_match('/^(?:0|[1-9][0-9]{0,3})(?:,(?:0|[1-9][0-9]{0,3})){0,29}$/D', $attribute->value)
