@@ -10,9 +10,9 @@ final class DocumentationTreeService
 {
     public function __construct(private readonly Application $app) {}
 
-    public function branch(array $space, ?int $userId, bool $super, bool $viewPermission, bool $movePermission, ?int $parent = null, string $query = '', int $offset = 0, bool $copyPermission = false): array
+    public function branch(array $space, ?int $userId, bool $super, bool $viewPermission, bool $movePermission, ?int $parent = null, string $query = '', int $offset = 0, bool $copyPermission = false, bool $siblingsOnly = false): array
     {
-        return $this->app->database()->transaction(function () use ($space, $userId, $super, $viewPermission, $movePermission, $parent, $query, $offset, $copyPermission): array {
+        return $this->app->database()->transaction(function () use ($space, $userId, $super, $viewPermission, $movePermission, $parent, $query, $offset, $copyPermission, $siblingsOnly): array {
             if (!(new SpaceAccessService($this->app))->canViewFor($space, $userId, $super)) throw new \OutOfBoundsException('Nie znaleziono przestrzeni.');
             [$acl, $rows, $visible] = $this->visible($space, $userId, $super, $viewPermission);
             if ($parent !== null && !isset($visible[$parent])) throw new \OutOfBoundsException('Nie znaleziono gałęzi.');
@@ -20,15 +20,17 @@ final class DocumentationTreeService
             foreach ($visible as $row) $children[isset($visible[(int) ($row['parent_id'] ?? 0)]) ? (int) $row['parent_id'] : 0][] = (int) $row['id'];
             $ids = $children[$parent ?? 0] ?? [];
             $query = mb_substr(trim($query), 0, 100);
-            if ($query !== '' && $parent === null) $ids = array_keys($visible);
+            if ($query !== '') {
+                $allowed = $parent === null && !$siblingsOnly ? $visible : array_fill_keys($ids, true);
+                $matches = $this->app->database()->fetchAll('SELECT id FROM pages WHERE space_id = ? AND deleted_at IS NULL AND title LIKE ? ORDER BY order_index, id', [$space['id'], '%' . $query . '%']);
+                $ids = array_values(array_filter(array_map(static fn (array $row): int => (int) $row['id'], $matches), static fn (int $id): bool => isset($allowed[$id])));
+            }
             if ($ids === []) return ['items' => [], 'next_offset' => null];
-            $placeholders = implode(',', array_fill(0, count($ids), '?'));
-            $parameters = $ids;
-            $search = '';
-            if ($query !== '') { $search = ' AND title LIKE ?'; $parameters[] = '%' . $query . '%'; }
-            $offset = max(0, $offset);
-            $items = $this->app->database()->fetchAll('SELECT id, parent_id, title, slug, status, version, order_index FROM pages WHERE id IN (' . $placeholders . ')' . $search . ' ORDER BY order_index, id LIMIT 51 OFFSET ' . $offset, $parameters);
-            $more = count($items) > 50; $items = array_slice($items, 0, 50);
+            $offset = max(0, $offset); $selected = array_slice($ids, $offset, 51);
+            $more = count($selected) > 50; $selected = array_slice($selected, 0, 50);
+            if ($selected === []) return ['items' => [], 'next_offset' => null];
+            $placeholders = implode(',', array_fill(0, count($selected), '?'));
+            $items = $this->app->database()->fetchAll('SELECT id, parent_id, title, slug, status, version, order_index FROM pages WHERE id IN (' . $placeholders . ') ORDER BY order_index, id', $selected);
             foreach ($items as &$item) {
                 $id = (int) $item['id'];
                 $item['id'] = $id;
@@ -66,7 +68,7 @@ final class DocumentationTreeService
         $acl = new PageAclService($this->app);
         $acl->snapshot($space, $userId, $super);
         // No document bodies or hidden names are loaded for branch authorization.
-        $rows = array_column($this->app->database()->fetchAll('SELECT id, space_id, parent_id, inherit_acl, status, owner_id, author_id FROM pages WHERE space_id = ? AND deleted_at IS NULL', [$space['id']]), null, 'id');
+        $rows = array_column($this->app->database()->fetchAll('SELECT id, space_id, parent_id, inherit_acl, status, owner_id, author_id FROM pages WHERE space_id = ? AND deleted_at IS NULL ORDER BY order_index, id', [$space['id']]), null, 'id');
         $visible = array_filter($rows, fn (array $row): bool => $acl->canViewFor($row, $space, $userId, $super, $viewPermission));
         return [$acl, $rows, $visible];
     }

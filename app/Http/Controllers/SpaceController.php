@@ -93,7 +93,7 @@ final class SpaceController extends Controller
             if (!is_string($query)) throw new \InvalidArgumentException('Nieprawidłowe wyszukiwanie.');
             return Response::json(['data' => (new \OpenWiki\Spaces\DocumentationTreeService($this->app))->branch($space,
                 $this->app->auth()->user()['id'] ?? null, $this->app->auth()->can('*'), $this->app->auth()->can('page.view'), $this->app->auth()->can('page.move'),
-                $parent === null ? null : (int) $parent, $query, max(0, (int) $request->query('offset', 0)), $this->app->auth()->can('page.create'))]);
+                $parent === null ? null : (int) $parent, $query, max(0, (int) $request->query('offset', 0)), $this->app->auth()->can('page.create'), $request->query('siblings_only') === '1')]);
         } catch (\OutOfBoundsException $error) { return Response::json(['error' => ['message' => $error->getMessage()]], 404); }
         catch (\InvalidArgumentException $error) { return Response::json(['error' => ['message' => $error->getMessage()]], 422); }
     }

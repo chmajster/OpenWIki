@@ -2856,7 +2856,7 @@ final class ApiV1Controller extends Controller
             $parentId = $parent === null ? null : ($this->positiveId((string) $parent) ?? throw new \OutOfBoundsException('Nie znaleziono gałęzi.'));
             return Response::json(['data' => (new \OpenWiki\Spaces\DocumentationTreeService($this->app))->branch($space, (int) $context['user']['id'],
                 $this->isSuperAdmin($context), $this->contextHasPermission($context, 'page.view'), $this->contextHasPermission($context, 'page.move'),
-                $parentId, (string) $request->query('q', ''), max(0, (int) $request->query('offset', 0)), $this->contextHasPermission($context, 'page.create'))]);
+                $parentId, (string) $request->query('q', ''), max(0, (int) $request->query('offset', 0)), $this->contextHasPermission($context, 'page.create'), $request->query('siblings_only') === '1')]);
         } catch (\Throwable $error) { return $this->spaceError($error); }
     }
 

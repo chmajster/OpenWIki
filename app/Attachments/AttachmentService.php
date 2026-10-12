@@ -89,14 +89,14 @@ final class AttachmentService
     public function adopt(int $pageId, int $uploaderId, array $stored): int
     {
         return $this->database->transaction(function () use ($pageId, $uploaderId, $stored): int {
-        $this->writablePage($pageId);
-        $id = $this->database->insert('INSERT INTO attachments (page_id, uploader_id, name, storage_key, mime_type, size_bytes, current_version, created_at, updated_at)
-            VALUES (:page, :user, :name, :key, :mime, :size, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())',
-            ['page' => $pageId, 'user' => $uploaderId, 'name' => $stored['name'], 'key' => $stored['storage_key'], 'mime' => $stored['mime_type'], 'size' => $stored['size_bytes']]);
-        $this->database->execute('INSERT INTO attachment_versions (attachment_id, version_number, storage_key, mime_type, size_bytes, sha256, uploader_id, created_at)
-            VALUES (:id, 1, :key, :mime, :size, :sha, :user, UTC_TIMESTAMP())',
-            ['id' => $id, 'key' => $stored['storage_key'], 'mime' => $stored['mime_type'], 'size' => $stored['size_bytes'], 'sha' => $stored['sha256'], 'user' => $uploaderId]);
-        return $id;
+            $this->writablePage($pageId);
+            $id = $this->database->insert('INSERT INTO attachments (page_id, uploader_id, name, storage_key, mime_type, size_bytes, current_version, created_at, updated_at)
+                VALUES (:page, :user, :name, :key, :mime, :size, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())',
+                ['page' => $pageId, 'user' => $uploaderId, 'name' => $stored['name'], 'key' => $stored['storage_key'], 'mime' => $stored['mime_type'], 'size' => $stored['size_bytes']]);
+            $this->database->execute('INSERT INTO attachment_versions (attachment_id, version_number, storage_key, mime_type, size_bytes, sha256, uploader_id, created_at)
+                VALUES (:id, 1, :key, :mime, :size, :sha, :user, UTC_TIMESTAMP())',
+                ['id' => $id, 'key' => $stored['storage_key'], 'mime' => $stored['mime_type'], 'size' => $stored['size_bytes'], 'sha' => $stored['sha256'], 'user' => $uploaderId]);
+            return $id;
         });
     }
 
@@ -227,26 +227,26 @@ final class AttachmentService
     {
         $name = $this->safeName($name);
         return $this->database->transaction(function () use ($attachmentId, $name): bool {
-        $attachment = $this->find($attachmentId); if ($attachment === null) return false;
-        $this->writablePage((int) $attachment['page_id']);
-        return $this->database->execute(
-            'UPDATE attachments SET name = :name, updated_at = UTC_TIMESTAMP()
-             WHERE id = :id AND deleted_at IS NULL',
-            ['name' => $name, 'id' => $attachmentId]
-        ) === 1;
+            $attachment = $this->find($attachmentId); if ($attachment === null) return false;
+            $this->writablePage((int) $attachment['page_id']);
+            return $this->database->execute(
+                'UPDATE attachments SET name = :name, updated_at = UTC_TIMESTAMP()
+                 WHERE id = :id AND deleted_at IS NULL',
+                ['name' => $name, 'id' => $attachmentId]
+            ) === 1;
         });
     }
 
     public function delete(int $attachmentId): bool
     {
         return $this->database->transaction(function () use ($attachmentId): bool {
-        $attachment = $this->find($attachmentId); if ($attachment === null) return false;
-        $this->writablePage((int) $attachment['page_id']);
-        return $this->database->execute(
-            'UPDATE attachments SET deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
-             WHERE id = :id AND deleted_at IS NULL',
-            ['id' => $attachmentId]
-        ) === 1;
+            $attachment = $this->find($attachmentId); if ($attachment === null) return false;
+            $this->writablePage((int) $attachment['page_id']);
+            return $this->database->execute(
+                'UPDATE attachments SET deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
+                 WHERE id = :id AND deleted_at IS NULL',
+                ['id' => $attachmentId]
+            ) === 1;
         });
     }
 

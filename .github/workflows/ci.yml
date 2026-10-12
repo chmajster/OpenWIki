@@ -120,6 +120,7 @@ jobs:
             storage/temp/editor-*.png
             storage/temp/document-*.png
             storage/temp/daily-editor-*.png
+            storage/temp/space-*.png
             storage/temp/editor-performance.json
           retention-days: 7
 

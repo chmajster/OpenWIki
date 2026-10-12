@@ -2,25 +2,39 @@
 declare(strict_types=1);
 namespace OpenWiki\Spaces;
 
-use OpenWiki\Core\Application;
 use OpenWiki\Core\Env;
 use OpenWiki\Wiki\ContentService;
 use OpenWiki\Wiki\MarkdownRenderer;
+use OpenWiki\Wiki\Slugger;
 
 final class StructureContent
 {
-    public function __construct(private readonly Application $app) {}
-
-    public function transform(array $page, array $source, array $destination, array $rows, array $slugs, array $mapping, array $assets): array
+    private array $local = [];
+    private array $titles = [];
+    private array $slugs = [];
+    private array $aliases = [];
+    private array $targets = [];
+    public function __construct(private readonly array $source, array $destination, array $rows, array $slugs, array $mapping, private readonly array $assets, array $redirects = [])
     {
-        $references = []; $local = []; $cross = (int) $source['id'] !== (int) $destination['id'];
         foreach ($rows as $row) {
             if ((int) $row['space_id'] !== (int) $source['id'] || $row['deleted_at'] !== null) continue;
-            $url = isset($mapping[$row['id']]) ? '/spaces/' . rawurlencode($destination['space_key']) . '/pages/' . rawurlencode($slugs[$row['id']]) : DocumentationTreeService::url($source, $row);
-            foreach ([$row['title'], $row['slug']] as $ref) $references[mb_strtolower($ref)] ??= $url;
-            foreach (['pages' => $row['slug'], 'wiki' => $row['slug']] as $route => $ref) $local['/spaces/' . rawurlencode($source['space_key']) . '/' . $route . '/' . rawurlencode($ref)] = $url;
+            $this->titles[mb_strtolower($row['title'])] ??= (int) $row['id']; $this->slugs[$row['slug']] ??= (int) $row['id'];
+            if (!isset($mapping[$row['id']])) continue;
+            $url = '/spaces/' . rawurlencode($destination['space_key']) . '/pages/' . rawurlencode($slugs[$row['id']]);
+            $this->targets[(int) $row['id']] = $url;
+            $this->local['/spaces/' . rawurlencode($source['space_key']) . '/pages/' . rawurlencode($row['slug'])] = $url;
         }
-        $rewriteUrl = static function (string $url) use ($local, $assets, $references, $source, $destination, $cross): string {
+        foreach ($redirects as $redirect) if ((int) $redirect['space_id'] === (int) $source['id']) {
+            $this->aliases[$redirect['old_slug']] = (int) $redirect['page_id'];
+            if (isset($mapping[$redirect['page_id']]) && !isset($this->slugs[$redirect['old_slug']])) $this->local['/spaces/' . rawurlencode($source['space_key']) . '/pages/' . rawurlencode($redirect['old_slug'])] = $this->targets[(int) $redirect['page_id']];
+        }
+    }
+
+    public function transform(array $page): array
+    {
+        $local = $this->local; $assets = $this->assets; $source = $this->source;
+        $referenceUrl = fn (string $reference): ?string => $this->referenceUrl($reference);
+        $rewriteUrl = static function (string $url) use ($local, $assets, $referenceUrl, $source): string {
             $host = parse_url($url, PHP_URL_HOST); $appHost = parse_url((string) Env::get('APP_URL', ''), PHP_URL_HOST);
             if ($host !== null && (!is_string($appHost) || strcasecmp($host, $appHost) !== 0)) return $url;
             $path = parse_url($url, PHP_URL_PATH); if (!is_string($path)) return $url;
@@ -28,12 +42,12 @@ final class StructureContent
             foreach ($assets as $old => $new) if ($path === $old || str_starts_with($path, $old . '/')) return $new . substr($path, strlen($old)) . $suffix;
             if (isset($local[$path])) return $local[$path] . $suffix;
             $prefix = '/spaces/' . rawurlencode($source['space_key']) . '/wiki/';
-            if (str_starts_with($path, $prefix)) return ($references[mb_strtolower(rawurldecode(substr($path, strlen($prefix))))] ?? $path) . $suffix;
+            if (str_starts_with($path, $prefix)) return ($referenceUrl(rawurldecode(substr($path, strlen($prefix)))) ?? $path) . $suffix;
             return $url;
         };
-        $wiki = static function (string $text, bool $markdown) use ($references, $source, $cross): string {
-            return preg_replace_callback('/\[\[([^\]\r\n]{1,255})\]\]/u', static function (array $match) use ($references, $source, $markdown, $cross): string {
-                $reference = trim($markdown ? $match[1] : html_entity_decode($match[1], ENT_QUOTES | ENT_HTML5, 'UTF-8')); $url = $references[mb_strtolower($reference)] ?? '/spaces/' . rawurlencode($source['space_key']) . '/wiki/' . rawurlencode($reference);
+        $wiki = static function (string $text, bool $markdown) use ($referenceUrl, $source): string {
+            return preg_replace_callback('/\[\[([^\]\r\n]{1,255})\]\]/u', static function (array $match) use ($referenceUrl, $source, $markdown): string {
+                $reference = trim($markdown ? $match[1] : html_entity_decode($match[1], ENT_QUOTES | ENT_HTML5, 'UTF-8')); $url = $referenceUrl($reference) ?? '/spaces/' . rawurlencode($source['space_key']) . '/wiki/' . rawurlencode($reference);
                 $label = $markdown ? str_replace(['\\', '[', ']'], ['\\\\', '\\[', '\\]'], $reference) : htmlspecialchars($reference, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
                 return $markdown ? '[' . $label . '](' . $url . ')' : '<a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '">' . $label . '</a>';
             }, $text) ?? $text;
@@ -67,5 +81,13 @@ final class StructureContent
         };
         $walk($root); $html = ''; foreach ($root->childNodes as $child) $html .= $dom->saveHTML($child);
         return (new ContentService())->normalize('visual', $html, '');
+    }
+
+    private function referenceUrl(string $reference): ?string
+    {
+        try { $slug = (new Slugger())->slug($reference); } catch (\InvalidArgumentException) { return null; }
+        $target = $this->titles[mb_strtolower($reference)] ?? $this->slugs[$slug] ?? $this->aliases[$slug] ?? null;
+        // External/hidden targets keep the reference supplied by the author, never their private slug.
+        return $target === null ? null : ($this->targets[$target] ?? null);
     }
 }

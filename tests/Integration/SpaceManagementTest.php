@@ -262,4 +262,23 @@ final class SpaceManagementTest extends TestCase
             self::assertTrue($service->effective($space, $recipient)['space.manage_access']['allowed']);
         });
     }
+
+    public function testNestedCopyUsesDestinationInheritanceInsteadOfTheOriginalAncestor(): void
+    {
+        $this->instance(function (Application $app, Database $db): void {
+            $owner = $this->user($db, 'owner', true); $editor = $this->user($db, 'editor');
+            $role = $db->insert('INSERT INTO roles (name, slug) VALUES ("Copy editor", "copy-editor")');
+            $db->execute('INSERT IGNORE INTO permissions (name) VALUES ("page.view"), ("page.create"), ("page.publish")');
+            $db->execute('INSERT INTO role_permissions (role_id, permission_id) SELECT ?, id FROM permissions WHERE name IN ("page.view", "page.create", "page.publish")', [$role]); $db->execute('INSERT INTO user_roles VALUES (?, ?)', [$editor, $role]);
+            $spaces = new SpaceService($app); $source = $spaces->create(['name' => 'Source', 'visibility' => 'public'], $owner, $this->request()); $destination = $spaces->create(['name' => 'Destination', 'visibility' => 'public'], $owner, $this->request());
+            $spaces->rule((int) $destination['id'], ['principal_type' => 'user', 'principal_id' => $editor, 'permission' => 'space.edit', 'effect' => 'allow'], $owner, $this->request());
+            $writer = new \OpenWiki\Wiki\PageWriteService($db, $app->basePath()); $pages = [];
+            foreach (['Ancestor', 'Root', 'Child'] as $index => $title) $pages[] = $writer->save($source, null, ['title' => $title, 'status' => 'published', 'content_html' => '<p>Text</p>', 'parent_id' => $index === 0 ? null : $pages[$index - 1]['id']], $owner);
+            $db->execute('INSERT INTO page_acl (page_id, principal_type, principal_id, permission, effect, inherit_to_children) VALUES (?, "user", ?, "page.create", "deny", 1)', [$pages[0]['id'], $editor]);
+            $service = new \OpenWiki\Spaces\StructureService($app); $input = ['action' => 'copy', 'scope' => 'subtree', 'destination_space_id' => (int) $destination['id'], 'base_version' => 1];
+            $preview = $service->preview((int) $pages[1]['id'], $input, $editor); $result = $service->execute((int) $pages[1]['id'], $input + ['preview_token' => $preview['preview_token'], 'operation_id' => '77777777-7777-4777-8777-777777777777'], $editor, $this->request());
+            self::assertCount(2, $result['mapping']); self::assertNull($db->fetchOne('SELECT parent_id FROM pages WHERE id = ?', [$result['id']])['parent_id']);
+            self::assertSame($result['id'], (int) $db->fetchOne('SELECT parent_id FROM pages WHERE id = ?', [$result['mapping'][$pages[2]['id']]])['parent_id']);
+        });
+    }
 }

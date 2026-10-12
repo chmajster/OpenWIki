@@ -197,7 +197,7 @@ final class SpaceService
 
     private function record(string $action, string $event, array $space, int $actor, Request $request, ?array $before = null): void
     {
-        $fields = array_flip(['name', 'space_key', 'visibility', 'status', 'owner_id', 'home_page_id', 'management_version']);
+        $fields = array_flip(['name', 'space_key', 'description', 'icon', 'visibility', 'status', 'owner_id', 'home_page_id', 'management_version']);
         $after = array_intersect_key($space, $fields);
         (new AuditLogger($this->app->database()))->log($action, 'space', (int) $space['id'], $actor, $request, $before === null ? null : array_intersect_key($before, $fields), $after);
         (new WebhookService($this->app->database()))->queue($event, ['id' => (int) $space['id'], 'actor_id' => $actor] + $after);
