@@ -47,13 +47,13 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
     });
     root.querySelectorAll('[data-table-command]').forEach((button) => button.addEventListener('click', () => { if (canEdit()) focusedChain()[button.dataset.tableCommand]().run(); }));
     root.querySelectorAll('[data-dialog-close]').forEach((button) => button.addEventListener('click', () => button.closest('dialog').close()));
-    let linkSelection = null;
+    let linkSelection = null, linkAttributes = {};
     editor.on('transaction', ({transaction}) => {
         if (linkSelection) linkSelection = linkSelection.map(transaction.mapping);
     });
     for (const name of ['table', 'link', 'code', 'callout', 'macro']) dialog(name).addEventListener('close', () => {
         if (dialog(name).open) return;
-        if (name === 'link') { linkSelection = null; ++searchSequence; clearTimeout(searchTimer); }
+        if (name === 'link') { linkSelection = null; linkAttributes = {}; ++searchSequence; clearTimeout(searchTimer); }
         if (canEdit()) editor.view.focus();
     });
     const openLink = () => {
@@ -72,7 +72,8 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
         // A cursor inside a link edits its entire range; an explicit selection stays explicit.
         if (editor.state.selection.empty && editor.isActive('link')) editor.commands.extendMarkRange('link');
         linkSelection = editor.state.selection.getBookmark();
-        q('[data-link-url]').value = editor.getAttributes('link').href || '';
+        linkAttributes = editor.getAttributes('link');
+        q('[data-link-url]').value = linkAttributes.href || '';
         q('[data-link-text]').value = editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ');
         q('[data-link-remove]').disabled = !editor.isActive('link');
         q('[data-link-error]').textContent = '';
@@ -110,8 +111,8 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
         if (!linkSelection) return;
         const selection = linkSelection.resolve(editor.state.doc);
         const original = editor.state.doc.textBetween(selection.from, selection.to, ' ');
-        const attrs = {href, target: null};
-        if (href !== editor.getAttributes('link').href) {
+        const attrs = {...linkAttributes, href, target: linkAttributes.target || null};
+        if (href !== linkAttributes.href) {
             for (const name of ['data-draft-file-id', 'data-attachment-id', 'data-file-size', 'data-file-type']) attrs[name] = null;
         }
         const chain = focusedChain().setTextSelection({from: selection.from, to: selection.to});

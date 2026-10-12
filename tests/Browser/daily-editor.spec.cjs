@@ -71,6 +71,26 @@ test('changing a link destination keeps existing inline formatting and draft met
     await page.goto(path(doc) + '/edit'); await expect(editor(page).locator('a strong')).toHaveText('Bold label');
 });
 
+test('renaming an uploaded file link preserves protected attachment metadata through publication', async ({page, request}) => {
+    const doc = await create(request, '<p>File documentation</p>'); await page.goto(path(doc) + '/edit');
+    await editor(page).press('ControlOrMeta+End'); await editor(page).press('Enter');
+    await page.locator('[data-attachment-file]').setInputFiles({name: 'runbook.txt', mimeType: 'text/plain', buffer: Buffer.from('Documented procedure\n')});
+    const link = editor(page).locator('a[data-draft-file-id]'); await expect(link).toHaveCount(1);
+    const size = await link.getAttribute('data-file-size'); const type = await link.getAttribute('data-file-type');
+    expect(size).not.toBeNull(); expect(type).not.toBeNull();
+    await link.click(); await editor(page).press('Home'); await editor(page).press('ArrowRight'); await editor(page).press('ControlOrMeta+k');
+    await expect(page.locator('[data-link-url]')).toHaveValue(await link.getAttribute('href'));
+    await page.locator('[data-link-text]').fill('Protected runbook');
+    await page.locator('[data-link-insert]').click(); await expect(link).toHaveText('Protected runbook');
+    await expect(link).toHaveAttribute('data-file-size', size); await expect(link).toHaveAttribute('data-file-type', type);
+    await page.locator('[data-save-button]').click(); const savedLink = page.locator('[data-document-content] a[data-attachment-id]');
+    await expect(savedLink).toHaveText('Protected runbook'); const href = await savedLink.getAttribute('href');
+    expect((await page.request.get(href)).status()).toBe(200); expect((await request.get(href, {maxRedirects: 0})).status()).toBe(404);
+    await page.goto(path(doc) + '/edit'); const reopened = editor(page).locator('a[data-attachment-id]');
+    await expect(reopened).toHaveText('Protected runbook'); await expect(reopened).toHaveAttribute('data-file-size', size);
+    await expect(reopened).toHaveAttribute('data-file-type', type);
+});
+
 test('oversized spreadsheet and plain text paste preserve the selection and recoverable document', async ({page, request}) => {
     const doc = await create(request, '<p>Retain this document</p>'); await page.goto(path(doc) + '/edit');
     await editor(page).press('ControlOrMeta+a'); await paste(page, Array(51).fill('Column A\tColumn B').join('\n'));
