@@ -10,6 +10,7 @@ DB_NAME="${OPENWIKI_DB_NAME:-openwiki}"
 DB_USER="${OPENWIKI_DB_USER:-openwiki}"
 WEB_USER=""
 PHP_FPM_SERVICE=""
+PHP_FPM_SOCKET=""
 NGINX_SITE="openwiki"
 CRON_FILE="/etc/cron.d/openwiki"
 MODE="install"
@@ -227,6 +228,7 @@ detect_installed_fpm_service() {
   esac
   [[ "$(systemctl show "$candidate" --property=LoadState --value)" == loaded ]] || fail "Brak usługi obsługującej socket OpenWiki: $candidate."
   PHP_FPM_SERVICE="$candidate"
+  PHP_FPM_SOCKET="$socket"
 }
 
 secure_env_permissions() {
@@ -467,7 +469,9 @@ nginx_server_names() {
 configure_nginx() {
   info "[6/8] Konfiguracja Nginx"
   local socket
-  socket="$(detect_fpm_socket)" || fail "Nie znaleziono socketu PHP-FPM."
+  socket="$PHP_FPM_SOCKET"
+  if [[ -z "$socket" ]]; then socket="$(detect_fpm_socket)" || fail "Nie znaleziono socketu PHP-FPM."; fi
+  [[ -S "$socket" ]] || fail "Socket PHP-FPM instancji nie jest dostępny: $socket."
 
   local conf server_names health_exceptions=""
   if [[ -f "${APP_DIR:-$INSTALL_DIR}/app/Upgrade/WriteGate.php" ]]; then
