@@ -60,8 +60,7 @@ final class StructureService
                         $inputPage = $this->pageInput($original, $parent, $plan['slugs'][$old], 'Kopia dokumentu');
                         if ($old === $id) $inputPage['title'] = $plan['title'];
                         // The eventual direct ACL is included in authorization before creation.
-                        $candidate = array_replace($original, ['space_id' => $destination['id'], 'parent_id' => $parent]);
-                        $can = fn (string $permission, ?array $page): bool => $this->copyAllowed($plan, $actor, $permission, $page ?? $candidate, $old);
+                        $can = fn (string $permission, ?array $page): bool => $this->copyAllowed($plan, $actor, $permission, $old);
                         $saved = $writer->save($destination, null, $inputPage, $user, $request, $can, false, null, false);
                         $new = (int) $saved['id']; $mapping[$old] = $new;
                         $db->execute('UPDATE pages SET inherit_acl = ? WHERE id = ?', [$original['inherit_acl'], $new]);
@@ -232,7 +231,7 @@ final class StructureService
         $acl = new PageAclService($this->app); $acl->simulate($space, $rows, $plan['rules'], $profile['id'], $profile['principals'], $view, $edit); return $acl;
     }
 
-    private function copyAllowed(array $plan, SpaceActor $actor, string $permission, array $page, int $old): bool
+    private function copyAllowed(array $plan, SpaceActor $actor, string $permission, int $old): bool
     {
         $profile = $plan['profiles'][$actor->id]; $profile['super'] = $actor->can('*');
         $rows = $plan['rows'];
@@ -273,7 +272,7 @@ final class StructureService
     private function projection(array $plan, int $user): array
     {
         return ['preview_token' => $this->token($plan, $user), 'count' => count($plan['selected']), 'destination' => $plan['destination']['name'], 'title' => $plan['title'], 'access_changes' => $plan['changes'], 'detached_children' => count($plan['detached']),
-            'effects' => $plan['action'] === 'copy' ? 'Kopia zachowuje bezpośrednie ACL i tagi. Tworzy niezależne załączniki ze wszystkimi wersjami i nową historię od wersji 1. Linki wewnątrz kopii prowadzą do kopii; inne do oryginałów.' : 'Przeniesienie zachowuje identyfikatory, historię, załączniki i bezpośrednie ACL. Dziedziczenie dostępu wynika z nowego rodzica i przestrzeni. Stare adresy przekierowują po sprawdzeniu dostępu.'];
+            'effects' => $plan['action'] === 'copy' ? 'Kopia zachowuje bezpośrednie ACL i tagi. Tworzy niezależne załączniki ze wszystkimi wersjami i nową historię od wersji 1. Linki wewnątrz kopii prowadzą do kopii; inne do oryginałów. Podgląd porównuje dostęp do kopii z oryginałem. Dostęp do oryginału pozostaje bez zmian.' : 'Przeniesienie zachowuje identyfikatory, historię, załączniki i bezpośrednie ACL. Dziedziczenie dostępu wynika z nowego rodzica i przestrzeni. Stare adresy przekierowują po sprawdzeniu dostępu.'];
     }
 
     private function token(array $plan, int $user): string

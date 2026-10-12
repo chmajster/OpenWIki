@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace OpenWiki\Http\Controllers;
 
-use OpenWiki\Audit\AuditLogger;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
@@ -13,8 +12,6 @@ use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
-use OpenWiki\Wiki\Slugger;
-use OpenWiki\Webhooks\WebhookService;
 
 final class SpaceController extends Controller
 {
@@ -39,7 +36,7 @@ final class SpaceController extends Controller
             if (!$error instanceof \InvalidArgumentException && !$error instanceof \OpenWiki\Spaces\SpaceConflict && !$error instanceof \DomainException) error_log('[OpenWiki space create] ' . $error->getMessage());
             return $this->render('spaces/create', ['title' => 'Create space', 'old' => (array) $request->input(),
                 'formError' => $error instanceof \InvalidArgumentException || $error instanceof \OpenWiki\Spaces\SpaceConflict || $error instanceof \DomainException ? $error->getMessage() : 'Nie udało się utworzyć przestrzeni.'],
-                $error instanceof \OpenWiki\Spaces\SpaceConflict ? 409 : ($error instanceof \DomainException ? 403 : 422));
+                $error instanceof \OpenWiki\Spaces\SpaceConflict ? 409 : ($error instanceof \DomainException ? 403 : ($error instanceof \InvalidArgumentException ? 422 : 500)));
         }
     }
 
@@ -155,7 +152,10 @@ final class SpaceController extends Controller
             $message = $status === 500 ? 'Nie udało się zapisać zmian. Spróbuj ponownie.' : $error->getMessage();
             if ($status === 500) error_log('[OpenWiki space settings] ' . $error->getMessage());
             if ($request->expectsJson()) return Response::json(['error' => ['message' => $message]], $status);
-            return $this->settingsForm($service->find((int) $space['id']), $actor, $service, $status, $message, (array) $request->input());
+            $space = $service->find((int) $space['id']);
+            if (!$this->settingsAllowed($space)) return $this->render('errors/403', ['title' => 'Permission denied'], 403);
+            $actor = new \OpenWiki\Spaces\SpaceActor($this->app->database(), $actor->id);
+            return $this->settingsForm($space, $actor, $service, $status, $message, (array) $request->input());
         }
     }
 
@@ -164,9 +164,18 @@ final class SpaceController extends Controller
         $pages = (new PageAclService($this->app))->visiblePages($space, fn () => (new PageRepository($this->app->database()))->tree((int) $space['id']));
         $capabilities = [];
         foreach (\OpenWiki\Spaces\SpaceService::PERMISSIONS as $permission) $capabilities[$permission] = $service->allowed($space, $actor, $permission);
+        $selectedOwner = $space['owner_id'];
+        if ($capabilities['space.manage_owner'] && filter_var($old['owner_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) !== false) $selectedOwner = (int) $old['owner_id'];
+        $owner = $this->app->database()->fetchOne('SELECT id, username FROM users WHERE id = ? AND deleted_at IS NULL', [$selectedOwner]);
+        $owner ??= $this->app->database()->fetchOne('SELECT id, username FROM users WHERE id = ?', [$space['owner_id']]);
+        $selectedPrincipal = null;
+        if ($capabilities['space.manage_access'] && filter_var($old['principal_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) !== false) {
+            $table = match ($old['principal_type'] ?? '') { 'user' => 'users', 'group' => 'user_groups', 'role' => 'roles', default => null };
+            if ($table !== null) $selectedPrincipal = $this->app->database()->fetchOne('SELECT id, ' . ($table === 'users' ? 'username' : 'name') . ' AS name FROM ' . $table . ' WHERE id = ?', [(int) $old['principal_id']]);
+        }
         return $this->render('spaces/settings', ['title' => 'Ustawienia przestrzeni', 'space' => $space, 'pages' => $pages,
             'capabilities' => $capabilities, 'rules' => $capabilities['space.manage_access'] ? $service->entries((int) $space['id']) : [],
-            'owner' => $this->app->database()->fetchOne('SELECT id, username FROM users WHERE id = ?', [$space['owner_id']]),
+            'owner' => $owner, 'selectedPrincipal' => $selectedPrincipal,
             'formError' => $error, 'old' => $old], $status);
     }
 }

@@ -94,3 +94,49 @@ test('visible child of hidden parent does not disclose parent metadata to guests
     const branch = await guest.request.get(`/spaces/${space.key}/tree`); const serialized = await branch.text(); expect(serialized).not.toContain(parent.slug); expect((await branch.json()).data.items[0].parent_id).toBeNull();
     await guest.goto(pathFor(space, child)); await expect(guest.locator('.breadcrumbs')).toContainText('Niedostępny poziom'); await expect(guest.locator('.breadcrumbs')).not.toContainText('SECRET PARENT'); await context.close();
 });
+
+test('settings validation and stale versions preserve input without overwriting server changes', async ({page, request}) => {
+    const space = await createSpace(request);
+    await page.goto(`/spaces/${space.key}/settings`);
+    await page.locator('[name=description]').fill('Opis do odzyskania');
+    const owner = page.locator('[data-principal-picker][data-type=user]').first();
+    await owner.locator('[data-principal-query]').fill(fixture().users[1].username);
+    await expect(owner.locator(`option[value="${fixture().users[1].id}"]`)).toHaveCount(1);
+    await owner.locator('[name=owner_id]').selectOption(String(fixture().users[1].id));
+    await page.locator('[name=name]').fill('');
+    await page.locator('[data-space-settings]').evaluate(form => form.noValidate = true);
+    const invalid = page.waitForResponse(response => response.url().endsWith('/settings') && response.request().method() === 'POST');
+    await page.getByRole('button', {name: 'Zapisz ustawienia'}).click(); expect((await invalid).status()).toBe(422);
+    await expect(page.locator('[name=description]')).toHaveValue('Opis do odzyskania');
+    await expect(page.locator('[name=owner_id]')).toHaveValue(String(fixture().users[1].id));
+    const originalVersion = await page.locator('[data-space-settings] [name=base_version]').inputValue();
+    await api(request, 'put', `spaces/${space.id}`, {name: 'Nowsza nazwa serwera'});
+    await page.locator('[name=name]').fill('Lokalna nazwa');
+    for (let retry = 0; retry < 2; retry++) {
+        const conflict = page.waitForResponse(response => response.url().endsWith('/settings') && response.request().method() === 'POST');
+        await page.getByRole('button', {name: 'Zapisz ustawienia'}).click(); expect((await conflict).status()).toBe(409);
+        await expect(page.locator('[name=name]')).toHaveValue('Lokalna nazwa');
+        await expect(page.locator('[data-space-settings] [name=base_version]')).toHaveValue(originalVersion);
+    }
+    expect((await api(request, 'get', `spaces/${space.id}`)).name).toBe('Nowsza nazwa serwera');
+});
+
+test('an older position search cannot replace a newer selection or its committed order', async ({page, request}) => {
+    const space = await createSpace(request), root = await createPage(request, space, 'Root'), sibling = await createPage(request, space, 'Sibling');
+    await page.goto(`/spaces/${space.key}`); await expect(node(page, root.id)).toBeVisible();
+    await node(page, root.id).locator('.tree-operation').click(); await expect(dialog(page).locator('[name=before_id]')).toBeEnabled();
+    let release; const held = new Promise(resolve => { release = resolve; });
+    await page.route(`**/spaces/${space.key}/tree?*`, async route => {
+        if (new URL(route.request().url()).searchParams.get('q') !== 'Root') return route.continue();
+        const response = await route.fetch(); await held; await route.fulfill({response});
+    });
+    const older = page.waitForRequest(request => new URL(request.url()).searchParams.get('q') === 'Root');
+    await dialog(page).locator('[data-position-search]').fill('Root'); await older;
+    await dialog(page).locator('[data-position-search]').fill('Sibling');
+    await expect(dialog(page).locator(`[name=before_id] option[value="${sibling.id}"]`)).toHaveCount(1);
+    await dialog(page).locator('[name=before_id]').selectOption(String(sibling.id));
+    const finished = page.waitForResponse(response => new URL(response.url()).searchParams.get('q') === 'Root'); release(); await finished;
+    await expect(dialog(page).locator('[name=before_id]')).toHaveValue(String(sibling.id));
+    await prepare(page); await commit(page); await page.reload(); await expect(node(page, root.id)).toBeVisible();
+    expect(await page.locator('[data-tree-root] > [role=treeitem]').evaluateAll(rows => rows.map(row => Number(row.dataset.pageId)))).toEqual([root.id, sibling.id]);
+});

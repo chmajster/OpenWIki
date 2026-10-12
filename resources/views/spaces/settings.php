@@ -22,7 +22,7 @@ $labels = ['space.view' => 'Odczyt', 'space.edit' => 'Edycja', 'space.manage_acc
     <?php if ($capabilities['space.manage_owner']): ?>
     <div data-principal-picker data-url="<?= $e($base) ?>/principals" data-type="user">
         <label>Wyszukaj nowego właściciela <input type="search" data-principal-query autocomplete="off"></label>
-        <label>Właściciel <select name="owner_id" data-principal-results data-original="<?= (int) $space['owner_id'] ?>"><option value="<?= (int) $space['owner_id'] ?>"><?= $e($owner['username'] ?? 'Właściciel') ?></option></select></label>
+        <label>Właściciel <select name="owner_id" data-principal-results data-original="<?= (int) $space['owner_id'] ?>"><option value="<?= (int) ($owner['id'] ?? $space['owner_id']) ?>"><?= $e($owner['username'] ?? 'Właściciel') ?></option></select></label>
         <span data-picker-status role="status"></span>
     </div>
     <p class="form-help">Przekazanie własności może odebrać Ci dostęp. Nowy właściciel musi mieć aktywne konto.</p>
@@ -38,12 +38,12 @@ $labels = ['space.view' => 'Odczyt', 'space.edit' => 'Edycja', 'space.manage_acc
 <p>Dopasowane deny ma pierwszeństwo przed allow. Właściciel i superadministrator zachowują zarządzanie. Uprawnienia do zmian wymagają także uprawnienia globalnego. W prywatnej przestrzeni granty ACL są nieaktywne; zmień widoczność na ograniczoną, aby udostępnić dokumenty.</p>
 <form class="form-grid" method="post" action="<?= $e($base) ?>/access" data-principal-picker data-url="<?= $e($base) ?>/principals">
     <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>"><input type="hidden" name="base_version" value="<?= $baseVersion ?>">
-    <label>Typ <select name="principal_type" data-principal-type><option value="user">Użytkownik</option><option value="group">Grupa</option><option value="role">Rola</option></select></label>
+    <label>Typ <select name="principal_type" data-principal-type><?php foreach (['user' => 'Użytkownik', 'group' => 'Grupa', 'role' => 'Rola'] as $key => $label): ?><option value="<?= $key ?>" <?= ($old['principal_type'] ?? 'user') === $key ? 'selected' : '' ?>><?= $e($label) ?></option><?php endforeach; ?></select></label>
     <label>Wyszukaj <input type="search" data-principal-query autocomplete="off"></label>
-    <label>Adresat <select name="principal_id" data-principal-results required><option value="">Wyszukaj i wybierz adresata</option></select></label>
+    <label>Adresat <select name="principal_id" data-principal-results required><option value="">Wyszukaj i wybierz adresata</option><?php if ($selectedPrincipal): ?><option value="<?= (int) $selectedPrincipal['id'] ?>" selected><?= $e($selectedPrincipal['name']) ?></option><?php endif; ?></select></label>
     <span data-picker-status role="status"></span>
-    <label>Uprawnienie <select name="permission"><?php foreach ($labels as $key => $label): ?><option value="<?= $e($key) ?>"><?= $e($label) ?></option><?php endforeach; ?></select></label>
-    <label>Decyzja <select name="effect"><option value="allow">Allow — zezwól</option><option value="deny">Deny — odmów</option></select></label>
+    <label>Uprawnienie <select name="permission"><?php foreach ($labels as $key => $label): ?><option value="<?= $e($key) ?>" <?= ($old['permission'] ?? 'space.view') === $key ? 'selected' : '' ?>><?= $e($label) ?></option><?php endforeach; ?></select></label>
+    <label>Decyzja <select name="effect"><option value="allow" <?= ($old['effect'] ?? 'allow') === 'allow' ? 'selected' : '' ?>>Allow — zezwól</option><option value="deny" <?= ($old['effect'] ?? '') === 'deny' ? 'selected' : '' ?>>Deny — odmów</option></select></label>
     <button class="button button--primary" type="submit">Zapisz regułę</button>
 </form>
 <div class="table-scroll"><table><thead><tr><th>Adresat</th><th>Uprawnienie</th><th>Decyzja</th><th>Akcja</th></tr></thead><tbody>
