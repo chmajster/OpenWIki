@@ -166,8 +166,10 @@ final class PageAclService
         catch (\DomainException) { return false; }
         // Evaluate the resource ACL without recursing through draft visibility.
         $resource = array_replace($page, ['status' => 'published']);
+        // An archive disables mutations, not an authorized collaborator's historical reads.
+        $readSpace = array_replace($space, ['status' => 'active']);
         foreach (['page.edit', 'page.review', 'page.publish'] as $permission) {
-            if ($this->canFor($resource, $space, $permission, $user, $super && $actor->can('*'), $actor->can($permission))) return true;
+            if ($this->canFor($resource, $readSpace, $permission, $user, $super && $actor->can('*'), $actor->can($permission))) return true;
         }
         return false;
     }

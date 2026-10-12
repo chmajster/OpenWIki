@@ -120,6 +120,9 @@ final class PageReviewTest extends TestCase
         try { $result = (new DocumentImportService($this->app->database(), $this->app->basePath(), false, $this->policy('author')))->importFromPath($this->space, $this->users['author'], $temp, 'Private.md'); }
         finally { unlink($temp); }
         $imported = (new PageRepository($this->app->database()))->findById($result['page_ids'][0]); self::assertNull($imported['published_revision']); self::assertSame('draft', $imported['workflow_state']);
+        $this->app->database()->execute('UPDATE spaces SET status = "archived" WHERE id = ?', [$this->space['id']]); $this->space['status'] = 'archived';
+        self::assertSame(200, $api->pageRevision($this->request([], $publisher), (string) $page['id'], '2')->status());
+        self::assertSame(403, $api->reviewPage($this->request(['revision' => 3, 'action' => 'submit'], $author), (string) $page['id'])->status());
     }
 
     public function testSelfApprovalRejectionPermissionDenialAndFreshness(): void

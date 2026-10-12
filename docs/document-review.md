@@ -70,6 +70,8 @@ dostępne w panelu obiegu. Historia dla czytelnika obejmuje wyłącznie rewizje,
 które rzeczywiście były opublikowane. Podgląd i diff sprawdzają uprawnienia
 obu rewizji; kopia sprzed konwersji pozostaje dostępna tylko do uprawnionego
 przywrócenia. HTML snapshotów jest filtrowany przy odczycie bez nadpisywania.
+Archiwizacja przestrzeni blokuje decyzje i zapis; uprawniony współpracownik
+zachowuje odczyt roboczej historii. Czytelnik nadal widzi tylko publikacje.
 
 Każdy zapis zamraża wersje i nazwy załączników rewizji. W przestrzeni z recenzją
 publikacja nie udostępnia plików ani ich wersji dodanych po tym zapisie.
