@@ -38,6 +38,43 @@ sudo ./install.sh
 
 The script installs and starts Nginx, MariaDB and PHP-FPM, installs Composer dependencies, builds static editor assets with npm, provisions the OpenWiki database account, runs the shared CLI installer, configures cron, Nginx and SELinux where applicable, and performs application/database/HTTP health checks. No Node.js service runs after installation.
 
+## Uruchamianie lokalne
+
+Z katalogu pobranego repozytorium uruchom:
+
+```bash
+bash install.sh --local
+```
+
+Aplikacja działa pod `http://127.0.0.1:8080`, bez roota i bez konfigurowania usług systemowych. Skrypt korzysta bezpośrednio z katalogu, w którym znajduje się `install.sh`. Nie kopiuje ani nie pobiera kodu, nie zmienia gałęzi, lokalnych zmian, właściciela repozytorium ani konfiguracji Nginx/Apache/PHP-FPM/crona/systemd.
+
+Wymagane są PHP CLI 8.2+, Composer oraz rozszerzenia aplikacji: PDO/pdo_mysql, mbstring, OpenSSL, DOM, Phar, cURL, LDAP, ZIP, GD, JSON, session i fileinfo. `storage/` musi być zapisywalne. Na Debianie/Ubuntu zależności można przygotować poleceniem:
+
+```bash
+sudo apt-get install php-cli php-mysql php-mbstring php-xml php-curl php-ldap php-zip php-gd composer curl unzip
+```
+
+Dystrybucja musi dostarczać PHP 8.2 lub nowsze. Na Fedora/RHEL odpowiednikiem jest `sudo dnf install php-cli php-mysqlnd php-mbstring php-xml php-curl php-ldap php-zip php-gd composer curl unzip`. Lokalny skrypt zgłasza brakujące zależności; sam ich nie instaluje systemowo. W Windows użyj Bash w WSL z linuksowym PHP/Composer/Node; katalog projektu może znajdować się na `/mnt/c/...`, również w ścieżce ze spacjami.
+
+Można wybrać adres i port, także uruchamiając skrypt pełną ścieżką z innego katalogu:
+
+```bash
+bash install.sh --local --port 8090
+bash install.sh --local --host 127.0.0.1 --port 8090
+bash install.sh --local --host 0.0.0.0 --port 8090
+bash "/ścieżka ze spacjami/OpenWIki/install.sh" --local
+```
+
+Hostem może być adres IPv4/IPv6 lub `localhost`; port musi mieścić się w zakresie 1024–65535. Dla `0.0.0.0` podsumowanie podaje adres `http://127.0.0.1:PORT`. Zajęty port powoduje błąd i nie zatrzymuje procesu, który go używa. `--host`/`--port` wymagają `--local`, a `--local` nie łączy się z `--install`, `--status`, `--uninstall` ani `--install-dir`. Zmienna `OPENWIKI_INSTALL_DIR` nie zmienia katalogu trybu lokalnego.
+
+Pierwsze uruchomienie udostępnia istniejący kreator pod `http://127.0.0.1:8080/install`. Potrzebny jest dostępny serwer **MySQL/MariaDB** oraz konto z uprawnieniami do bazy; kreator może utworzyć bazę, jeżeli konto ma takie prawo. Przed instalacją `/health` zwraca `503` i `setup_required` — skrypt sprawdza również kreator i rozpoznaje ten stan. Nie instaluje automatycznie bazy ani nie wprowadza SQLite.
+
+Przy ponownym uruchomieniu pozostają dotychczasowe `.env`, `APP_KEY`, poświadczenia, znacznik instalacji, konta, strony i pliki. Lokalny URL oraz nieszyfrowane ciasteczko dla lokalnego HTTP są nadpisane tylko w procesie PHP; `.env` nie jest przepisywane. Lokalna nazwa ciasteczka zależy od adresu i portu. Istniejący `installed.lock` bez czytelnego `.env` wymaga przywrócenia konfiguracji tej instancji; skrypt nie resetuje jej danych. Problem bazy lub `storage/` po instalacji jest osobnym błędem healthcheck.
+
+Skrypt używa `composer install` z `composer.lock`. Aktualne zależności PHP i kompletne, zgodne bundle są ponownie używane. Gdy potrzebne jest zbudowanie edytora, wymagane są **Node.js 22+ i npm**; skrypt używa `npm ci --include=dev` oraz `npm run build`. Manifest builda sprawdza lockfile, źródła i wyniki, a zmiana źródła wymusza przebudowanie. Na Linuxie można wcześniej wykonać `bash scripts/build-editor.sh`, aby użyć istniejącego, tymczasowego narzędzia Node.js z weryfikacją sumy kontrolnej.
+
+Zmiany plików PHP są widoczne po odświeżeniu strony. Zmiany w `resources/js/` wymagają `npm run build` albo ponownego uruchomienia `--local`, które wykryje nieaktualne zasoby. Serwer wyświetla logi w terminalu i działa na pierwszym planie. **Ctrl+C** kończy jego proces i zwalnia port. Tryb lokalny używa [serwera developerskiego PHP CLI](https://www.php.net/manual/en/features.commandline.webserver.php); wdrożenie systemowe pozostaje osobnym trybem. Szczegóły i testy opisuje [dokumentacja lokalnego runtime](docs/local-runtime.md).
+
 ## Daily documentation editor
 
 The Visual editor uses [Tiptap/ProseMirror](https://tiptap.dev/docs/editor/core-concepts/extensions). Its maintained document schema, table/list commands and transaction history replace `execCommand` and manual DOM mutations. Pages and revisions store one versioned source envelope (`version`, `format`, `source`); existing HTML and Markdown fields remain compatible projections. The migration preserves original historical content bytes, and reading a page never rewrites it. HTML-based extensions keep compatibility with PHP rendering, protected attachments, wiki links, macros, import/export and the shared page write service.

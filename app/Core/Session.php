@@ -12,7 +12,8 @@ final class Session
             return;
         }
 
-        session_name('OPENWIKI');
+        $cookieName = Env::get('SESSION_COOKIE_NAME', 'OPENWIKI') ?? 'OPENWIKI';
+        session_name(preg_match('/^[A-Za-z][A-Za-z0-9_]{0,63}$/D', $cookieName) ? $cookieName : 'OPENWIKI');
         session_set_cookie_params([
             'lifetime' => 0,
             'path' => '/',

@@ -13,6 +13,11 @@ PHP_FPM_SERVICE=""
 NGINX_SITE="openwiki"
 CRON_FILE="/etc/cron.d/openwiki"
 MODE="install"
+EXPLICIT_MODE=""
+INSTALL_DIR_SPECIFIED=0
+LOCAL_HOST="127.0.0.1"
+LOCAL_PORT="8080"
+LOCAL_ADDRESS_SPECIFIED=0
 NO_COLOR="${NO_COLOR:-0}"
 
 if [[ -t 1 && "${NO_COLOR:-0}" != "1" ]]; then
@@ -34,14 +39,27 @@ OpenWiki installer
 
 Użycie:
   sudo ./install.sh [opcje]
+  bash install.sh --local [--host ADRES] [--port PORT]
 
 Opcje:
   --install              Instalacja lub naprawa OpenWiki (domyślnie)
   --status               Status aplikacji i usług
   --uninstall            Usuń konfigurację usług i pliki OpenWiki
   --install-dir PATH     Katalog instalacji (domyślnie: /var/www/openwiki)
+  --local                Uruchom tę kopię projektu bez roota i usług systemowych
+  --host ADRES           Lokalny adres IPv4/IPv6 lub localhost (domyślnie: 127.0.0.1)
+  --port PORT            Port trybu --local, 1024–65535 (domyślnie: 8080)
   --no-color             Wyłącz kolory
   --help                 Pomoc
+
+Przykłady lokalne (PHP 8.2+, Composer, dostępny MySQL/MariaDB):
+  bash install.sh --local
+  bash install.sh --local --port 8090
+  bash install.sh --local --host 0.0.0.0 --port 8090
+  bash /ścieżka/do/OpenWIki/install.sh --local
+  Pierwsza konfiguracja: http://127.0.0.1:8080/install
+  Zatrzymanie: Ctrl+C. Node.js 22+ jest potrzebny przy budowaniu zasobów.
+  --local nie łączy się z --install, --status, --uninstall ani --install-dir.
 
 Zmienne środowiskowe:
   OPENWIKI_INSTALL_DIR
@@ -51,18 +69,30 @@ Zmienne środowiskowe:
 EOF
 }
 
+select_mode() {
+  [[ -z "$EXPLICIT_MODE" || "$EXPLICIT_MODE" == "$1" ]] || fail "Sprzeczne tryby: --$EXPLICIT_MODE i --$1."
+  EXPLICIT_MODE="$1"
+  MODE="$1"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --install) MODE="install" ;;
-    --status) MODE="status" ;;
-    --uninstall) MODE="uninstall" ;;
-    --install-dir) shift; [[ $# -gt 0 ]] || fail "Brak wartości dla --install-dir"; INSTALL_DIR="$1" ;;
+    --install) select_mode install ;;
+    --status) select_mode status ;;
+    --uninstall) select_mode uninstall ;;
+    --local) select_mode local ;;
+    --install-dir) shift; [[ $# -gt 0 && "$1" != --* ]] || fail "Brak wartości dla --install-dir"; INSTALL_DIR="$1"; INSTALL_DIR_SPECIFIED=1 ;;
+    --host) shift; [[ $# -gt 0 && "$1" != --* ]] || fail "Brak wartości dla --host"; LOCAL_HOST="$1"; LOCAL_ADDRESS_SPECIFIED=1 ;;
+    --port) shift; [[ $# -gt 0 && "$1" != --* ]] || fail "Brak wartości dla --port"; LOCAL_PORT="$1"; LOCAL_ADDRESS_SPECIFIED=1 ;;
     --no-color) NO_COLOR=1; C_OK=''; C_INFO=''; C_WARN=''; C_FAIL=''; C_RESET='' ;;
     --help|-h) usage; exit 0 ;;
     *) fail "Nieznana opcja: $1" ;;
   esac
   shift
 done
+
+[[ "$MODE" == local || "$LOCAL_ADDRESS_SPECIFIED" == 0 ]] || fail "--host i --port wymagają --local."
+[[ "$MODE" != local || "$INSTALL_DIR_SPECIFIED" == 0 ]] || fail "--local zawsze używa katalogu install.sh; nie łączy się z --install-dir."
 
 validate_install_dir() {
   [[ "$INSTALL_DIR" == /* ]] || fail "Katalog instalacji musi być ścieżką absolutną."
@@ -512,6 +542,13 @@ uninstall_mode() {
   rm -rf "$INSTALL_DIR"
   ok "Pliki i konfiguracja OpenWiki zostały usunięte. Baza danych nie została usunięta."
 }
+
+if [[ "$MODE" == local ]]; then
+  # This flow intentionally bypasses every deployment, root and service operation.
+  source "$SCRIPT_DIR/scripts/local-server.sh"
+  local_mode
+  exit $?
+fi
 
 validate_install_dir
 

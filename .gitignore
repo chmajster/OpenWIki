@@ -19,3 +19,5 @@
 /public/assets/wiki-editor.js
 /public/assets/diagram.js
 /public/assets/document-reader.js
+/public/assets/editor-manifest.json
+/public/assets/.editor-manifest-*.tmp
