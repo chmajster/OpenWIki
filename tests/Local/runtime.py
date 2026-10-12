@@ -53,13 +53,13 @@ def opener():
                                       urllib.request.HTTPCookieProcessor(CookieJar()))
 
 
-def http(client, url, data=None, token=None):
+def http(client, url, data=None, token=None, timeout=3):
     headers = {'Authorization': 'Bearer ' + token} if token else {}
     if data is not None:
         data = urllib.parse.urlencode(data).encode()
     request = urllib.request.Request(url, data=data, headers=headers)
     try:
-        response = client.open(request, timeout=3)
+        response = client.open(request, timeout=timeout)
     except urllib.error.HTTPError as error:
         response = error
     return response.status, response.read(), response.headers
@@ -175,7 +175,9 @@ def run():
                 'db_database': DB_NAME, 'db_username': os.getenv('OPENWIKI_TEST_DB_USERNAME'),
                 'db_password': os.getenv('OPENWIKI_TEST_DB_PASSWORD', ''), 'create_database': '1',
                 'admin_username': 'local-tester', 'admin_email': 'local@example.invalid', 'admin_password': 'Local-runtime-test-123!'}
-            status, body, headers = http(browser, url + '/install', setup)
+            # Fresh DDL plus durable recovery checkpoints can exceed a normal
+            # request budget on CI disks. Keep startup/read probes at 3 seconds.
+            status, body, headers = http(browser, url + '/install', setup, timeout=30)
             check(status == 200 and b'name="identifier"' in body, 'Graphical installation completed and redirects to login')
             status, body, headers = http(browser, url + '/health')
             check(status == 200 and json.loads(body)['status'] == 'ok', 'Installed health checks the real database')
