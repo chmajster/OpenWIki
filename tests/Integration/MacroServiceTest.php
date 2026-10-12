@@ -132,7 +132,11 @@ final class MacroServiceTest extends TestCase
             ['id' => $spaceId]
         );
 
+        $anonymous = (new MacroService($this->app))->renderPage($page, $space);
+        self::assertStringNotContainsString('macro-' . $suffix, $anonymous['html']);
+        self::assertTrue($this->app->auth()->attempt('macro-' . $suffix, 'CorrectHorseBatteryStaple!42'));
         $rendered = (new MacroService($this->app))->renderPage($page, $space);
+        $this->app->auth()->logout();
 
         self::assertStringContainsString('id="introduction"', $rendered['html']);
         self::assertStringContainsString('id="details"', $rendered['html']);

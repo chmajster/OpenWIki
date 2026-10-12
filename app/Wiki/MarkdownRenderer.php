@@ -14,6 +14,7 @@ use League\CommonMark\MarkdownConverter;
 final class MarkdownRenderer
 {
     private readonly MarkdownConverter $converter;
+    private readonly Environment $environment;
 
     public function __construct()
     {
@@ -22,6 +23,37 @@ final class MarkdownRenderer
         $environment->addExtension(new CommonMarkCoreExtension());
         $environment->addExtension(new GithubFlavoredMarkdownExtension());
         $this->converter = new MarkdownConverter($environment);
+        $this->environment = $environment;
+    }
+
+    public function replaceAssetUrls(string $source, array $urls): string
+    {
+        if ($urls === []) return $source;
+        $document = (new \League\CommonMark\Parser\MarkdownParser($this->environment))->parse($source);
+        $protected = [];
+        foreach ($document->iterator() as $node) {
+            if ($node instanceof \League\CommonMark\Extension\CommonMark\Node\Block\FencedCode
+                || $node instanceof \League\CommonMark\Extension\CommonMark\Node\Block\IndentedCode) {
+                for ($line = $node->getStartLine(); $line <= $node->getEndLine(); $line++) $protected[$line] = true;
+            }
+        }
+        $lines = preg_split('/(?<=\n)/', $source); $result = ''; $chunk = '';
+        $rewrite = static function (string $text) use ($urls): string {
+            // Code spans may cross lines. Preserve exact delimiters and source bytes.
+            return preg_replace_callback('/(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)|[^`]+|`/u', static function (array $match) use ($urls): string {
+                if (str_starts_with($match[0], '`')) return $match[0];
+                foreach ($urls as $old => $new) {
+                    $pattern = '~(\]\(\s*<?|^[ \t]{0,3}\[[^\]\r\n]+\]:[ \t]*<?)' . preg_quote($old, '~') . '(?=>?(?:[\s)]|$))~m';
+                    $match[0] = preg_replace_callback($pattern, static fn (array $destination): string => $destination[1] . $new, $match[0]) ?? $match[0];
+                }
+                return $match[0];
+            }, $text) ?? $text;
+        };
+        foreach ($lines as $index => $line) {
+            if (isset($protected[$index + 1])) { $result .= $rewrite($chunk) . $line; $chunk = ''; }
+            else $chunk .= $line;
+        }
+        return $result . $rewrite($chunk);
     }
 
     public function render(string $markdown): string

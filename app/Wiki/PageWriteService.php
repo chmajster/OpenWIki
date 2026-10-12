@@ -25,6 +25,14 @@ final class PageWriteService
 
     public function validate(array $space, ?array $current, array $input, ?callable $can = null): array
     {
+        $canonical = null;
+        if (array_key_exists('document', $input)) {
+            if (!is_array($input['document'])) throw new \InvalidArgumentException('document must be a versioned source object.');
+            $canonical = (new ContentService())->document($input['document']);
+            $input['content_format'] = $canonical['format'];
+            $input['content_html'] = $canonical['html'];
+            $input['content_markdown'] = $canonical['markdown'] ?? '';
+        }
         $value = static fn (string $key, mixed $default = ''): mixed => array_key_exists($key, $input)
             ? $input[$key] : ($current[$key] ?? $default);
         foreach (['title', 'slug', 'status', 'content_format', 'content_html', 'content_markdown', 'change_summary'] as $key) {
@@ -82,7 +90,7 @@ final class PageWriteService
         if ($current !== null && $format !== $current['content_format'] && !array_key_exists($sourceField, $input)) {
             throw new \InvalidArgumentException('Changing content_format requires the converted source content.');
         }
-        $content = (new ContentService())->normalize(
+        $content = $canonical ?? (new ContentService())->normalize(
             $format,
             (string) $value('content_html'),
             (string) $value('content_markdown')
@@ -136,12 +144,31 @@ final class PageWriteService
         ?Request $request = null, ?callable $can = null, bool $allowInlineImages = false,
         ?int $restoredRevision = null, bool $refreshLinks = true
     ): array {
+        $operationId = $input['operation_id'] ?? null;
+        if ($operationId !== null && (!is_string($operationId) || !preg_match('/^[a-f0-9-]{36}$/D', $operationId))) {
+            throw new \InvalidArgumentException('Invalid save operation identity.');
+        }
+        $hashInput = $input;
+        unset($hashInput['_token']);
+        $operationHash = hash('sha256', json_encode([(int) $space['id'], $current['id'] ?? null, $hashInput], JSON_THROW_ON_ERROR));
         $inlineImages = $this->inlineImages;
+        $imageCheckpoint = $inlineImages?->trackingCheckpoint() ?? 0;
         $ownsTransaction = !$this->database->pdo()->inTransaction();
         try {
             $saved = $this->database->transaction(function () use (
-                $space, $current, $input, $userId, $request, $can, $allowInlineImages, $inlineImages, $restoredRevision, $refreshLinks
+                $space, $current, $input, $userId, $request, $can, $allowInlineImages, $inlineImages, $restoredRevision, $refreshLinks, $operationId, $operationHash
             ): array {
+                if ($operationId !== null) {
+                    $this->database->fetchOne('SELECT id FROM users WHERE id = :id FOR UPDATE', ['id' => $userId]);
+                    $receipt = $this->database->fetchOne('SELECT * FROM editor_page_operations WHERE user_id = :user AND operation_id = :operation', ['user' => $userId, 'operation' => $operationId]);
+                    if ($receipt !== null) {
+                        if (!hash_equals($receipt['request_hash'], $operationHash)) throw new \InvalidArgumentException('Operation identity was reused for different content.');
+                        $result = json_decode($receipt['result_json'], true, 512, JSON_THROW_ON_ERROR);
+                        $fresh = (new PageRepository($this->database))->findById((int) $result['id']);
+                        if ($fresh === null || ($can !== null && !$can('page.edit', $fresh))) throw new \DomainException('You do not have permission to access this saved page.');
+                        return $result;
+                    }
+                }
                 // Serialize hierarchy changes as well as version checks within one space.
                 $this->database->fetchOne('SELECT id FROM spaces WHERE id = :id FOR UPDATE', ['id' => (int) $space['id']]);
                 if ($current !== null) {
@@ -157,7 +184,11 @@ final class PageWriteService
                     throw new \DomainException('You do not have permission to save this page.');
                 }
                 $data = $this->validate($space, $current, $input, $can);
-                $hasInlineImages = stripos($data['content_html'], 'data:image/') !== false || stripos($data['conversion_backup']['html'] ?? '', 'data:image/') !== false;
+                $assetUrls = [];
+                $backupContent = $data['conversion_backup'] === null ? null : (new ContentService())->normalize(
+                    $data['conversion_backup']['format'], $data['conversion_backup']['html'], $data['conversion_backup']['markdown']);
+                $assets = ContentService::assetKinds($data['content_html'] . ($backupContent['html'] ?? ''));
+                $hasInlineImages = $assets['inline_images'];
                 if ($hasInlineImages && !$allowInlineImages) {
                     throw new \DomainException('Inline images require attachment.upload permission and, for API tokens, attachments:write scope.');
                 }
@@ -179,16 +210,43 @@ final class PageWriteService
                 }
                 if ($hasInlineImages) {
                     $materialized = $inlineImages->materializeDataImages($data['content_html'], $id, $userId);
+                    $assetUrls += $materialized['urls'];
+                    if ($data['content_markdown'] !== null) $data['content_markdown'] = (new MarkdownRenderer())->replaceAssetUrls($data['content_markdown'], $materialized['urls']);
                     foreach (['pages' => 'id = :id', 'page_revisions' => 'page_id = :id AND revision_number = :version'] as $table => $where) {
-                        $params = ['html' => $materialized['html'], 'text' => $materialized['text'], 'id' => $id];
+                        $params = ['html' => $materialized['html'], 'text' => $materialized['text'], 'markdown' => $data['content_markdown'], 'id' => $id];
                         if ($table === 'page_revisions') $params['version'] = $version;
-                        $this->database->execute('UPDATE ' . $table . ' SET content_html = :html, content_text = :text WHERE ' . $where, $params);
+                        $this->database->execute('UPDATE ' . $table . ' SET content_html = :html, content_text = :text, content_markdown = :markdown WHERE ' . $where, $params);
                     }
-                    if ($data['conversion_backup'] !== null && stripos($data['conversion_backup']['html'], 'data:image/') !== false) {
-                        $backupImages = $inlineImages->materializeDataImages($data['conversion_backup']['html'], $id, $userId);
-                        $data['conversion_backup']['html'] = $backupImages['html'];
+                    if ($backupContent !== null && ContentService::assetKinds($backupContent['html'])['inline_images']) {
+                        $backupImages = $inlineImages->materializeDataImages($backupContent['html'], $id, $userId);
+                        $assetUrls += $backupImages['urls'];
+                        $data['conversion_backup']['html'] = $data['conversion_backup']['format'] === 'visual' ? $backupImages['html'] : '';
+                        $data['conversion_backup']['markdown'] = (new MarkdownRenderer())->replaceAssetUrls($data['conversion_backup']['markdown'], $backupImages['urls']);
                         $this->database->execute('UPDATE page_revisions SET conversion_backup_json = :backup WHERE page_id = :id AND revision_number = :version',
                             ['backup' => json_encode($data['conversion_backup'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 'id' => $id, 'version' => $version]);
+                    }
+                }
+                if ($assets['draft_files']) {
+                    if ($this->basePath === null || !$allowInlineImages) throw new \DomainException('Draft files require attachment.upload permission.');
+                    $files = new \OpenWiki\Attachments\DraftFileService($this->database, $this->basePath);
+                    $currentHtml = $this->database->fetchOne('SELECT content_html FROM pages WHERE id = :id', ['id' => $id])['content_html'];
+                    $resolved = $files->materialize($currentHtml, $id, (int) $space['id'], $userId, (string) ($input['document_key'] ?? ''));
+                    $assetUrls += $resolved['urls'];
+                    $markdown = $data['content_markdown'] === null ? null : (new MarkdownRenderer())->replaceAssetUrls($data['content_markdown'], $resolved['urls']);
+                    foreach (['pages' => 'id = :id', 'page_revisions' => 'page_id = :id AND revision_number = :version'] as $table => $where) {
+                        $params = ['html' => $resolved['html'], 'markdown' => $markdown, 'id' => $id];
+                        if ($table === 'page_revisions') $params['version'] = $version;
+                        $this->database->execute('UPDATE ' . $table . ' SET content_html = :html, content_markdown = :markdown WHERE ' . $where, $params);
+                    }
+                    if ($data['conversion_backup'] !== null) {
+                        $backup = $data['conversion_backup'];
+                        $backupHtml = (new ContentService())->normalize($backup['format'], $backup['html'], $backup['markdown'])['html'];
+                        $restored = $files->materialize($backupHtml, $id, (int) $space['id'], $userId, (string) ($input['document_key'] ?? ''));
+                        $assetUrls += $restored['urls'];
+                        $backup['html'] = $backup['format'] === 'visual' ? $restored['html'] : '';
+                        $backup['markdown'] = (new MarkdownRenderer())->replaceAssetUrls($backup['markdown'], $restored['urls']);
+                        $this->database->execute('UPDATE page_revisions SET conversion_backup_json = :backup WHERE page_id = :id AND revision_number = :version',
+                            ['backup' => json_encode($backup, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 'id' => $id, 'version' => $version]);
                     }
                 }
                 $metadata->syncTags($id, $data['tags']);
@@ -224,12 +282,22 @@ final class PageWriteService
                      FROM pages p INNER JOIN users u ON u.id = p.author_id
                      INNER JOIN spaces s ON s.id = p.space_id WHERE p.id = :id', ['id' => $id]
                 ) ?? throw new \RuntimeException('Saved page cannot be resolved.');
-                return $saved + ['tags' => $metadata->tagsForPage($id)];
+                $document = ['version' => ContentService::SCHEMA_VERSION, 'format' => $saved['content_format'],
+                    'source' => $saved['content_format'] === 'visual' ? $saved['content_html'] : $saved['content_markdown']];
+                $saved['document_json'] = json_encode($document, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+                $this->database->execute('UPDATE pages SET document_json = :document WHERE id = :id', ['document' => $saved['document_json'], 'id' => $id]);
+                $this->database->execute('UPDATE page_revisions SET document_json = :document WHERE page_id = :id AND revision_number = :version', ['document' => $saved['document_json'], 'id' => $id, 'version' => $version]);
+                $result = $saved + ['tags' => $metadata->tagsForPage($id), 'asset_replacements' => $assetUrls];
+                if ($operationId !== null) {
+                    $this->database->execute('INSERT INTO editor_page_operations (user_id, operation_id, request_hash, result_json, created_at) VALUES (:user, :operation, :hash, :result, UTC_TIMESTAMP())',
+                        ['user' => $userId, 'operation' => $operationId, 'hash' => $operationHash, 'result' => json_encode($result, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)]);
+                }
+                return $result;
             });
             if ($ownsTransaction) $inlineImages?->clearTracking();
             return $saved;
         } catch (\Throwable $exception) {
-            $inlineImages?->cleanupCreatedFiles();
+            $inlineImages?->cleanupCreatedFiles($imageCheckpoint);
             if ($exception instanceof \PDOException && (int) ($exception->errorInfo[1] ?? 0) === 1062
                 && str_contains($exception->getMessage(), 'uq_pages_space_slug')) {
                 throw new \InvalidArgumentException('A page with that slug already exists in this space.', 0, $exception);

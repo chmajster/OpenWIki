@@ -223,6 +223,8 @@ TEXT);
 
         $database = $app->database();
         (new RateLimiter($database))->prune(86400);
+        (new \OpenWiki\Wiki\EditSessionService($database))->prune();
+        (new \OpenWiki\Attachments\DraftFileService($database, $this->basePath))->prune();
 
         $database->execute(
             'DELETE FROM page_edit_locks WHERE expires_at < UTC_TIMESTAMP()'

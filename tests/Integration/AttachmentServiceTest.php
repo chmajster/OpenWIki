@@ -45,6 +45,27 @@ final class AttachmentServiceTest extends TestCase
         }
     }
 
+    public function testDraftRetentionCollectsExpiredAndOrphanBytesButKeepsHistoricalAndRecentFiles(): void
+    {
+        $user = $this->createUser();
+        $space = $this->database->insert('INSERT INTO spaces (name, space_key, owner_id, visibility, status, created_at, updated_at) VALUES ("Retention", ?, ?, "private", "active", UTC_TIMESTAMP(), UTC_TIMESTAMP())', ['RET-' . bin2hex(random_bytes(5)), $user]);
+        $page = $this->database->insert('INSERT INTO pages (space_id, title, slug, content_html, content_format, author_id, owner_id, status, created_at, updated_at) VALUES (?, "Retained", "retained", "", "visual", ?, ?, "draft", UTC_TIMESTAMP(), UTC_TIMESTAMP())', [$space, $user, $user]);
+        $service = new AttachmentService($this->database, $this->basePath);
+        $source = $this->basePath . '/history.txt'; file_put_contents($source, 'Historical bytes');
+        $id = $service->createFromSource($page, $user, $source, 'history.txt'); $attachment = $service->find($id);
+        $protectedPath = $service->stagedPath($attachment['storage_key']); touch($protectedPath, time() - 31 * 86400); $service->delete($id);
+        $paths = [];
+        foreach (['a', 'b', 'c'] as $letter) {
+            $key = str_repeat($letter, 2) . '/' . str_repeat($letter, 2) . '/' . str_repeat($letter, 64) . '.bin';
+            $path = $this->basePath . '/storage/attachments/' . $key; mkdir(dirname($path), 0770, true); file_put_contents($path, 'Draft bytes');
+            if ($letter !== 'c') touch($path, time() - 31 * 86400); $paths[$letter] = $path;
+            if ($letter === 'a') $this->database->execute('INSERT INTO editor_draft_files (space_id, user_id, document_key, operation_id, name, storage_key, mime_type, size_bytes, sha256, created_at, last_used_at) VALUES (?, ?, ?, ?, "expired.txt", ?, "text/plain", 11, ?, UTC_TIMESTAMP() - INTERVAL 31 DAY, UTC_TIMESTAMP() - INTERVAL 31 DAY)', [$space, $user, 'new:11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', $key, hash_file('sha256', $path)]);
+        }
+        self::assertSame(1, (new \OpenWiki\Attachments\DraftFileService($this->database, $this->basePath))->prune());
+        self::assertFileDoesNotExist($paths['a']); self::assertFileDoesNotExist($paths['b']); self::assertFileExists($paths['c']); self::assertFileExists($protectedPath);
+        self::assertSame('Historical bytes', file_get_contents($protectedPath));
+    }
+
     public function testAttachmentStorageVersioningRenameAndSoftDelete(): void
     {
         $userId = $this->createUser();

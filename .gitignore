@@ -17,3 +17,5 @@
 .phpunit.result.cache
 /storage/installed.lock
 /public/assets/wiki-editor.js
+/public/assets/diagram.js
+/public/assets/document-reader.js

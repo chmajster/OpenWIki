@@ -22,7 +22,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             <?php foreach ($revisions as $revision): ?>
                 <article class="revision-row">
                     <div>
-                        <strong><?= $e($t('Version')) ?> <?= (int) $revision['revision_number'] ?></strong>
+                        <a href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/revisions/<?= (int) $revision['revision_number'] ?>"><strong><?= $e($t('Version')) ?> <?= (int) $revision['revision_number'] ?></strong></a>
                         <span class="status-pill status-pill--<?= $e($revision['status']) ?>"><?= $e($t($revision['status'])) ?></span>
                         <p><?= $e($revision['change_summary'] ?: $t('No change summary')) ?></p>
                         <small><?= $e($revision['username']) ?> · <?= $e($revision['created_at']) ?></small>

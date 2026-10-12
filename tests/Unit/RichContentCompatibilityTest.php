@@ -10,6 +10,36 @@ use PHPUnit\Framework\TestCase;
 
 final class RichContentCompatibilityTest extends TestCase
 {
+    public function testVersionedSourceIsAuthoritativeWithoutChangingStoredHistoricalBytes(): void
+    {
+        $row = ['document_json' => json_encode(['version' => 1, 'format' => 'visual', 'source' => '<p>Original</p>']), 'content_html' => '<p>Stale</p>', 'content_format' => 'markdown'];
+        self::assertSame('<p>Original</p>', ContentService::storedSource($row)['content_html']);
+        self::assertSame('visual', ContentService::storedSource($row)['content_format']);
+        self::assertSame('<p>Stale</p>', $row['content_html']);
+        self::assertNull(ContentService::storedSource(null));
+        self::assertSame(['content_html' => '<p>Legacy</p>'], ContentService::storedSource(['content_html' => '<p>Legacy</p>']));
+    }
+
+    public function testAdvancedStructuresUseControlledAttributesAndRetainLiteralCode(): void
+    {
+        $html = '<details data-disclosure="true"><summary>Title</summary><div data-disclosure-content="true"><p><sup>2</sup><sub>3</sub></p></div></details>'
+            . '<div data-columns="2"><div data-column="true"><p data-align="right"><span data-text-color="blue" data-highlight="yellow">Text</span></p></div><div data-column="true"><p>Other</p></div></div>'
+            . '<pre data-diagram="mermaid"><code>A --&gt; B</code></pre><table><tr><td colspan="2" colwidth="0,240" data-cell-color="green">Merged</td></tr></table>';
+        self::assertSame($html, (new ContentService())->normalize('visual', $html, '')['html']);
+        $converted = (new ContentService())->convert('visual', 'markdown', $html, '');
+        self::assertTrue($converted['lossy']); self::assertSame($html, $converted['before_html']);
+        $unsafe = (new HtmlSanitizer())->sanitize('<p data-align="expression(x)" data-text-color="url(x)" style="color:red"><span data-highlight="invalid">Safe</span></p><table><tr><td rowspan="999999" colwidth="9999">Cell</td></tr></table>');
+        foreach (['expression', 'url(', 'style=', 'data-highlight', 'rowspan', 'colwidth'] as $attribute) self::assertStringNotContainsString($attribute, $unsafe);
+    }
+
+    public function testWriteDepthLimitDoesNotPreventSafeReadOfLegacyStructure(): void
+    {
+        $html = str_repeat('<div>', 110) . '<p>Old content</p>' . str_repeat('</div>', 110);
+        self::assertStringContainsString('Old content', (new ContentService())->normalize('visual', $html, '', false)['html']);
+        $this->expectException(\InvalidArgumentException::class);
+        (new ContentService())->normalize('visual', $html, '');
+    }
+
     public function testGfmPreservesTablesNestedListsTasksCodeLanguageAndSafeLinks(): void
     {
         $markdown = "# Żółć\n\n| Nazwa | Wynik |\n| --- | --- |\n| test | **OK** |\n\n"
@@ -43,6 +73,22 @@ final class RichContentCompatibilityTest extends TestCase
         self::assertStringContainsString('<h2>Nagłówek</h2>', $html);
         self::assertStringContainsString('<strong>Komórka</strong>', $html);
         foreach (['script', 'iframe', 'onclick', 'javascript:', 'style='] as $unsafe) self::assertStringNotContainsString($unsafe, $html);
+    }
+
+    public function testAssetDestinationsChangeWithoutRewritingMarkdownCodeOrPlainExamples(): void
+    {
+        $source = "[Download](/editor-files/12/download)\n\n[Reference][file]\n\n[file]: /editor-files/12/download \"Title\"\n\n"
+            . "Plain /editor-files/12/download\n\n`[Inline](/editor-files/12/download)`\n\n"
+            . "    [Indented](/editor-files/12/download)\n\n~~~markdown\n[Fenced](/editor-files/12/download)\n~~~";
+        $renderer = new \OpenWiki\Wiki\MarkdownRenderer();
+        $result = $renderer->replaceAssetUrls($source, ['/editor-files/12/download' => '/attachments/34/download']);
+        self::assertStringContainsString('[Download](/attachments/34/download)', $result);
+        self::assertStringContainsString('[file]: /attachments/34/download "Title"', $result);
+        self::assertStringContainsString('Plain /editor-files/12/download', $result);
+        self::assertStringContainsString('`[Inline](/editor-files/12/download)`', $result);
+        self::assertStringContainsString('    [Indented](/editor-files/12/download)', $result);
+        self::assertStringContainsString("~~~markdown\n[Fenced](/editor-files/12/download)\n~~~", $result);
+        self::assertSame(2, substr_count($renderer->render($result), 'href="/attachments/34/download"'));
     }
 
     public function testLossyRichConversionRetainsTheSanitizedOriginal(): void

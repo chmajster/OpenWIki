@@ -13,6 +13,7 @@ $notificationCount = $currentUser === null
     <title><?= $e($pageTitle) ?></title>
     <link rel="stylesheet" href="/assets/app.css">
     <script src="/assets/app.js" defer></script>
+    <script src="/assets/document-reader.js" defer></script>
 </head>
 <body data-user-id="<?= (int) ($currentUser['id'] ?? 0) ?>">
 <textarea hidden data-ui-translations><?= $e(json_encode($locale === 'pl' ? \OpenWiki\Core\I18n::catalog() : new \stdClass(), JSON_THROW_ON_ERROR)) ?></textarea>

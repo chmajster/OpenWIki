@@ -6,8 +6,10 @@ const {execFileSync} = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const destination = path.resolve(process.argv[2] || path.join(root, 'storage/temp/openwiki.tar.gz'));
 execFileSync('git', ['diff', '--quiet', 'HEAD'], {cwd: root});
-for (const file of ['vendor/autoload.php', 'public/assets/wiki-editor.js']) {
-    if (!fs.statSync(path.join(root, file)).isFile()) throw new Error('Missing runtime artifact: ' + file);
+const bundles = ['wiki-editor', 'diagram', 'document-reader'].map(name => 'public/assets/' + name + '.js');
+for (const file of ['vendor/autoload.php', 'public/assets/diagram.html', ...bundles]) {
+    const artifact = fs.statSync(path.join(root, file));
+    if (!artifact.isFile() || !artifact.size) throw new Error('Missing or empty runtime artifact: ' + file);
 }
 const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'openwiki-release-'));
 try {
@@ -20,7 +22,7 @@ try {
         fs.copyFileSync(path.join(root, file), target);
     }
     fs.cpSync(path.join(root, 'vendor'), path.join(stage, 'vendor'), {recursive: true});
-    fs.copyFileSync(path.join(root, 'public/assets/wiki-editor.js'), path.join(stage, 'public/assets/wiki-editor.js'));
+    for (const file of bundles) fs.copyFileSync(path.join(root, file), path.join(stage, file));
     fs.mkdirSync(path.dirname(destination), {recursive: true});
     execFileSync('tar', ['-czf', destination, '-C', stage, '.'], {stdio: 'inherit'});
     process.stdout.write('PHP runtime package created.\n');

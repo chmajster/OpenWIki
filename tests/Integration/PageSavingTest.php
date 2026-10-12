@@ -274,6 +274,132 @@ final class PageSavingTest extends TestCase
         self::assertSame((int) $source['id'], (int) $backlinks[0]['id']);
     }
 
+    public function testConditionalDraftSaveIsIdempotentAndKeepsRecoveryBeforeDeletion(): void
+    {
+        $controller = new PageDraftController($this->app);
+        $identity = ['document_key' => 'new:11111111-1111-4111-8111-111111111111', 'editor_id' => '22222222-2222-4222-8222-222222222222', 'base_version' => 0];
+        $first = $identity + ['draft_sequence' => 1, 'draft_version' => 0, 'operation_id' => '33333333-3333-4333-8333-333333333333', 'content_html' => '<p><strong>Recover me</strong></p>', 'title' => ''];
+        $save = $controller->saveEditorDraft($this->request($first), $this->space['space_key']);
+        self::assertSame(200, $save->status());
+        self::assertSame(1, json_decode($save->body(), true)['data']['draft_version']);
+        $empty = $identity + ['draft_sequence' => 2, 'draft_version' => 1, 'operation_id' => '44444444-4444-4444-8444-444444444444', 'content_html' => '', 'title' => ''];
+        self::assertSame(200, $controller->saveEditorDraft($this->request($empty), $this->space['space_key'])->status());
+        self::assertSame($save->body(), $controller->saveEditorDraft($this->request($first), $this->space['space_key'])->body());
+        $stale = array_replace($empty, ['draft_sequence' => 3, 'operation_id' => '55555555-5555-4555-8555-555555555555']);
+        self::assertSame(409, $controller->saveEditorDraft($this->request($stale), $this->space['space_key'])->status());
+        $sessions = new EditSessionService($this->app->database());
+        $points = $sessions->recoveryPoints((int) $this->space['id'], $this->userId, $identity['document_key']);
+        self::assertCount(2, $points);
+        self::assertSame('<p><strong>Recover me</strong></p>', $sessions->recoveryPoint((int) $this->space['id'], $this->userId, $identity['document_key'], (int) $points[1]['id'])['html']);
+        self::assertNull($sessions->recoveryPoint((int) $this->space['id'], $this->otherUserId, $identity['document_key'], (int) $points[1]['id']));
+        self::assertSame(0, (int) $this->app->database()->fetchOne('SELECT COUNT(*) AS total FROM pages WHERE space_id = ?', [$this->space['id']])['total']);
+    }
+
+    public function testRetriedExplicitSaveCreatesOneRevisionAndRejectsReusedOperation(): void
+    {
+        $writer = new PageWriteService($this->app->database());
+        $input = ['title' => 'Idempotent article', 'operation_id' => '11111111-1111-4111-8111-111111111111',
+            'document' => ['version' => 1, 'format' => 'visual', 'source' => '<p>Canonical <strong>source</strong></p>'], 'content_html' => '<p>stale</p>'];
+        $page = $writer->save($this->space, null, $input, $this->userId);
+        self::assertSame($page, $writer->save($this->space, null, $input, $this->userId));
+        self::assertSame('<p>Canonical <strong>source</strong></p>', $page['content_html']);
+        self::assertSame(1, json_decode($page['document_json'], true)['version']);
+        self::assertCount(1, (new PageRepository($this->app->database()))->revisions((int) $page['id']));
+        $this->expectException(\InvalidArgumentException::class);
+        $writer->save($this->space, null, array_replace($input, ['title' => 'Different operation content']), $this->userId);
+    }
+
+    public function testPublishedArticleRemainsUnchangedWhileIncompleteDraftSaves(): void
+    {
+        $writer = new PageWriteService($this->app->database());
+        $page = $writer->save($this->space, null, ['title' => 'Published article', 'status' => 'published', 'content_html' => '<p>Reader version</p>'], $this->userId);
+        $controller = new PageDraftController($this->app);
+        $draft = ['document_key' => 'page:' . $page['id'], 'editor_id' => '22222222-2222-4222-8222-222222222222', 'base_version' => 1,
+            'draft_sequence' => 1, 'draft_version' => 0, 'operation_id' => '33333333-3333-4333-8333-333333333333', 'title' => '', 'parent_id' => '99999999', 'content_html' => '<p>Work in progress</p>'];
+        self::assertSame(200, $controller->saveEditorDraft($this->request($draft), $this->space['space_key'])->status());
+        $fresh = (new PageRepository($this->app->database()))->findById((int) $page['id']);
+        self::assertSame(1, (int) $fresh['version']);
+        self::assertSame('<p>Reader version</p>', $fresh['content_html']);
+        self::assertSame($page['parent_id'], $fresh['parent_id']);
+        self::assertCount(1, (new PageRepository($this->app->database()))->revisions((int) $page['id']));
+    }
+
+    public function testDocumentedPrivateFileUrlsInsideCodeAreNotAttachmentReferences(): void
+    {
+        $html = '<pre><code>/editor-files/999999/download data-draft-file-id="999999"</code></pre>';
+        $response = (new PageDraftController($this->app))->saveEditorDraft($this->request([
+            'document_key' => 'new:11111111-1111-4111-8111-111111111111', 'editor_id' => '22222222-2222-4222-8222-222222222222',
+            'base_version' => 0, 'draft_sequence' => 1, 'content_html' => $html,
+        ]), $this->space['space_key']);
+        self::assertSame(200, $response->status());
+        $page = (new PageWriteService($this->app->database()))->save($this->space, null, ['title' => 'Literal asset examples',
+            'content_html' => $html . '<pre><code>data:image/png;base64,example</code></pre>'], $this->userId);
+        self::assertStringContainsString('/editor-files/999999/download', $page['content_html']);
+    }
+
+    public function testReactivatingAnAcknowledgedContextCannotBypassTheActiveDraftQuota(): void
+    {
+        $db = $this->app->database(); $service = new EditSessionService($db);
+        $document = 'new:11111111-1111-4111-8111-111111111111'; $tab = '22222222-2222-4222-8222-222222222222';
+        $service->saveEditorDraft((int) $this->space['id'], $this->userId, $document, $tab, 1, 0, ['title' => 'Completed']);
+        $service->acknowledgeDraft((int) $this->space['id'], $this->userId, $document, $tab, 1);
+        for ($i = 0; $i < 100; $i++) {
+            $db->execute('INSERT INTO page_editor_drafts (space_id, user_id, document_key, editor_id, sequence, base_version, payload_json, updated_at) VALUES (?, ?, ?, ?, 1, 0, "{}", UTC_TIMESTAMP())',
+                [$this->space['id'], $this->userId, $document, sprintf('00000000-0000-4000-8000-%012d', $i)]);
+        }
+        $operation = '33333333-3333-4333-8333-333333333333';
+        try {
+            $service->saveEditorDraft((int) $this->space['id'], $this->userId, $document, $tab, 2, 0, ['title' => 'Reactivated'], 1, $operation);
+            self::fail('Acknowledged contexts must count again when reactivated.');
+        } catch (\InvalidArgumentException $error) {
+            self::assertStringContainsString('Active draft limit', $error->getMessage());
+        }
+        $service->acknowledgeDraft((int) $this->space['id'], $this->userId, $document, '00000000-0000-4000-8000-000000000000', 1);
+        $saved = $service->saveEditorDraft((int) $this->space['id'], $this->userId, $document, $tab, 2, 0, ['title' => 'Reactivated'], 1, $operation);
+        self::assertSame(2, $saved['draft_version']);
+        self::assertSame(100, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM page_editor_drafts WHERE user_id = ? AND sequence > acknowledged_sequence', [$this->userId])['total']);
+    }
+
+    public function testMarkdownInlineImagesAndConversionBackupsUseProtectedSourcesWithoutDuplicatingFiles(): void
+    {
+        $db = $this->app->database(); $writer = new PageWriteService($db, $this->app->basePath());
+        $image = imagecreatetruecolor(2, 1); ob_start(); imagepng($image); $bytes = ob_get_clean(); imagedestroy($image);
+        $source = 'data:image/png;base64,' . base64_encode($bytes);
+        $pageIds = [];
+        try {
+            $literalCode = "\n\n```text\n![Example](" . $source . ")\n```\n\n`![Inline](" . $source . ")`";
+            $input = ['title' => 'Markdown image', 'content_format' => 'markdown', 'content_markdown' => '![Pixel](' . $source . ')' . $literalCode,
+                'operation_id' => '77777777-7777-4777-8777-777777777777'];
+            $page = $writer->save($this->space, null, $input, $this->userId, allowInlineImages: true); $pageIds[] = $page['id'];
+            self::assertStringContainsString($literalCode, $page['content_markdown']);
+            self::assertStringStartsWith('![Pixel](/attachments/', $page['content_markdown']);
+            self::assertStringContainsString('/attachments/', $page['content_markdown']);
+            self::assertSame($page['content_markdown'], json_decode($page['document_json'], true)['source']);
+            self::assertStringContainsString('/attachments/', $page['asset_replacements'][$source]);
+            self::assertSame($page, $writer->save($this->space, null, $input, $this->userId, allowInlineImages: true));
+            $writer->save($this->space, $page, ['base_version' => 1], $this->userId, allowInlineImages: true);
+            self::assertSame(1, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM attachments WHERE page_id = ?', [$page['id']])['total']);
+            $backupInput = ['title' => 'Image only in conversion source', 'content_html' => '<p>Current content</p>',
+                'conversion_backup' => ['format' => 'markdown', 'html' => '', 'markdown' => '![Prior image](' . $source . ')']];
+            try {
+                $writer->save($this->space, null, $backupInput, $this->userId);
+                self::fail('Images in Markdown backups require attachment permission.');
+            } catch (\DomainException $error) { self::assertStringContainsString('attachment.upload', $error->getMessage()); }
+            $storageKey = $db->fetchOne('SELECT storage_key FROM attachments WHERE page_id = ?', [$page['id']])['storage_key'];
+            self::assertFileExists((new \OpenWiki\Attachments\AttachmentService($db, $this->app->basePath()))->stagedPath($storageKey));
+            $backupPage = $writer->save($this->space, null, $backupInput, $this->userId, allowInlineImages: true); $pageIds[] = $backupPage['id'];
+            $revision = (new PageRepository($db))->revision((int) $backupPage['id'], 1);
+            $backup = json_decode($revision['conversion_backup_json'], true);
+            self::assertStringNotContainsString('data:image/', $backup['markdown']);
+            self::assertStringContainsString('/attachments/', $backup['markdown']);
+            self::assertSame('', $backup['html']);
+            self::assertStringContainsString('/attachments/', $backupPage['asset_replacements'][$source]);
+        } finally {
+            $attachments = new \OpenWiki\Attachments\AttachmentService($db, $this->app->basePath());
+            foreach ($pageIds as $id) $attachments->purgeStorageKeys(array_column($db->fetchAll('SELECT storage_key FROM attachments WHERE page_id = ?', [$id]), 'storage_key'));
+        }
+    }
+
     private function request(array $input, ?string $token = null): Request
     {
         $server = ['HTTP_ACCEPT' => 'application/json'];

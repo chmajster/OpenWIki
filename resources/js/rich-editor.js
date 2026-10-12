@@ -2,14 +2,28 @@ import {Editor, Extension, Node, Mark, mergeAttributes} from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import {Table, TableRow, TableCell, TableHeader} from '@tiptap/extension-table';
 import {TaskList, TaskItem} from '@tiptap/extension-list';
-import {NodeSelection} from '@tiptap/pm/state';
+import {NodeSelection, TextSelection} from '@tiptap/pm/state';
+import {documentBlocks} from './document-blocks.js';
 
 const globals = ['id', 'class', 'title', 'aria-label'];
+const DocumentNavigation = Extension.create({
+    name: 'documentNavigation', priority: 1000,
+    addKeyboardShortcuts() {
+        const move = (end) => {
+            const {state, view} = this.editor;
+            const selection = TextSelection.findFrom(state.doc.resolve(end ? state.doc.content.size : 0), end ? -1 : 1, true);
+            if (!selection) return false;
+            view.dispatch(state.tr.setSelection(selection).scrollIntoView()); return true;
+        };
+        return {'Mod-Home': () => move(false), 'Mod-End': () => move(true)};
+    }
+});
 const globalAttributes = Extension.create({
     name: 'legacyAttributes',
     addGlobalAttributes() {
         return [{types: ['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'listItem', 'taskList', 'taskItem', 'callout', 'table', 'tableRow', 'tableCell', 'tableHeader', 'horizontalRule', 'link', 'bold', 'italic', 'underline', 'strike', 'code'],
-            attributes: Object.fromEntries(globals.map((name) => [name, {default: null, parseHTML: (element) => element.getAttribute(name)}]))}];
+            attributes: Object.fromEntries(globals.map((name) => [name, {default: null, parseHTML: (element) => element.getAttribute(name)}]))},
+            {types: ['link'], attributes: Object.fromEntries(['data-draft-file-id', 'data-attachment-id', 'data-file-size', 'data-file-type'].map((name) => [name, {default: null}]))}];
     }
 });
 
@@ -31,27 +45,28 @@ const Container = Node.create({
 const Span = Mark.create({
     name: 'legacySpan', inclusive: false,
     addAttributes() { return Object.fromEntries([...globals, 'data-callout'].map((name) => [name, {default: null}])); },
-    parseHTML() { return [{tag: 'span', getAttrs: (element) => Object.fromEntries([...globals, 'data-callout'].map((name) => [name, element.getAttribute(name)]))}]; },
+    parseHTML() { return [{tag: 'span:not([data-text-color]):not([data-highlight])', getAttrs: (element) => Object.fromEntries([...globals, 'data-callout'].map((name) => [name, element.getAttribute(name)]))}]; },
     renderHTML({HTMLAttributes}) { return ['span', HTMLAttributes, 0]; }
 });
 const ImageFigure = Node.create({
     name: 'imageFigure', group: 'block', atom: true, draggable: true,
-    addAttributes() { return Object.fromEntries(['src', 'alt', 'width', 'height', 'loading', 'data-attachment-id', 'data-original-width', 'data-original-height', 'caption', 'figureId', 'figureClass'].map((name) => [name, {default: null, rendered: false}])); },
+    addAttributes() { return Object.fromEntries(['src', 'alt', 'width', 'height', 'loading', 'data-attachment-id', 'data-draft-file-id', 'data-original-width', 'data-original-height', 'caption', 'figureId', 'figureClass', 'alignment'].map((name) => [name, {default: null, rendered: false}])); },
     parseHTML() {
         const attrs = (element) => {
             const image = element.tagName === 'IMG' ? element : element.querySelector('img');
             if (!image) return false;
-            return {...Object.fromEntries(['src', 'alt', 'width', 'height', 'loading', 'data-attachment-id', 'data-original-width', 'data-original-height'].map((name) => [name, image.getAttribute(name)])),
+            return {...Object.fromEntries(['src', 'alt', 'width', 'height', 'loading', 'data-attachment-id', 'data-draft-file-id', 'data-original-width', 'data-original-height'].map((name) => [name, image.getAttribute(name)])),
                 caption: element.querySelector('figcaption')?.textContent || null,
                 figureId: element.tagName === 'FIGURE' ? element.getAttribute('id') : null,
-                figureClass: element.tagName === 'FIGURE' ? element.getAttribute('class') : null};
+                figureClass: element.tagName === 'FIGURE' ? element.getAttribute('class') : null,
+                alignment: element.tagName === 'FIGURE' ? element.getAttribute('data-align') : null};
         };
         return [{tag: 'figure', priority: 100, getAttrs: attrs}, {tag: 'img[src]', getAttrs: attrs}];
     },
     renderHTML({node}) {
         const attrs = node.attrs;
-        const image = Object.fromEntries(['src', 'alt', 'width', 'height', 'loading', 'data-attachment-id', 'data-original-width', 'data-original-height'].filter((key) => attrs[key] !== null).map((key) => [key, attrs[key]]));
-        return ['figure', mergeAttributes(attrs.figureId ? {id: attrs.figureId} : {}, attrs.figureClass ? {class: attrs.figureClass} : {}),
+        const image = Object.fromEntries(['src', 'alt', 'width', 'height', 'loading', 'data-attachment-id', 'data-draft-file-id', 'data-original-width', 'data-original-height'].filter((key) => attrs[key] !== null).map((key) => [key, attrs[key]]));
+        return ['figure', mergeAttributes(attrs.figureId ? {id: attrs.figureId} : {}, attrs.figureClass ? {class: attrs.figureClass} : {}, attrs.alignment ? {'data-align': attrs.alignment} : {}),
             ['img', image], ...(attrs.caption ? [['figcaption', {}, attrs.caption]] : [])];
     }
 });
@@ -65,16 +80,32 @@ const CompatibleTable = Table.extend({
 export function createRichEditor(element, html, sanitize, onUpdate, onSelection) {
     const editor = new Editor({
         element, content: html, injectCSS: false,
-        extensions: [StarterKit.configure({link: {openOnClick: false, autolink: false, defaultProtocol: 'https', HTMLAttributes: {target: null, rel: null}}, codeBlock: false}),
+        extensions: [DocumentNavigation, StarterKit.configure({link: {openOnClick: false, autolink: false, defaultProtocol: 'https', HTMLAttributes: {target: null, rel: null}}, codeBlock: false}),
             // Keep code language in the same data-language attribute used by PHP revisions.
             Node.create({name: 'codeBlock', group: 'block', content: 'text*', marks: '', code: true, defining: true,
-                addAttributes() { return {language: {default: null, parseHTML: (e) => e.querySelector('code')?.getAttribute('data-language') || e.querySelector('code')?.className.replace(/^language-/, '') || null, rendered: false}}; },
-                parseHTML() { return [{tag: 'pre', preserveWhitespace: 'full'}]; },
-                renderHTML({node}) { return ['pre', {}, ['code', node.attrs.language ? {'data-language': node.attrs.language} : {}, 0]]; },
+                addAttributes() { return {language: {default: null, parseHTML: (e) => e.querySelector('code')?.getAttribute('data-language') || e.querySelector('code')?.className.replace(/^language-/, '') || null, rendered: false},
+                    'data-line-numbers': {default: null, parseHTML: element => element.getAttribute('data-line-numbers')},
+                    'data-code-wrap': {default: null, parseHTML: element => element.getAttribute('data-code-wrap')}}; },
+                parseHTML() { return [{tag: 'pre:not([data-diagram])', preserveWhitespace: 'full'}]; },
+                renderHTML({node, HTMLAttributes}) { return ['pre', HTMLAttributes, ['code', node.attrs.language ? {'data-language': node.attrs.language} : {}, 0]]; },
+                addNodeView() { return ({node}) => {
+                    const dom = document.createElement('pre'), gutter = document.createElement('span'), contentDOM = document.createElement('code');
+                    gutter.className = 'code-line-numbers'; gutter.contentEditable = 'false'; gutter.setAttribute('aria-hidden', 'true'); dom.append(gutter, contentDOM);
+                    const update = (next) => {
+                        if (next.type.name !== 'codeBlock') return false;
+                        gutter.hidden = next.attrs['data-line-numbers'] !== 'true';
+                        gutter.textContent = Array.from({length: next.textContent.split('\n').length}, (_, index) => index + 1).join('\n');
+                        for (const name of ['data-line-numbers', 'data-code-wrap']) next.attrs[name] === null ? dom.removeAttribute(name) : dom.setAttribute(name, next.attrs[name]);
+                        next.attrs.language ? contentDOM.setAttribute('data-language', next.attrs.language) : contentDOM.removeAttribute('data-language');
+                        return true;
+                    };
+                    update(node); return {dom, contentDOM, update};
+                }; },
                 addCommands() { return {toggleCodeBlock: (attributes) => ({commands}) => commands.toggleNode('codeBlock', 'paragraph', attributes)}; },
                 addKeyboardShortcuts() { return {'Mod-Alt-c': () => this.editor.commands.toggleCodeBlock(), 'Mod-Enter': () => this.editor.commands.exitCode(), Enter: () => this.editor.commands.newlineInCode()}; }
-            }), CompatibleTable.configure({resizable: false}), TableRow, TableCell, TableHeader,
-            TaskList, Tasks.configure({nested: true, a11y: {checkboxLabel: (node) => window.wikiTranslate('Task') + ': ' + (node.textContent || window.wikiTranslate('Empty task'))}}), ImageFigure, Callout, Container, Span, globalAttributes],
+            }), CompatibleTable.configure({resizable: true, allowTableNodeSelection: true}), TableRow, TableCell, TableHeader,
+            TaskList, Tasks.configure({nested: true, a11y: {checkboxLabel: (node) => window.wikiTranslate('Task') + ': ' + (node.textContent || window.wikiTranslate('Empty task'))}}), ImageFigure, Callout, Container, Span, globalAttributes,
+            ...documentBlocks],
         editorProps: {
             attributes: {'data-visual-editor': '', role: 'textbox', 'aria-label': element.dataset.label, 'aria-multiline': 'true', class: 'visual-editor document-content'},
             transformPastedHTML: sanitize,
@@ -90,6 +121,21 @@ export function createRichEditor(element, html, sanitize, onUpdate, onSelection)
         onUpdate: () => onUpdate(),
         onSelectionUpdate: () => onSelection?.()
     });
+    editor.view.dom.addEventListener('paste', event => {
+        if (event.clipboardData?.files.length) return;
+        const html = event.clipboardData?.getData('text/html') || '';
+        if (!html) return;
+        const parsed = new DOMParser().parseFromString(html, 'text/html'), stack = [[parsed.body, 0]];
+        let count = 0, exceeded = html.length > 2000000;
+        while (!exceeded && stack.length) {
+            const [node, depth] = stack.pop(); exceeded = depth > 100 || ++count > 50000;
+            for (const child of node.children) stack.push([child, depth + 1]);
+        }
+        if (exceeded) {
+            event.preventDefault(); event.stopImmediatePropagation();
+            element.closest('[data-wiki-editor]').querySelector('[data-block-feedback]').textContent = 'Wklejana struktura przekracza limit dokumentu. Wklej mniejszy fragment. Bieżąca treść pozostaje bez zmian.';
+        }
+    }, true);
     return editor;
 }
 

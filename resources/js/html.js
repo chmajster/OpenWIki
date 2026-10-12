@@ -1,22 +1,22 @@
 export const sanitizeHtml = (html, policy) => {
     const doc = new DOMParser().parseFromString(String(html), 'text/html');
-    const clean = (parent) => {
-        for (const node of Array.from(parent.children)) {
+        for (const node of Array.from(doc.body.querySelectorAll('*')).reverse()) {
             const tag = node.tagName.toLowerCase();
             if (['script', 'style', 'iframe', 'object', 'embed', 'svg', 'math'].includes(tag)) { node.remove(); continue; }
-            clean(node);
             if (!policy.tags.includes(tag)) { node.replaceWith(...node.childNodes); continue; }
             for (const attr of Array.from(node.attributes)) {
                 const allowed = policy.global.concat(policy.attributes[tag] || []).includes(attr.name);
                 const url = attr.value.trim();
                 const safe = !['src', 'href'].includes(attr.name) || url === '' || /^[/#]/.test(url)
                     || /^(https?:|mailto:)/i.test(url) || (tag === 'img' && /^data:image\/(png|jpeg|gif|webp);base64,/i.test(url));
-                if (!allowed || !safe) node.removeAttribute(attr.name);
+                const controlled = !policy.values?.[attr.name] || policy.values[attr.name].includes(attr.value);
+                const widths = attr.name !== 'colwidth' || (/^(0|[1-9][0-9]{0,3})(,(0|[1-9][0-9]{0,3})){0,29}$/.test(attr.value) && attr.value.split(',').every(value => Number(value) <= 1600));
+                const spans = !['colspan', 'rowspan'].includes(attr.name) || (/^[0-9]+$/.test(attr.value) && Number(attr.value) >= 1 && Number(attr.value) <= 100);
+                const dimensions = !['width', 'height', 'data-original-width', 'data-original-height'].includes(attr.name) || (/^[0-9]+$/.test(attr.value) && Number(attr.value) >= 1 && Number(attr.value) <= 20000);
+                if (!allowed || !safe || !controlled || !widths || !spans || !dimensions) node.removeAttribute(attr.name);
             }
             if (tag === 'a' && node.target === '_blank') node.rel = 'noopener noreferrer';
         }
-    };
-    clean(doc.body);
     return doc.body.innerHTML;
 };
 

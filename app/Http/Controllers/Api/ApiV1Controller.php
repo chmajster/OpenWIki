@@ -3306,9 +3306,12 @@ final class ApiV1Controller extends Controller
 
     private function pageResource(array $page): array
     {
+        $page = \OpenWiki\Wiki\ContentService::storedSource($page);
         return $this->pageListResource($page) + [
             'content_format' => $page['content_format'],
             'content_html' => $page['content_html'],
+            'document' => ['version' => \OpenWiki\Wiki\ContentService::SCHEMA_VERSION, 'format' => $page['content_format'],
+                'source' => $page['content_format'] === 'visual' ? $page['content_html'] : $page['content_markdown']],
             'content_markdown' => $page['content_markdown'],
             'tags' => $page['tags'] ?? (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
         ];

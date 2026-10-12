@@ -298,6 +298,9 @@ final class MacroService
     private function userProfile(string $username): string
     {
         $username = trim($username);
+        if (!$this->app->auth()->can('user.view') && strcasecmp($username, (string) ($this->app->auth()->user()['username'] ?? '')) !== 0) {
+            return '<span class="macro-error">User not available</span>';
+        }
         if ($username === '') {
             return '<span class="macro-error">Username required</span>';
         }
