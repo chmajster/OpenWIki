@@ -1177,3 +1177,4 @@ dialog .button { margin: 8px 8px 0 0; }
 }
 
 .revision-diff{overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}.revision-diff span{display:block}.diff-removed{background:#ffe3e3;color:#711}.diff-added{background:#dcfce7;color:#14532d}
+.search-combobox{position:relative;min-width:0}.search-page-form .search-combobox{flex:1}.search-combobox input{width:100%}.search-suggestions{position:absolute;inset:100% 0 auto;z-index:30;list-style:none;margin:4px 0;padding:4px;background:var(--surface,#fff);border:1px solid var(--border,#ccd);border-radius:8px;box-shadow:0 6px 24px #0002;max-height:320px;overflow:auto}.search-suggestions a{display:block;padding:10px;overflow-wrap:anywhere}.search-suggestions [aria-selected=true]{background:#dbeafe}.search-pagination{margin:20px 0;justify-content:center}.search-result{overflow-wrap:anywhere}

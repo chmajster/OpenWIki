@@ -13,6 +13,7 @@ $notificationCount = $currentUser === null
     <title><?= $e($pageTitle) ?></title>
     <link rel="stylesheet" href="/assets/app.css">
     <script src="/assets/app.js" defer></script>
+    <script src="/assets/search.js" defer></script>
     <script src="/assets/document-reader.js" defer></script>
 </head>
 <body data-user-id="<?= (int) ($currentUser['id'] ?? 0) ?>">
@@ -21,9 +22,11 @@ $notificationCount = $currentUser === null
     <div class="topbar__inner">
         <a class="brand" href="/"><?= $e($app->name()) ?></a>
         <?php if ($app->installed()): ?>
-            <form class="top-search" method="get" action="/search" role="search">
+            <form class="top-search search-combobox" method="get" action="/search" role="search" data-search-form>
                 <label class="sr-only" for="global-search"><?= $e($t('Search')) ?></label>
-                <input id="global-search" name="q" type="search" placeholder="<?= $e($t('Search documentation…')) ?>" value="<?= $e($_GET['q'] ?? '') ?>" autocomplete="off">
+                <input id="global-search" name="q" type="search" placeholder="<?= $e($t('Search documentation…')) ?>" value="<?= $e(is_scalar($_GET['q'] ?? '') ? ($_GET['q'] ?? '') : '') ?>" autocomplete="off" data-search-query aria-autocomplete="list" aria-controls="global-search-suggestions" aria-expanded="false">
+                <ul id="global-search-suggestions" class="search-suggestions" role="listbox" aria-label="Podpowiedzi wyszukiwania" hidden></ul>
+                <span class="sr-only" data-search-suggestion-status role="status" aria-live="polite"></span>
                 <span class="shortcut">Ctrl K</span>
             </form>
             <nav class="top-actions" aria-label="<?= $e($t('Account actions')) ?>">

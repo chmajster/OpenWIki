@@ -44,6 +44,19 @@ $bytes = static function (?int $value): string {
         </div>
     </div>
 
+    <div class="card panel" data-search-index>
+        <div class="panel__header"><h2>Indeks wyszukiwania</h2></div>
+        <p role="status">Stan: <?= $e($searchIndex['state']) ?> · <?= (int) $searchIndex['scanned'] ?> / <?= (int) $searchIndex['total'] ?></p>
+        <progress aria-label="Postęp indeksowania" value="<?= (int) $searchIndex['scanned'] ?>" max="<?= max(1, (int) $searchIndex['total']) ?>"></progress>
+        <?php if (!empty($searchIndex['error'])): ?><p class="alert alert--error"><?= $e($searchIndex['error']) ?></p><?php endif; ?>
+        <p class="muted">Zmiany stron aktualizują FULLTEXT automatycznie. Naprawa tekstu działa w partiach po 200 stron przez <code>cron:run</code> lub <code>search:work</code>. Snapshoty rewizji pozostają niezmienione.</p>
+        <form method="post" action="/admin/system/search-index" class="form-actions">
+            <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+            <button class="button button--secondary" type="submit" <?= in_array($searchIndex['state'], ['queued','running'], true) ? 'disabled' : '' ?>><?= $searchIndex['state'] === 'failed' ? 'Wznów indeksowanie' : 'Przebuduj indeks' ?></button>
+            <a class="button button--ghost" href="/admin/system">Odśwież postęp</a>
+        </form>
+    </div>
+
     <div class="card panel">
         <div class="panel__header"><h2>Gotowość i aktualizacja</h2></div>
         <dl class="definition-list">

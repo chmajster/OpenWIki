@@ -309,6 +309,11 @@ Raw PHP session IDs are never displayed in the UI. Session actions use SHA-256 f
 
 Global search at `/search` covers pages, Spaces, users, comments, tags and attachment names.
 
+UI and API share complete ACL-filtered pagination, accurate totals, published/working
+revision visibility, matching-context snippets and keyboard suggestions. See
+[search semantics and index recovery](docs/search.md) and the
+[10,000-page benchmark](docs/search-benchmark.md).
+
 Filters include:
 
 - result type,
@@ -324,6 +329,8 @@ Rebuild searchable plain-text page content after imports or data repair with:
 
 ```bash
 php bin/console search:index
+php bin/console search:status
+php bin/console cron:run
 ```
 
 

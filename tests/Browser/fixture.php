@@ -52,7 +52,7 @@ if (($argv[1] ?? '') === 'seed') {
         $database->execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [$users[$index]['id'], $id]);
         foreach ($index === 3 ? ['space.view'] : ['space.view', 'space.edit'] as $name) $database->execute('INSERT INTO space_acl (space_id, principal_type, principal_id, permission, effect) VALUES (?, "user", ?, ?, "allow")', [$spaceId, $users[$index]['id'], $name]);
     }
-    $scopes = ['pages:read', 'pages:write', 'spaces:read', 'spaces:write', 'attachments:read', 'attachments:write', 'users:read', 'users:write', 'roles:read', 'roles:write', 'groups:read', 'groups:write'];
+    $scopes = ['pages:read', 'pages:write', 'spaces:read', 'spaces:write', 'attachments:read', 'attachments:write', 'users:read', 'users:write', 'roles:read', 'roles:write', 'groups:read', 'groups:write', 'search:read'];
     $workflowRoles = []; $workflowTokens = [];
     foreach ([5 => ['page.view', 'page.create', 'page.edit', 'attachment.upload'], 6 => ['page.view', 'page.review', 'page.verify'], 7 => ['page.view', 'page.publish'], 8 => ['page.view']] as $index => $names) {
         $role = $database->insert('INSERT INTO roles (name, slug) VALUES (?, ?)', ['Workflow browser ' . $suffix . '-' . $index, 'workflow-browser-' . $suffix . '-' . $index]);
@@ -72,6 +72,19 @@ if (($argv[1] ?? '') === 'seed') {
     echo json_encode(['imageBase64' => $imageBase64, 'users'  => $users, 'roleId' => $roleId, 'limitedRoleId' => $limitedRole, 'securityRoleIds' => $securityRoles,
         'workflowRoleIds' => $workflowRoles, 'workflowTokens' => $workflowTokens,
         'wildcardPermissionId' => $wildcardPermissionId, 'delegateToken' => $delegateToken, 'spaceId' => $spaceId, 'spaceKey' => $spaceKey, 'token' => $token], JSON_THROW_ON_ERROR);
+} elseif (($argv[1] ?? '') === 'search-seed') {
+    $data = json_decode(file_get_contents(dirname(__DIR__, 2) . '/storage/temp/editor-browser.json'), true, 512, JSON_THROW_ON_ERROR);
+    $marker = 'search-' . bin2hex(random_bytes(5)); $owner = $data['users'][0]['id'];
+    $space = (new SpaceRepository($database))->create(['name' => 'Search browser', 'space_key' => strtoupper($marker), 'description' => null, 'owner_id' => $owner, 'visibility' => 'public']);
+    $make = static function (string $title, ?int $parent = null, bool $inherit = true) use ($database, $space, $owner): int {
+        return $database->insert('INSERT INTO pages (space_id,parent_id,title,slug,content_html,content_text,content_format,author_id,owner_id,inherit_acl,status,version,created_at,updated_at) VALUES (?, ?, ?, ?, "<p>Zażółć IP C++ foo_bar router</p>", "Zażółć IP C++ foo_bar router", "visual", ?, ?, ?, "published", 1, "2026-01-01 00:00:00", "2026-01-01 00:00:00")', [$space, $parent, $title, bin2hex(random_bytes(10)), $owner, $owner, (int) $inherit]);
+    };
+    $parent = $make('SECRET ancestor ' . $marker);
+    $database->execute('INSERT INTO page_acl (page_id,principal_type,principal_id,permission,effect,inherit_to_children) VALUES (?,"user",?,"page.view","allow",1)', [$parent,$owner]);
+    $database->transaction(function () use ($make,$marker,$parent): void { for ($i=0;$i<220;$i++) $make($marker,$parent); });
+    $visible = []; for ($i=0;$i<35;$i++) $visible[] = $make($marker . ' visible ' . $i);
+    $visible[] = $make($marker . ' independent child',$parent,false);
+    echo json_encode(['query' => $marker, 'spaceId' => $space, 'visible' => $visible], JSON_THROW_ON_ERROR);
 } elseif (in_array($argv[1] ?? '', ['acl-search-scale', 'acl-search-cleanup'], true)) {
     $data = json_decode(file_get_contents(dirname(__DIR__, 2) . '/storage/temp/editor-browser.json'), true, 512, JSON_THROW_ON_ERROR);
     $parentId = filter_var($argv[2] ?? '', FILTER_VALIDATE_INT);

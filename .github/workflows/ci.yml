@@ -94,6 +94,34 @@ jobs:
           OPENWIKI_TEST_DB_PASSWORD: root
         run: npm run test:browser
 
+      - name: Reproducible 10000-page search benchmark
+        env:
+          OPENWIKI_TEST_DB_HOST: 127.0.0.1
+          OPENWIKI_TEST_DB_PORT: 3306
+          OPENWIKI_TEST_DB_DATABASE: openwiki_search_benchmark_test
+          OPENWIKI_TEST_DB_USERNAME: root
+          OPENWIKI_TEST_DB_PASSWORD: root
+          APP_KEY: benchmark-test-key-benchmark-test-key
+        run: |
+          mysql -h127.0.0.1 -uroot -proot -e 'CREATE DATABASE openwiki_search_benchmark_test CHARACTER SET utf8mb4'
+          git fetch origin 97a833147bb003d8b92ff95cb5675c78ce690ab5
+          mkdir -p storage/temp/search-baseline
+          git archive 97a833147bb003d8b92ff95cb5675c78ce690ab5 | tar -x -C storage/temp/search-baseline
+          php tests/Search/benchmark.php --seed
+          php tests/Search/benchmark.php --baseline > storage/temp/search-before.json
+          php tests/Search/benchmark.php > storage/temp/search-after.json
+          python3 tests/Search/report.py storage/temp/search-before.json storage/temp/search-after.json > storage/temp/search-report.md
+          cat storage/temp/search-report.md
+
+      - name: Search benchmark measurements
+        uses: actions/upload-artifact@v4
+        with:
+          name: search-benchmark
+          path: |
+            storage/temp/search-before.json
+            storage/temp/search-after.json
+            storage/temp/search-report.md
+
       - name: Non-root local runtime end-to-end
         env:
           OPENWIKI_TEST_DB_HOST: 127.0.0.1
