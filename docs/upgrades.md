@@ -19,7 +19,7 @@ sudo bash install.sh --upgrade-status --install-dir /var/www/openwiki
 sudo bash install.sh --resume --install-dir /var/www/openwiki
 ```
 
-`WERSJA_GIT` jest istniejącym tagiem, gałęzią lub pełnym SHA w oficjalnym repozytorium. Najlepiej wybrać konkretny tag albo SHA. Gałąź jest rozwiązywana tylko raz; wznowienie korzysta z zapisanego SHA, nawet jeśli gałąź później się zmieni. Kod powrotu 0 oznacza ukończenie operacji. Upgrade zwraca `upgraded` albo `unchanged` w statusie. Ponowienie tej samej wersji sprawdza gotowość i zachowuje poprzednią kopię odzyskiwania. Błąd etapu, niezgodny schemat i równoległa aktualizacja zwracają kod różny od 0.
+`WERSJA_GIT` jest istniejącym tagiem, gałęzią lub pełnym SHA w oficjalnym repozytorium. Najlepiej wybrać konkretny tag albo SHA. Gałąź jest rozwiązywana tylko raz; wznowienie korzysta z zapisanego SHA, nawet jeśli gałąź później się zmieni. Kod powrotu 0 oznacza ukończenie operacji. Upgrade zwraca `upgraded` albo `unchanged` w statusie. Ponowienie tej samej wersji sprawdza schemat, gotowość przez HTTP i worker, zachowując poprzednią kopię odzyskiwania. Wznowienie nieudanej weryfikacji tej samej wersji powtarza wyłącznie te sprawdzenia. Błąd etapu, niezgodny schemat i równoległa aktualizacja zwracają kod różny od 0.
 
 `--install` odmawia zmiany katalogu z `.env` lub znacznikiem instalacji. `--repair` poprawia konfigurację zarządzanych usług i uprawnienia, sprawdza gotowość, zachowuje kod oraz klucz i nie wykonuje migracji. `--diagnose`/`--status` są odczytem statusu usług, bazy, storage, schematu i aktualizacji. Brak gotowości daje niezerowy wynik. Tryb `--local` pozostaje osobnym serwerem developerskim.
 

@@ -264,6 +264,16 @@ jobs:
           test -L /var/www/openwiki-ci/current
           curl --fail --silent --show-error http://127.0.0.1/health >/dev/null
           sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --upgrade "$ref" </dev/null
+          recovery="$(sudo php -r '$v=json_decode(file_get_contents($argv[1]), true); echo $v["id"].":".$v["backup_sha256"];' /var/www/openwiki-ci/.openwiki/status.json)"
+          socket="$(readlink -f /run/php/openwiki-ci-alias.sock)"
+          service="$(sudo grep -l "^[[:space:]]*listen[[:space:]]*=[[:space:]]*$socket[[:space:]]*$" /etc/php/*/fpm/pool.d/*.conf | head -n1 | cut -d/ -f4)"
+          test -n "$service"
+          sudo systemctl stop "php$service-fpm.service"
+          if sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --upgrade "$ref" </dev/null; then exit 1; fi
+          sudo systemctl start "php$service-fpm.service"
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --resume </dev/null
+          after_recovery="$(sudo php -r '$v=json_decode(file_get_contents($argv[1]), true); echo $v["id"].":".$v["backup_sha256"];' /var/www/openwiki-ci/.openwiki/status.json)"
+          test "$recovery" = "$after_recovery"
           sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --repair </dev/null
           sudo touch /var/www/openwiki-ci/.openwiki/maintenance
           curl --fail --silent --show-error http://127.0.0.1/health/live >/dev/null

@@ -28,7 +28,7 @@ try {
         $old = $state->read();
         if (!in_array($old['status'], ['idle', 'completed', 'rolled_back', 'restored'], true)) throw new RuntimeException('An unfinished upgrade exists. Use --resume or controlled recovery.');
         unset($old['prior_state']);
-        $state->update(['operation' => 'upgrade', 'restore_database' => '', 'prior_state' => $old, 'id' => gmdate('YmdHis') . '-' . bin2hex(random_bytes(6)), 'status' => 'running', 'stage' => 'preflight', 'ref' => $argv[3],
+        $state->update(['operation' => 'upgrade', 'restore_database' => '', 'verification_only' => '', 'prior_state' => $old, 'id' => gmdate('YmdHis') . '-' . bin2hex(random_bytes(6)), 'status' => 'running', 'stage' => 'preflight', 'ref' => $argv[3],
             'completed' => [], 'sha' => null, 'previous' => null, 'backup_sha256' => null, 'error' => null]);
         exit(0);
     }
@@ -36,7 +36,7 @@ try {
         $previous = $state->read()['prior_state'] ?? [];
         // Keep the last verified recovery archive and previous release on a no-op.
         $state->update($previous + ['status' => 'completed']);
-        $state->update(['status' => 'completed', 'result' => 'unchanged']);
+        $state->update(['status' => 'completed', 'result' => 'unchanged', 'verification_only' => '']);
         exit(0);
     }
     if ($command === 'set') { $state->update([$argv[3] => $argv[4]]); exit(0); }

@@ -106,26 +106,27 @@ upgrade_launchers() {
   mv -f "$INSTALL_DIR/install.sh.next" "$INSTALL_DIR/install.sh"
 }
 
+upgrade_verify_runtime() {
+  if [[ ${UPGRADE_MANAGED_HOST:-1} == 1 ]]; then
+    local host
+    host=$(upgrade_tool app-host "$APP_DIR") || return 1
+    curl --fail --silent --show-error --location --max-redirs 3 --max-time 15 -H "Host: $host" http://127.0.0.1/health -o "$INSTALL_DIR/.openwiki/health.json" &&
+      php -r '$v=json_decode(file_get_contents($argv[1]), true); exit(($v["status"] ?? null) === "ok" && ($v["checks"]["database"] ?? false) === true && ($v["checks"]["storage"] ?? false) === true ? 0 : 1);' "$INSTALL_DIR/.openwiki/health.json" &&
+      runuser -u "$WEB_USER" -- php "$APP_DIR/bin/console" cron:run
+  else
+    php "$APP_DIR/bin/console" readiness && php "$APP_DIR/bin/console" cron:run
+  fi
+}
+
 upgrade_open_and_verify() {
   upgrade_tool ready "$APP_DIR"
   upgrade_runtime
   rm "$INSTALL_DIR/.openwiki/maintenance"
   flock -u 8
   unset OPENWIKI_UPGRADE_OWNER
-  if [[ ${UPGRADE_MANAGED_HOST:-1} == 1 ]]; then
-    local host
-    host=$(upgrade_tool app-host "$APP_DIR")
-    if ! curl --fail --silent --show-error --location --max-redirs 3 --max-time 15 -H "Host: $host" http://127.0.0.1/health -o "$INSTALL_DIR/.openwiki/health.json" ||
-       ! php -r '$v=json_decode(file_get_contents($argv[1]), true); exit(($v["status"] ?? null) === "ok" && ($v["checks"]["database"] ?? false) === true && ($v["checks"]["storage"] ?? false) === true ? 0 : 1);' "$INSTALL_DIR/.openwiki/health.json" ||
-       ! runuser -u "$WEB_USER" -- php "$APP_DIR/bin/console" cron:run; then
-      upgrade_pause
-      return 1
-    fi
-  else
-    if ! php "$APP_DIR/bin/console" readiness || ! php "$APP_DIR/bin/console" cron:run; then
-      upgrade_pause
-      return 1
-    fi
+  if ! upgrade_verify_runtime; then
+    upgrade_pause
+    return 1
   fi
 }
 
@@ -209,8 +210,11 @@ upgrade_mode() {
     [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || fail "Nieprawidłowy SHA wydania."
     upgrade_tool set sha "$sha"
   fi
-  if [[ "$MODE" == upgrade && ! -f "$directory/maintenance" && -f "$APP_DIR/.release-sha" && "$(cat "$APP_DIR/.release-sha")" == "$sha" ]]; then
+  if [[ ( "$MODE" == upgrade || "$(upgrade_get verification_only)" == 1 ) && ! -f "$directory/maintenance" && -f "$APP_DIR/.release-sha" && "$(cat "$APP_DIR/.release-sha")" == "$sha" ]]; then
+    upgrade_tool set verification_only 1
+    upgrade_begin verify-unchanged
     php "$APP_DIR/bin/console" readiness
+    upgrade_verify_runtime
     upgrade_tool unchanged
     ok "Wskazane wydanie już działa; bez zmian."
     return 0
