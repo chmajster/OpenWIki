@@ -478,7 +478,15 @@ final class ApiV1Controller extends Controller
             return $this->error('validation_error', $exception->getMessage(), 422);
         } catch (\RuntimeException $exception) {
             if ($exception->getMessage() === 'EDIT_CONFLICT') {
-                return Response::json(['error' => ['code' => 'edit_conflict', 'message' => 'The page has changed. Resolve the conflict before changing base_version.', 'conflict' => ['base_version' => (int) $baseVersion, 'base' => (new PageRepository($this->app->database()))->revision($pageId, (int) $baseVersion), 'local' => (array) $request->input(), 'server' => (new PageRepository($this->app->database()))->findById($pageId)]]], 409);
+                $repository = new PageRepository($this->app->database());
+                $server = $repository->findById($pageId);
+                if ($server !== null && !$this->pageWritePolicy($space, $context)('page.view', $server)) {
+                    return $this->error('forbidden', 'You no longer have permission to access the current page.', 403);
+                }
+                $content = new \OpenWiki\Wiki\ContentService();
+                return Response::json(['error' => ['code' => 'edit_conflict', 'message' => 'The page has changed. Resolve the conflict before changing base_version.',
+                    'conflict' => ['base_version' => (int) $baseVersion, 'base' => $content->safeProjection($repository->revision($pageId, (int) $baseVersion)),
+                        'local' => (array) $request->input(), 'server' => $content->safeProjection($server)]]], 409);
             }
             error_log('[OpenWiki API page update] ' . $exception->getMessage());
             return $this->error('server_error', 'Unable to update page.', 500);
@@ -516,21 +524,17 @@ final class ApiV1Controller extends Controller
             return $this->error('forbidden', 'You cannot delete this page.', 403);
         }
 
-        $this->app->database()->execute(
-            'UPDATE pages SET deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
-             WHERE id = :id AND deleted_at IS NULL',
-            ['id' => $pageId]
-        );
-
-        (new AuditLogger($this->app->database()))->log(
-            'PAGE_DELETED',
-            'page',
-            $pageId,
-            (int) $context['user']['id'],
-            $request,
-            ['title' => $row['title'], 'slug' => $row['slug'], 'status' => $row['status']],
-            ['deleted' => true]
-        );
+        try {
+            (new \OpenWiki\Wiki\PageLifecycleService($this->app->database(), $this->app->basePath()))
+                ->trash($space, $pageId, (int) $context['user']['id'], $this->pageWritePolicy($space, $context, subtreeSnapshot: true), $request);
+        } catch (\DomainException $exception) {
+            return $this->error('forbidden', $exception->getMessage(), 403);
+        } catch (\InvalidArgumentException $exception) {
+            return $this->error('not_found', $exception->getMessage(), 404);
+        } catch (\Throwable $exception) {
+            error_log('[OpenWiki API page lifecycle] ' . $exception->getMessage());
+            return $this->error('server_error', 'Unable to move the page subtree to trash.', 500);
+        }
 
         return new Response('', 204);
     }
@@ -1145,7 +1149,7 @@ final class ApiV1Controller extends Controller
         }
 
         try {
-            $service = new DirectoryAdminService($this->app->database());
+            $service = new DirectoryAdminService($this->app->database(), \OpenWiki\Admin\AdminActor::user((int) $context['user']['id']));
             $userId = $service->createUser((array) $request->input());
             $user = $service->user($userId);
             if ($user === null) {
@@ -1169,6 +1173,8 @@ final class ApiV1Controller extends Controller
             return Response::json([
                 'data' => $this->userResource($user),
             ], 201);
+        } catch (\DomainException $exception) {
+            return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->error(
                 'validation_error',
@@ -1197,7 +1203,7 @@ final class ApiV1Controller extends Controller
         }
 
         $userId = $this->positiveId($id);
-        $service = new DirectoryAdminService($this->app->database());
+        $service = new DirectoryAdminService($this->app->database(), \OpenWiki\Admin\AdminActor::user((int) $context['user']['id']));
         $existing = $userId === null ? null : $service->user($userId);
         if ($existing === null) {
             return $this->error('not_found', 'User not found.', 404);
@@ -1267,6 +1273,8 @@ final class ApiV1Controller extends Controller
             return Response::json([
                 'data' => $this->userResource($updated),
             ]);
+        } catch (\DomainException $exception) {
+            return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->error(
                 'validation_error',
@@ -1306,13 +1314,18 @@ final class ApiV1Controller extends Controller
             );
         }
 
-        $service = new DirectoryAdminService($this->app->database());
+        $service = new DirectoryAdminService($this->app->database(), \OpenWiki\Admin\AdminActor::user((int) $context['user']['id']));
         $existing = $service->user($userId);
         if ($existing === null) {
             return $this->error('not_found', 'User not found.', 404);
         }
 
-        if (!$service->softDeleteUser($userId)) {
+        try {
+            $deleted = $service->softDeleteUser($userId);
+        } catch (\DomainException $exception) {
+            return $this->error('forbidden', $exception->getMessage(), 403);
+        }
+        if (!$deleted) {
             return $this->error('not_found', 'User not found.', 404);
         }
 
@@ -1407,7 +1420,7 @@ final class ApiV1Controller extends Controller
         }
 
         try {
-            $service = new DirectoryAdminService($this->app->database());
+            $service = new DirectoryAdminService($this->app->database(), \OpenWiki\Admin\AdminActor::user((int) $context['user']['id']));
             $groupId = $service->saveGroup(
                 null,
                 (array) $request->input()
@@ -1434,6 +1447,8 @@ final class ApiV1Controller extends Controller
             return Response::json([
                 'data' => $this->groupResource($group),
             ], 201);
+        } catch (\DomainException $exception) {
+            return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->error(
                 'validation_error',
@@ -1462,7 +1477,7 @@ final class ApiV1Controller extends Controller
         }
 
         $groupId = $this->positiveId($id);
-        $service = new DirectoryAdminService($this->app->database());
+        $service = new DirectoryAdminService($this->app->database(), \OpenWiki\Admin\AdminActor::user((int) $context['user']['id']));
         $existing = $groupId === null ? null : $service->group($groupId);
         if ($existing === null) {
             return $this->error('not_found', 'Group not found.', 404);
@@ -1505,6 +1520,8 @@ final class ApiV1Controller extends Controller
             return Response::json([
                 'data' => $this->groupResource($updated),
             ]);
+        } catch (\DomainException $exception) {
+            return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->error(
                 'validation_error',
@@ -1533,7 +1550,7 @@ final class ApiV1Controller extends Controller
         }
 
         $groupId = $this->positiveId($id);
-        $service = new DirectoryAdminService($this->app->database());
+        $service = new DirectoryAdminService($this->app->database(), \OpenWiki\Admin\AdminActor::user((int) $context['user']['id']));
         $existing = $groupId === null ? null : $service->group($groupId);
         if ($existing === null) {
             return $this->error('not_found', 'Group not found.', 404);
@@ -1559,6 +1576,8 @@ final class ApiV1Controller extends Controller
             );
 
             return new Response('', 204);
+        } catch (\DomainException $exception) {
+            return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->error(
                 'validation_error',
@@ -1633,7 +1652,7 @@ final class ApiV1Controller extends Controller
         }
 
         try {
-            $service = new DirectoryAdminService($this->app->database());
+            $service = new DirectoryAdminService($this->app->database(), \OpenWiki\Admin\AdminActor::user((int) $context['user']['id']));
             $roleId = $service->saveRole(
                 null,
                 (array) $request->input()
@@ -1660,6 +1679,8 @@ final class ApiV1Controller extends Controller
             return Response::json([
                 'data' => $this->roleResource($role),
             ], 201);
+        } catch (\DomainException $exception) {
+            return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->error(
                 'validation_error',
@@ -1688,7 +1709,7 @@ final class ApiV1Controller extends Controller
         }
 
         $roleId = $this->positiveId($id);
-        $service = new DirectoryAdminService($this->app->database());
+        $service = new DirectoryAdminService($this->app->database(), \OpenWiki\Admin\AdminActor::user((int) $context['user']['id']));
         $existing = $roleId === null ? null : $service->role($roleId);
         if ($existing === null) {
             return $this->error('not_found', 'Role not found.', 404);
@@ -1731,6 +1752,8 @@ final class ApiV1Controller extends Controller
             return Response::json([
                 'data' => $this->roleResource($updated),
             ]);
+        } catch (\DomainException $exception) {
+            return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->error(
                 'validation_error',
@@ -1759,7 +1782,7 @@ final class ApiV1Controller extends Controller
         }
 
         $roleId = $this->positiveId($id);
-        $service = new DirectoryAdminService($this->app->database());
+        $service = new DirectoryAdminService($this->app->database(), \OpenWiki\Admin\AdminActor::user((int) $context['user']['id']));
         $existing = $roleId === null ? null : $service->role($roleId);
         if ($existing === null) {
             return $this->error('not_found', 'Role not found.', 404);
@@ -1785,6 +1808,8 @@ final class ApiV1Controller extends Controller
             );
 
             return new Response('', 204);
+        } catch (\DomainException $exception) {
+            return $this->error('forbidden', $exception->getMessage(), 403);
         } catch (\InvalidArgumentException $exception) {
             return $this->error(
                 'validation_error',
@@ -3306,7 +3331,7 @@ final class ApiV1Controller extends Controller
 
     private function pageResource(array $page): array
     {
-        $page = \OpenWiki\Wiki\ContentService::storedSource($page);
+        $page = (new \OpenWiki\Wiki\ContentService())->safeProjection($page);
         return $this->pageListResource($page) + [
             'content_format' => $page['content_format'],
             'content_html' => $page['content_html'],

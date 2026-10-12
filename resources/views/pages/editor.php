@@ -202,7 +202,7 @@ $preserveParent = $isEdit && (int) $parentValue > 0
                             <?php if ($canPublish || $statusValue === 'published'): ?>
                                 <option value="published" <?= $statusValue === 'published' ? 'selected' : '' ?>><?= $e($t('Published')) ?></option>
                             <?php endif; ?>
-                            <?php if ($app->auth()->can('page.archive') || $statusValue === 'archived'): ?>
+                            <?php if (($canArchive ?? false) || $statusValue === 'archived'): ?>
                                 <option value="archived" <?= $statusValue === 'archived' ? 'selected' : '' ?>><?= $e($t('Archived')) ?></option>
                             <?php endif; ?>
                         </select>

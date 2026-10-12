@@ -71,7 +71,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                     </div>
                 </details>
                 <?php if ($canDeletePage): ?>
-                    <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/delete" data-confirm="<?= $e($t('Move this page to trash?')) ?>">
+                    <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/delete" data-confirm="<?= $e($t('Move this page and all its descendants to trash?')) ?>">
                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                         <button class="button button--ghost" type="submit"><?= $e($t('Delete')) ?></button>
                     </form>

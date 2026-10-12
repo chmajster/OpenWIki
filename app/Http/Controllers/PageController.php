@@ -45,7 +45,8 @@ final class PageController extends Controller
             'pages' => $this->visibleTree($space),
             'templates' => $templates,
             'tags' => [],
-            'canPublish' => $this->app->auth()->can('page.publish'),
+            'canPublish' => $this->pageWritePolicy($space)('page.publish', $page ?? null),
+            'canArchive' => $this->pageWritePolicy($space)('page.archive', $page ?? null),
             'canUploadImage' => $this->app->auth()->can('attachment.upload'),
             'imageUploadUrl' => null,
             'formAction' => '/spaces/' . rawurlencode($space['space_key']) . '/pages',
@@ -212,7 +213,8 @@ final class PageController extends Controller
             'pages' => $this->visibleTree($space),
             'templates' => [],
             'tags' => (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
-            'canPublish' => $this->app->auth()->can('page.publish'),
+            'canPublish' => $this->pageWritePolicy($space)('page.publish', $page ?? null),
+            'canArchive' => $this->pageWritePolicy($space)('page.archive', $page ?? null),
             'canUploadImage' => $this->app->auth()->can('attachment.upload'),
             'imageUploadUrl' => '/spaces/' . rawurlencode($space['space_key'])
                 . '/pages/' . rawurlencode($page['slug']) . '/images',
@@ -352,10 +354,6 @@ final class PageController extends Controller
             return $this->render('errors/404', ['title' => 'Revision not found'], 404);
         }
 
-        if ($revision['status'] === 'published' && !$this->app->auth()->can('page.publish')) {
-            return $this->render('errors/403', ['title' => 'Publishing permission required'], 403);
-        }
-
         try {
             $input = $revision;
             $input['slug'] = $revision['slug'] ?? $page['slug'];
@@ -423,14 +421,20 @@ final class PageController extends Controller
         $baseVersion = (int) ($old['base_version'] ?? 0);
         $conflict = null;
         if ($exception->getMessage() === 'EDIT_CONFLICT' && $page !== null) {
+            $server = $repository->findById((int) $page['id']);
+            if ($server !== null && !$this->pageWritePolicy($space)('page.view', $server)) {
+                $exception = new \DomainException('You no longer have permission to access the current page. Your local document remains recoverable.');
+                $message = $exception->getMessage();
+            } else {
             $conflict = [
                 'base_version' => $baseVersion,
                 'base' => (new \OpenWiki\Wiki\ContentService())->safeProjection($repository->revision((int) $page['id'], $baseVersion)),
                 'local' => $old,
-                'server' => (new \OpenWiki\Wiki\ContentService())->safeProjection($repository->findById((int) $page['id'])),
+                'server' => (new \OpenWiki\Wiki\ContentService())->safeProjection($server),
             ];
             if ($conflict['server'] !== null) {
                 $conflict['server']['tags'] = array_column((new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']), 'name');
+            }
             }
         }
         $status = match (true) {
@@ -458,7 +462,8 @@ final class PageController extends Controller
             'tags' => $page === null
                 ? []
                 : (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
-            'canPublish' => $this->app->auth()->can('page.publish'),
+            'canPublish' => $this->pageWritePolicy($space)('page.publish', $page ?? null),
+            'canArchive' => $this->pageWritePolicy($space)('page.archive', $page ?? null),
             'canUploadImage' => $this->app->auth()->can('attachment.upload'),
             'imageUploadUrl' => $page === null
                 ? null
