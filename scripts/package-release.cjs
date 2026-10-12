@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, '..');
 const destination = path.resolve(process.argv[2] || path.join(root, 'storage/temp/openwiki.tar.gz'));
 execFileSync('git', ['diff', '--quiet', 'HEAD'], {cwd: root});
 const bundles = ['wiki-editor', 'diagram', 'document-reader'].map(name => 'public/assets/' + name + '.js');
+bundles.push('public/assets/editor-manifest.json');
 for (const file of ['vendor/autoload.php', 'public/assets/diagram.html', ...bundles]) {
     const artifact = fs.statSync(path.join(root, file));
     if (!artifact.isFile() || !artifact.size) throw new Error('Missing or empty runtime artifact: ' + file);
