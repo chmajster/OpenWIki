@@ -154,7 +154,9 @@ test('an older position search cannot replace a newer selection or its committed
     });
     const older = page.waitForRequest(request => new URL(request.url()).searchParams.get('q') === 'Root');
     await dialog(page).locator('[data-position-search]').fill('Root'); await older;
-    await dialog(page).locator('[data-position-search]').fill('Sibling');
+    const newer = page.waitForResponse(response => new URL(response.url()).searchParams.get('q') === 'Sibling');
+    await dialog(page).locator('[data-position-search]').fill('Sibling'); await newer;
+    await expect(dialog(page).getByRole('button', {name: 'Przygotuj podgląd'})).toBeEnabled();
     await expect(dialog(page).locator(`[name=before_id] option[value="${sibling.id}"]`)).toHaveCount(1);
     await dialog(page).locator('[name=before_id]').selectOption(String(sibling.id));
     const finished = page.waitForResponse(response => new URL(response.url()).searchParams.get('q') === 'Root'); release(); await finished;

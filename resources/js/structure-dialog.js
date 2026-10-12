@@ -51,8 +51,12 @@ if (dialog) {
         try {
             const items = await branches(query, parentId, true);
             if (current !== generation || spaceId !== destination.value || parentId !== parent.value || sequence !== sequences.positions || query !== dialog.querySelector('[data-position-search]').value) return;
+            const scope = `${spaceId}:${parentId}`, selected = before.dataset.scope === scope ? before.selectedOptions[0] : null;
+            const retained = selected?.value ? {id: selected.value, title: selected.text} : null;
+            if (retained && !items.some(item => String(item.id) === retained.id)) items.unshift(retained);
             invalidate();
-            before.replaceChildren(new Option('Na końcu', ''), ...items.filter(item => item.id !== page.id && String(item.parent_id || '') === parentId).map(item => new Option(item.title, item.id)));
+            before.replaceChildren(new Option('Na końcu', ''), ...items.filter(item => item.id !== page.id && (item === retained || String(item.parent_id || '') === parentId)).map(item => new Option(item.title, item.id, false, String(item.id) === retained?.id)));
+            before.dataset.scope = scope;
         } catch (error) { if (current === generation && sequence === sequences.positions) status.textContent = error.message; }
         finally { if (sequence === sequences.positions) loadState('positions', false); }
     };
@@ -75,9 +79,9 @@ if (dialog) {
     form.elements.action.addEventListener('change', () => { dialog.querySelector('[data-copy-title]').hidden = form.elements.action.value !== 'copy'; });
     destination.addEventListener('change', () => { generation++; parent.value = ''; dialog.querySelector('[data-parent-search]').value = ''; dialog.querySelector('[data-position-search]').value = ''; loadParents('', ''); });
     parent.addEventListener('change', loadPositions);
-    dialog.querySelector('[data-destination-search]').addEventListener('input', event => { clearTimeout(destinationTimer); destinationTimer = setTimeout(() => searchSpaces(event.target.value), 250); });
-    dialog.querySelector('[data-parent-search]').addEventListener('input', event => { clearTimeout(parentTimer); parentTimer = setTimeout(() => loadParents(event.target.value), 250); });
-    dialog.querySelector('[data-position-search]').addEventListener('input', () => { clearTimeout(positionTimer); positionTimer = setTimeout(loadPositions, 250); });
+    dialog.querySelector('[data-destination-search]').addEventListener('input', event => { clearTimeout(destinationTimer); sequences.spaces++; loadState('spaces', true); destinationTimer = setTimeout(() => searchSpaces(event.target.value), 250); });
+    dialog.querySelector('[data-parent-search]').addEventListener('input', event => { clearTimeout(parentTimer); sequences.parents++; loadState('parents', true); parentTimer = setTimeout(() => loadParents(event.target.value), 250); });
+    dialog.querySelector('[data-position-search]').addEventListener('input', () => { clearTimeout(positionTimer); sequences.positions++; loadState('positions', true); positionTimer = setTimeout(loadPositions, 250); });
     confirm.addEventListener('change', buttons);
     form.addEventListener('submit', async event => {
         event.preventDefault(); if (busy || loading.size) return;
