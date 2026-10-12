@@ -21,7 +21,7 @@ final class Application
 
     public static function boot(string $basePath, bool $startSession = true): self
     {
-        Env::load($basePath . '/.env');
+        Env::load(RuntimePaths::configuration($basePath));
 
         $timezone = Env::get('APP_TIMEZONE', 'UTC') ?? 'UTC';
         if (!@date_default_timezone_set($timezone)) {
@@ -35,6 +35,8 @@ final class Application
 
     public function basePath(string $suffix = ''): string
     {
+        if ($suffix === '.env') return RuntimePaths::configuration($this->basePath);
+        if ($suffix === 'storage' || str_starts_with($suffix, 'storage/')) return RuntimePaths::storage($this->basePath, substr($suffix, 8));
         return $this->basePath . ($suffix === '' ? '' : '/' . ltrim($suffix, '/'));
     }
 

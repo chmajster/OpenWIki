@@ -205,7 +205,7 @@ TEXT);
 
     private function cacheClear(): int
     {
-        $path = $this->basePath . '/storage/cache';
+        $path = \OpenWiki\Core\RuntimePaths::storage($this->basePath, 'cache');
         if (!is_dir($path)) {
             fwrite(STDOUT, '[ OK ] Cache directory does not exist.' . PHP_EOL);
             return 0;
@@ -261,7 +261,7 @@ TEXT);
         );
 
         $tempRemoved = 0;
-        $tempPath = $this->basePath . '/storage/temp';
+        $tempPath = \OpenWiki\Core\RuntimePaths::storage($this->basePath, 'temp');
         if (is_dir($tempPath)) {
             $tempCutoff = time() - 86400;
             foreach (new \FilesystemIterator($tempPath, \FilesystemIterator::SKIP_DOTS) as $tempFile) {

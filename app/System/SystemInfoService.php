@@ -75,8 +75,8 @@ final class SystemInfoService
                 'size_bytes' => (int) ($dbSize['size_bytes'] ?? 0),
             ],
             'storage' => [
-                'attachments_bytes' => $this->directorySize($basePath . '/storage/attachments'),
-                'backups_bytes' => $this->directorySize($basePath . '/storage/backups'),
+                'attachments_bytes' => $this->directorySize($this->app->basePath('storage/attachments')),
+                'backups_bytes' => $this->directorySize($this->app->basePath('storage/backups')),
                 'disk_total_bytes' => $diskTotal === false ? null : (int) $diskTotal,
                 'disk_free_bytes' => $diskFree === false ? null : (int) $diskFree,
                 'writable' => $requirements['writable'],

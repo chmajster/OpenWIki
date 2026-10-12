@@ -102,7 +102,7 @@ final class DraftFileService
         // Foreign-key deletion of an account/space can remove the journal first.
         // Only old opaque bytes with no live or historical owner may be collected.
         $candidates = []; $collected = 0;
-        $root = $this->basePath . '/storage/attachments';
+        $root = \OpenWiki\Core\RuntimePaths::storage($this->basePath, 'attachments');
         if (is_dir($root)) {
             $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS));
             foreach ($iterator as $file) {
