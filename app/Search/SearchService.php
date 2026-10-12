@@ -19,7 +19,7 @@ final class SearchService
             $spaceIds = array_filter(array_column($candidates, 'space_id'));
             $workingIds = array_column(array_filter($candidates, static fn ($row) => (bool) $row['working']), 'page_id');
             $access = new SearchAccess($this->db, $spaceIds, array_filter(array_column($candidates, 'page_id')), $workingIds, $user, $permissions);
-            $visible = []; $tagPages = []; $files = [];
+            $visible = []; $tagPages = []; $tagWorking = []; $files = [];
             foreach ($candidates as $row) {
                 $type = $row['type']; $pageId = (int) ($row['page_id'] ?? 0);
                 if ($pageId !== 0 && !$access->visible($pageId, (bool) $row['working'])) continue;
@@ -31,7 +31,11 @@ final class SearchService
                     $files[$signature] = true;
                 }
                 $key = self::key($row);
-                if ($type === 'tag') $tagPages[$key][$pageId] = true;
+                if ($type === 'tag') {
+                    $tagPages[$key][$pageId] = true;
+                    if ((bool) $row['working']) $tagWorking[$key][$pageId] = true;
+                    $row['working'] = 0; $row['revision'] = 0; $row['branch'] = false;
+                }
                 $visible[$key] = $row;
             }
             unset($candidates);
@@ -84,7 +88,12 @@ final class SearchService
                 }
                 if ($type === 'tag') {
                     $result['name'] = $row['name']; $result['slug'] = $row['slug']; $result['page_count'] = count($tagPages[$key] ?? []);
+                    $result['working_page_count'] = count($tagWorking[$key] ?? []);
                     $result['snippet'] = $result['page_count'] . ' dostępnych stron'; $result['url'] = '/tags/' . rawurlencode($row['slug']);
+                    if ($result['working_page_count'] > 0) {
+                        $result['url'] = '/search?' . http_build_query(['q'=>$row['name'],'type'=>'page','tag'=>$row['name'],'visibility'=>$input['filters']['visibility'] ?? 'all']);
+                        $result['snippet'] .= ' · ' . $result['working_page_count'] . ' z dostępnymi wersjami roboczymi';
+                    }
                     unset($result['space'], $result['path'], $result['page_id']); $result['meta'] = '';
                 }
                 $data[] = $result;

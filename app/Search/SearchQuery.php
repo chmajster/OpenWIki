@@ -39,8 +39,8 @@ final class SearchQuery
             $conditions = array_map(static fn ($f) => "$f LIKE ? ESCAPE '!'", $fields);
             $matchParams = array_fill(0, count($fields), $like);
             if (!$this->fulltext) { $conditions[] = "$body LIKE ? ESCAPE '!'"; $matchParams[] = $like; }
-            $conditions[] = $working ? "r.tags_json LIKE ? ESCAPE '!'" : "EXISTS (SELECT 1 FROM page_tags pt INNER JOIN tags t ON t.id = pt.tag_id WHERE pt.page_id = p.id AND t.name LIKE ? ESCAPE '!')";
-            $matchParams[] = $like;
+            $conditions[] = $working ? "EXISTS (SELECT 1 FROM tags t WHERE JSON_CONTAINS(LOWER(COALESCE(r.tags_json,'[]')),JSON_QUOTE(LOWER(t.name))) AND (t.name LIKE ? ESCAPE '!' OR t.slug LIKE ? ESCAPE '!'))" : "EXISTS (SELECT 1 FROM page_tags pt INNER JOIN tags t ON t.id = pt.tag_id WHERE pt.page_id = p.id AND (t.name LIKE ? ESCAPE '!' OR t.slug LIKE ? ESCAPE '!'))";
+            array_push($matchParams, $like, $like);
             $match = '(' . implode(' OR ', $conditions) . ')';
             if ($this->fulltext && $ids === null) {
                 $tokens = preg_split('/\s+/u', $needle, -1, PREG_SPLIT_NO_EMPTY);
@@ -87,7 +87,12 @@ final class SearchQuery
             }
             $id = 'a.id'; $created = 'a.created_at'; $match = '(' . $title . " LIKE ? ESCAPE '!' OR " . $body . " LIKE ? ESCAPE '!')"; $matchParams = [$like, $like]; $extra .= ', p.title AS page_title,p.slug';
         } elseif ($type === 'tag') {
-            if ($ids === null) $from .= ' INNER JOIN users u ON u.id = p.author_id INNER JOIN page_tags pt ON pt.page_id = p.id INNER JOIN tags t ON t.id = pt.tag_id';
+            if ($ids === null) {
+                if ($working) {
+                    $from .= ' INNER JOIN page_revisions r ON r.page_id = p.id AND r.revision_number = p.version INNER JOIN users u ON u.id = r.author_id INNER JOIN tags t ON JSON_CONTAINS(LOWER(COALESCE(r.tags_json,"[]")),JSON_QUOTE(LOWER(t.name)))';
+                    $where[] = 'p.published_revision IS NOT NULL AND p.published_revision <> p.version';
+                } else $from .= ' INNER JOIN users u ON u.id = p.author_id INNER JOIN page_tags pt ON pt.page_id = p.id INNER JOIN tags t ON t.id = pt.tag_id';
+            }
             else { $from = 'tags t'; $where = []; $page = 'NULL'; $space = 'NULL'; $revision = '0'; }
             $id = 't.id'; $title = 't.name'; $body = "''"; $date = 't.created_at'; $created = 't.created_at';
             $match = '(t.name LIKE ? ESCAPE \'!\' OR t.slug LIKE ? ESCAPE \'!\')'; $matchParams = [$like, $like]; $extra = ', t.name,t.slug';
@@ -95,7 +100,7 @@ final class SearchQuery
 
         $score = 'CASE WHEN LOWER(' . $title . ') = LOWER(?) THEN 120 WHEN ' . $title . " LIKE ? ESCAPE '!' THEN 90 WHEN " . $title . " LIKE ? ESCAPE '!' THEN 70 ELSE 20 END";
         $params = [$needle, $prefix, $like];
-        $variant = $working ? '1' : ($type === 'page' ? '(p.status <> "published" AND p.published_revision IS NULL)' : '0');
+        $variant = $working ? '1' : (in_array($type, ['page','tag'], true) && !($type === 'tag' && $ids !== null) ? '(p.status <> "published" AND p.published_revision IS NULL)' : '0');
         $select = 'SELECT "' . $type . '" AS type,' . $id . ' AS id,' . $page . ' AS page_id,' . $space . ' AS space_id,' . $revision . ' AS revision,' . $variant . ' AS working,' . $score . ' AS relevance,' . $date . ' AS updated_at,' . $created . ' AS created_at';
         if ($type === 'attachment' && $ids === null) $select .= ', ' . $fileVersion . ' AS attachment_version, ' . $title . ' AS attachment_name';
         if ($ids !== null) {
@@ -122,7 +127,7 @@ final class SearchQuery
         if (($filters['author'] ?? '') !== '' && $type !== 'space') { $where[] = "u.username LIKE ? ESCAPE '!'"; $params[] = SearchInput::like($filters['author']); }
         if (($filters['tag'] ?? '') !== '' && !in_array($type, ['space', 'user'], true)) {
             if ($type === 'tag') { $where[] = '(t.name = ? OR t.slug = ?)'; array_push($params, $filters['tag'], $filters['tag']); }
-            elseif ($working && $type === 'page') { $where[] = 'JSON_CONTAINS(COALESCE(r.tags_json,"[]"), ?)'; $params[] = json_encode($filters['tag'], JSON_THROW_ON_ERROR); }
+            elseif ($working && $type === 'page') { $where[] = 'EXISTS (SELECT 1 FROM tags ft WHERE (ft.name = ? OR ft.slug = ?) AND JSON_CONTAINS(LOWER(COALESCE(r.tags_json,"[]")),JSON_QUOTE(LOWER(ft.name))))'; array_push($params,$filters['tag'],$filters['tag']); }
             else { $where[] = 'EXISTS (SELECT 1 FROM page_tags fpt INNER JOIN tags ft ON ft.id = fpt.tag_id WHERE fpt.page_id = p.id AND (ft.name = ? OR ft.slug = ?))'; array_push($params, $filters['tag'], $filters['tag']); }
         }
         foreach (['created_from' => [$created, '>='], 'created_to' => [$created, '<='], 'updated_from' => [$date, '>='], 'updated_to' => [$date, '<=']] as $key => [$column, $operator]) if (($filters[$key] ?? '') !== '') { $where[] = $column . ' ' . $operator . ' ?'; $params[] = $filters[$key]; }

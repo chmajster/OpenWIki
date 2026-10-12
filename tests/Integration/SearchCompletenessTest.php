@@ -88,6 +88,8 @@ final class SearchCompletenessTest extends TestCase
                 $db->execute('INSERT INTO page_revisions (page_id,revision_number,title,slug,content_html,content_text,content_format,status,author_id,created_at) VALUES (?, ?, ?, "doc", ?, ?, "visual", ?, ?, UTC_TIMESTAMP())', [$id, $number, $title, '<p>' . $text . '</p>', $text, $status, $owner]);
             }
             $service = new SearchService($db);
+            $db->execute('INSERT INTO tags (name,slug) VALUES ("Private Tag","private-tag")');
+            $db->execute('UPDATE page_revisions SET tags_json = ? WHERE page_id = ? AND revision_number = 2', [json_encode(['Private Tag']),$id]);
             self::assertSame(1, $service->search($this->input('publishedword'), $reader, ['page.view'])['meta']['total']);
             self::assertSame(0, $service->search($this->input('privateword'), $reader, ['page.view'])['meta']['total']);
             $work = $service->search($this->input('privateword'), $owner, ['page.view','page.edit']);
@@ -95,6 +97,11 @@ final class SearchCompletenessTest extends TestCase
             self::assertStringEndsWith('/revisions/2', $work['data'][0]['url']);
             self::assertSame(0, $service->search($this->input('privateword', ['visibility' => 'published']), $owner, ['page.view','page.edit'])['meta']['total']);
             self::assertSame(0, $service->search($this->input('publishedword', ['visibility' => 'working']), $owner, ['page.view','page.edit'])['meta']['total']);
+            self::assertSame(0,$service->search($this->input('private-tag',['type'=>'tag']),$reader,['page.view'])['meta']['total']);
+            $tag = $service->search($this->input('private-tag',['type'=>'tag']),$owner,['page.view','page.edit']);
+            self::assertSame(1,$tag['meta']['total']); self::assertSame(1,$tag['data'][0]['working_page_count']);
+            self::assertStringStartsWith('/search?', $tag['data'][0]['url']);
+            self::assertSame(1,$service->search($this->input('private-tag',['tag'=>'private-tag','visibility'=>'working']),$owner,['page.view','page.edit'])['meta']['total']);
         });
     }
 
