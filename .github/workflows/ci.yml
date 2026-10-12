@@ -251,7 +251,14 @@ jobs:
           ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
           before="$(sudo sha256sum /var/www/openwiki-ci/.env | awk '{print $1}')"
           if sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --install </dev/null; then exit 1; fi
+          # Exercise an actual socket alias, independently of distro defaults.
+          socket="$(sudo awk '/fastcgi_pass unix:/{sub(/.*unix:/, ""); sub(/;.*/, ""); print; exit}' /etc/nginx/sites-available/openwiki)"
+          sudo ln -sfn "$socket" /run/php/openwiki-ci-alias.sock
+          sudo sed -i 's|fastcgi_pass unix:.*;|fastcgi_pass unix:/run/php/openwiki-ci-alias.sock;|' /etc/nginx/sites-available/openwiki
+          sudo nginx -t
+          sudo systemctl reload nginx
           sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --upgrade "$ref" </dev/null
+          sudo grep -q 'fastcgi_pass unix:/run/php/openwiki-ci-alias.sock;' /etc/nginx/sites-available/openwiki
           after="$(sudo sha256sum /var/www/openwiki-ci/.env | awk '{print $1}')"
           test "$before" = "$after"
           test -L /var/www/openwiki-ci/current

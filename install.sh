@@ -219,18 +219,19 @@ detect_php_runtime_user() {
 }
 
 detect_installed_fpm_service() {
-  local conf socket candidate pool configured version selected="" selected_pool="" matches=0
+  local conf socket resolved_socket candidate pool configured version selected="" selected_pool="" matches=0
   if [[ "$PKG_FAMILY" == apt ]]; then conf="/etc/nginx/sites-available/$NGINX_SITE";
   else conf="/etc/nginx/conf.d/$NGINX_SITE.conf"; fi
   [[ -f "$conf" ]] || fail "Brak zarządzanej konfiguracji Nginx. Najpierw wykonaj --repair."
   socket=$(awk '/^[[:space:]]*fastcgi_pass[[:space:]]+unix:/{sub(/.*unix:/, ""); sub(/;.*/, ""); print; exit}' "$conf")
   [[ "$socket" == /* ]] || fail "Konfiguracja Nginx nie używa zarządzanego socketu PHP-FPM."
+  resolved_socket=$(readlink -m -- "$socket")
   # Socket filenames are configurable; identify the owning pool/service instead
   # of assuming that www.sock belongs to the RPM service or a versioned socket.
   for pool in /etc/php/*/fpm/pool.d/*.conf /etc/php-fpm.d/*.conf; do
     [[ -f "$pool" ]] || continue
     configured=$(awk -F= '/^[[:space:]]*listen[[:space:]]*=/{gsub(/[[:space:]"]/, "", $2); print $2; exit}' "$pool")
-    [[ "$configured" == "$socket" ]] || continue
+    [[ "$configured" == /* && "$(readlink -m -- "$configured")" == "$resolved_socket" ]] || continue
     if [[ "$pool" == /etc/php/* ]]; then
       version="${pool#/etc/php/}"; version="${version%%/*}"; candidate="php$version-fpm.service"
     else candidate=php-fpm.service; fi
@@ -238,7 +239,7 @@ detect_installed_fpm_service() {
     selected="$candidate"; selected_pool="$pool"; matches=$((matches + 1))
     if systemctl is-active --quiet "$candidate"; then matches=1; break; fi
   done
-  [[ "$matches" == 1 ]] || fail "Nie można jednoznacznie ustalić puli PHP-FPM dla socketu OpenWiki. Sprawdź konfigurację usług."
+  [[ "$matches" == 1 ]] || fail "Nie można jednoznacznie ustalić puli PHP-FPM dla socketu $socket ($resolved_socket). Sprawdź konfigurację usług."
   PHP_FPM_SERVICE="$selected"
   PHP_FPM_POOL="$selected_pool"
   PHP_FPM_SOCKET="$socket"
