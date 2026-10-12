@@ -46,6 +46,7 @@ try {
     $app = Application::boot($code);
     if (!$app->installed()) throw new RuntimeException('Existing APP_KEY and installation marker are required.');
     if ($command === 'preflight') {
+        if (is_link($instance . '/.env') || is_link($instance . '/storage')) throw new RuntimeException('Instance .env and storage must be local files/directories or mounts, not external symlinks. Nothing has been replaced.');
         $app->database()->fetchOne('SELECT 1');
         if ($app->database()->fetchOne("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND (TABLE_TYPE <> 'BASE TABLE' OR ENGINE <> 'InnoDB') LIMIT 1") !== null) {
             throw new RuntimeException('Verified recovery requires InnoDB tables and no views.');

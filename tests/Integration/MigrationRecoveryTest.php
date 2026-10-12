@@ -87,4 +87,29 @@ final class MigrationRecoveryTest extends TestCase
             });
         });
     }
+
+    public function testUnknownDdlOutcomeAndIncompatibleObjectsFailWithoutDestructiveRetry(): void
+    {
+        IsolatedDatabase::run(function (Database $db): void {
+            $db->pdo()->exec('CREATE TABLE recovery_data (id INT PRIMARY KEY, label INT NULL)');
+            $db->execute('INSERT INTO recovery_data VALUES (1, 42)');
+            $this->plan([MigrationStep::column('recovery_data', 'label', 'VARCHAR(30) NULL')], function ($path) use ($db): void {
+                try { (new MigrationRunner($db, $path))->migrate(); self::fail('An incompatible column must not be repaired implicitly.'); }
+                catch (\RuntimeException $error) { self::assertStringContainsString('incompatible', $error->getMessage()); }
+                self::assertSame(42, (int) $db->fetchOne('SELECT label FROM recovery_data')['label']);
+            });
+            $sql = 'ALTER TABLE recovery_data ADD COLUMN committed_before_crash INT NULL';
+            $step = ['sql' => $sql, 'repeatable' => false];
+            $db->pdo()->exec($sql);
+            $db->execute('INSERT INTO schema_migration_steps (version, step_index, sql_hash, state, updated_at) VALUES ("test_recovery", 0, ?, "running", UTC_TIMESTAMP())', [hash('sha256', json_encode($step, JSON_THROW_ON_ERROR))]);
+            $this->plan([$sql], function ($path) use ($db): void {
+                $runner = new MigrationRunner($db, $path);
+                try { $runner->migrate(); self::fail('Unknown DDL must not run a second time.'); }
+                catch (\RuntimeException $error) { self::assertStringContainsString('uncertain DDL', $error->getMessage()); }
+                self::assertFalse($runner->schemaState()['ready']);
+                self::assertSame(42, (int) $db->fetchOne('SELECT label FROM recovery_data')['label']);
+                self::assertSame([], $db->fetchAll('SELECT * FROM schema_migrations'));
+            });
+        });
+    }
 }

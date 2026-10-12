@@ -5,6 +5,7 @@ upgrade_tool() { php "$SCRIPT_DIR/scripts/upgrade-tool.php" "$1" "$INSTALL_DIR" 
 upgrade_get() { upgrade_tool get "$1"; }
 upgrade_done() { [[ $'\n'"$(upgrade_get completed)"$'\n' == *$'\n'"$1"$'\n'* ]]; }
 upgrade_complete() { upgrade_tool complete "$1"; }
+upgrade_begin() { UPGRADE_STAGE="$1"; upgrade_tool set stage "$1"; upgrade_tool set status running; }
 
 upgrade_failure() {
   local code=$? line=${1:-unknown}
@@ -41,11 +42,13 @@ upgrade_pause() {
       configure_nginx
       systemctl stop "$PHP_FPM_SERVICE"
     fi
-    local attempt pid command busy
+    local attempt pid command busy worker_directory
     for attempt in {1..60}; do
       busy=0
       while read -r pid command; do
-        [[ "$command" == *php* && "$command" == *"$INSTALL_DIR"* && "$command" == *'bin/console'* ]] && busy=1
+        [[ "$command" == *php* && "$command" == *'bin/console'* ]] || continue
+        worker_directory=$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)
+        if [[ "$command" == *"$INSTALL_DIR"* || "$worker_directory" == "$INSTALL_DIR" || "$worker_directory" == "$INSTALL_DIR/.openwiki/releases/"* ]]; then busy=1; fi
       done < <(ps -eo pid=,args=)
       [[ $busy == 1 ]] || break
       sleep 1
@@ -110,6 +113,9 @@ upgrade_mode() {
   local directory="$INSTALL_DIR/.openwiki" state sha previous stage log
   [[ -f "$INSTALL_DIR/.env" && -f "$INSTALL_DIR/storage/installed.lock" ]] || fail "Upgrade wymaga istniejącej instalacji. Użyj --install."
   for command in php git tar flock sha256sum composer; do command -v "$command" >/dev/null || fail "Brak narzędzia: $command"; done
+  for state in "$directory" "$directory/releases" "$directory/backups" "$directory/logs" "$directory/requests.lock" "$directory/upgrade.lock" "$directory/owner" "$directory/status.json"; do
+    [[ ! -L "$state" ]] || fail "Metadane aktualizacji nie mogą być dowiązaniem symbolicznym."
+  done
   mkdir -p "$directory/releases" "$directory/backups" "$directory/logs"
   chmod 0755 "$directory" "$directory/releases"
   chmod 0700 "$directory/backups" "$directory/logs"
@@ -124,8 +130,11 @@ upgrade_mode() {
   trap 'exit 130' INT
   trap 'exit 143' TERM
   if [[ "$MODE" == upgrade ]]; then
+    if ! upgrade_tool init "$GIT_REF"; then
+      trap - EXIT
+      fail "Wznów poprzednią operację przez --resume."
+    fi
     upgrade_tool preflight "$APP_DIR"
-    upgrade_tool init "$GIT_REF"
   elif [[ "$MODE" == resume ]]; then
     state=$(upgrade_get status)
     [[ "$state" == running || "$state" == failed ]] || fail "Brak aktualizacji do wznowienia (status: $state)."
@@ -156,6 +165,7 @@ upgrade_mode() {
     fi
     upgrade_tool set operation "$MODE"
     upgrade_tool set restore_database "$RESTORE_DATABASE"
+    upgrade_begin "$MODE"
     upgrade_pause
     if [[ "$MODE" == restore ]]; then
       upgrade_tool restore "$APP_DIR" "$RESTORE_DATABASE"
@@ -170,11 +180,11 @@ upgrade_mode() {
     return 0
   fi
 
-  UPGRADE_STAGE=fetch
+  upgrade_begin fetch
   sha=$(upgrade_get sha)
   if [[ -z "$sha" ]]; then
     [[ -d "$directory/source.git" ]] || git init --bare "$directory/source.git"
-    git --git-dir="$directory/source.git" fetch --no-tags --depth=1 "$REPO_URL" "$(upgrade_get ref)"
+    git --git-dir="$directory/source.git" fetch --no-tags --depth=1 -- "$REPO_URL" "$(upgrade_get ref)"
     sha=$(git --git-dir="$directory/source.git" rev-parse --verify 'FETCH_HEAD^{commit}')
     [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || fail "Nieprawidłowy SHA wydania."
     upgrade_tool set sha "$sha"
@@ -186,15 +196,15 @@ upgrade_mode() {
     return 0
   fi
   stage="$directory/releases/$sha"
-  UPGRADE_STAGE=pause
+  upgrade_begin pause
   upgrade_pause
   upgrade_complete paused
 
-  UPGRADE_STAGE=backup
+  upgrade_begin backup
   if ! upgrade_done backup; then upgrade_tool snapshot "$APP_DIR"; upgrade_complete backup; fi
   upgrade_tool verify "$APP_DIR"
 
-  UPGRADE_STAGE=prepare
+  upgrade_begin prepare
   if ! upgrade_done prepared; then
     if [[ ! -f "$stage/.code-ready" ]]; then
       [[ "$stage" == "$directory/releases/$sha" && ! -L "$stage" ]] || fail "Niepoprawny katalog przygotowania."
@@ -224,7 +234,7 @@ upgrade_mode() {
   fi
   (cd "$stage" && sha256sum --check --status .release-files)
 
-  UPGRADE_STAGE=previous
+  upgrade_begin previous
   previous=$(upgrade_get previous)
   if [[ -z "$previous" ]]; then
     if [[ "$APP_DIR" == "$directory/releases/"* ]]; then previous="$APP_DIR";
@@ -240,18 +250,18 @@ upgrade_mode() {
     upgrade_tool set previous "$previous"
   fi
 
-  UPGRADE_STAGE=migrate
+  upgrade_begin migrate
   # migrate itself safely resumes incomplete DDL and DML. Never infer success
   # solely from a checkpoint or a child process having started.
   php "$stage/bin/console" migrate
   upgrade_tool ready "$stage"
   upgrade_complete migrated
-  UPGRADE_STAGE=switch
+  upgrade_begin switch
   if [[ ! -L "$INSTALL_DIR/current" || "$(readlink -f "$INSTALL_DIR/current")" != "$stage" ]]; then upgrade_switch "$stage"; fi
   APP_DIR="$INSTALL_DIR/current"
   upgrade_launchers
   upgrade_complete switched
-  UPGRADE_STAGE=readiness
+  upgrade_begin readiness
   upgrade_open_and_verify
   upgrade_complete ready
   upgrade_tool set status completed

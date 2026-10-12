@@ -91,12 +91,17 @@ Polish is the default interface language; existing translated application messag
 
 Editor sources live in `resources/js/`. `npm run build` produces `public/assets/wiki-editor.js`, `document-reader.js` and `diagram.js`; generated bundles are not committed. The tracked `diagram.html` isolates Mermaid. CI builds before browser tests and records screenshots and actual performance measurements. The installer builds source deployments and accepts complete precompiled releases. Tags matching `v*` produce a release archive containing Composer runtime dependencies and all static assets, ready for PHP hosting without Node.js.
 
-Re-running the installer repairs the deployment without rotating credentials of an already installed database account:
+Fresh installation, configuration repair and version upgrades are separate operations. Repair preserves code, schema, configuration and credentials:
 
 ```bash
-sudo ./install.sh
-sudo ./install.sh --status
+sudo ./install.sh --repair
+sudo ./install.sh --diagnose
+sudo ./install.sh --upgrade <tag-or-commit>
+sudo ./install.sh --upgrade-status
+sudo ./install.sh --resume
 ```
+
+`--install` refuses an existing instance. An upgrade pins the requested Git reference to a SHA, pauses writes, verifies a private recovery backup, builds a separate release, runs `php bin/console migrate`, switches `current`, and verifies HTTP readiness and the worker. Pending migrations prevent success. See [upgrade and recovery procedures](docs/upgrades.md), including the first upgrade from older installers and schema-aware rollback/restore.
 
 Uninstall removes the OpenWiki files, cron entry and Nginx site. The database is intentionally retained:
 
@@ -183,9 +188,10 @@ The schema intentionally includes tables needed by subsequent production modules
 
 ```text
 GET /health
+GET /health/live
 ```
 
-The public response exposes only coarse application, database and storage status. It does not return secrets or infrastructure credentials.
+`/health/live` reports PHP process liveness without loading Composer, configuration or the database. `/health` returns 200 only when installation, database, storage, schema compatibility and maintenance state permit readiness; otherwise it returns 503. It includes pending, unknown and incomplete migration identifiers, but no secrets or infrastructure credentials. `php bin/console readiness` applies the same checks and exit status.
 
 ## Security
 
