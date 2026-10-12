@@ -155,7 +155,7 @@ $preserveParent = $isEdit && (int) $parentValue > 0
         <label><?= $e($t('Find a page')) ?><input type="search" maxlength="100" data-link-search autocomplete="off"></label>
         <div role="status" data-link-status></div><div data-link-results class="link-results"></div>
         <label><?= $e($t('Link text')) ?><input maxlength="255" data-link-text></label><label><?= $e($t('URL')) ?><input data-link-url type="text"></label>
-        <div role="alert" data-link-error></div><button type="button" class="button" data-link-insert><?= $e($t('Insert link')) ?></button><button type="button" class="button button--ghost" data-dialog-close><?= $e($t('Cancel')) ?></button>
+        <div role="alert" data-link-error></div><button type="button" class="button" data-link-insert><?= $e($t('Insert link')) ?></button><button type="button" class="button button--secondary" data-link-remove><?= $e($t('Remove link')) ?></button><button type="button" class="button button--ghost" data-dialog-close><?= $e($t('Cancel')) ?></button>
     </dialog>
     <dialog data-code-dialog aria-labelledby="code-heading"><h2 id="code-heading"><?= $e($t('Code block')) ?></h2>
         <label><?= $e($t('Language')) ?><input data-code-language maxlength="40" list="code-languages"></label><datalist id="code-languages"><option value="php"><option value="javascript"><option value="python"><option value="sql"><option value="bash"><option value="json"><option value="powershell"><option value="yaml"><option value="xml"><option value="text"></datalist>

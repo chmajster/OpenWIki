@@ -24,7 +24,7 @@ return [
     'Column before' => 'Kolumna z lewej', 'Column after' => 'Kolumna z prawej', 'Delete column' => 'Usuń kolumnę',
     'Header row' => 'Wiersz nagłówka', 'Merge cells' => 'Scal komórki', 'Split cell' => 'Podziel komórkę', 'Delete table' => 'Usuń tabelę',
     'Page content (Visual)' => 'Treść strony (wizualna)', 'Page content (Markdown)' => 'Treść strony (Markdown)',
-    'Insert link' => 'Wstaw odnośnik', 'Find a page' => 'Znajdź stronę', 'Link text' => 'Tekst odnośnika', 'URL' => 'URL',
+    'Insert link' => 'Wstaw odnośnik', 'Remove link' => 'Usuń odnośnik', 'Find a page' => 'Znajdź stronę', 'Link text' => 'Tekst odnośnika', 'URL' => 'URL',
     'Searching…' => 'Wyszukiwanie…', 'No accessible pages found.' => 'Nie znaleziono dostępnych stron.',
     'Enter a safe URL or choose a page.' => 'Podaj bezpieczny adres URL lub wybierz stronę.',
     'Language' => 'Język', 'Apply code block' => 'Zastosuj blok kodu', 'Type' => 'Typ', 'Information' => 'Informacja',

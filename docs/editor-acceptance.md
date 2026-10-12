@@ -29,6 +29,10 @@ Testy w `tests/Browser` uruchamiają rzeczywisty formularz, PHP i MySQL/MariaDB.
 `editor.spec.cjs`, `advanced-editor.spec.cjs` i `durable-editor.spec.cjs`
 sprawdzają narzędzia, zgodność i odzyskiwanie. `editor-performance.spec.cjs`
 zapisuje pomiary oraz obrazy dla widoków desktopowych i mobilnych.
+`daily-editor.spec.cjs` sprawdza zmianę tekstu i adresu linku, zachowanie jego
+formatowania, usunięcie, undo/redo, anulowanie, fokus i ponowny odczyt przy
+360/1440 px. Obejmuje też odrzucenie nadmiernego wklejenia bez utraty dokumentu
+oraz rozdzielenie skrótów treści Visual, metadanych i Markdown.
 Testy PHP weryfikują niezależnie sanitizer, renderer, konwersję, rewizje,
 uprawnienia i wspólne skutki domenowe zapisu.
 
