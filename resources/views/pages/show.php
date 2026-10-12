@@ -82,7 +82,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             </div>
         </div>
 
-        <div class="card panel" data-knowledge-status><p><?= $e($contentOwnerName) ?> ? Termin przeglądu: <?= $e($page['review_due_at'] ?? 'Nie wyznaczono') ?>. <?= $page['review_due_at'] !== null && $page['review_due_at'] < gmdate('Y-m-d') ? 'Dokument wymaga przeglądu.' : '' ?> Potwierdzenie aktualności: <?= (int) ($page['verified_revision'] ?? 0) === (int) $page['version'] ? $e($page['verified_at']) : 'Brak dla tej rewizji' ?>.</p>
+        <div class="card panel" data-knowledge-status><p>Właściciel merytoryczny: <?= $e($contentOwnerName) ?>. Termin przeglądu: <?= $e($page['review_due_at'] ?? 'Nie wyznaczono') ?>. <?= $page['review_due_at'] !== null && $page['review_due_at'] < gmdate('Y-m-d') ? 'Dokument wymaga przeglądu.' : '' ?> Potwierdzenie aktualności: <?= (int) ($page['verified_revision'] ?? 0) === (int) $page['version'] ? $e($page['verified_at']) : 'Brak dla tej rewizji' ?>.</p>
         <?php if (!empty($canReadWorking)): ?><a class="button" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/review">Obieg i aktualność · robocza rewizja <?= (int) $headVersion ?></a><?php endif; ?>
         <a href="/knowledge/overdue">Dokumenty po terminie przeglądu</a></div>
         <div class="document-layout <?= !empty($tableOfContents) ? 'document-layout--with-toc' : '' ?>">
