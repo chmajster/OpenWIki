@@ -11,13 +11,32 @@ use OpenWiki\Core\Session;
 use OpenWiki\Security\SecurityHeaders;
 
 $basePath = dirname(__DIR__);
+// Process liveness works even if Composer/configuration/database are unavailable.
+if (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) === '/health/live') {
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store');
+    echo '{"status":"alive","process":true}';
+    exit;
+}
 require $basePath . '/bootstrap/autoload.php';
 
 try {
-    $app = Application::boot($basePath);
+    $isHealth = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) === '/health';
+    $writeGate = new \OpenWiki\Upgrade\WriteGate();
+    if (!$isHealth) {
+        try { $writeGate->acquire($basePath); }
+        catch (RuntimeException) {
+            header('Retry-After: 60');
+            Response::json(['status' => 'maintenance', 'message' => 'Trwa aktualizacja OpenWiki. Spróbuj ponownie później.'], 503)->send();
+        }
+    }
+    $app = Application::boot($basePath, !$isHealth);
     SecurityHeaders::send();
 
     $request = Request::fromGlobals();
+
+    // Readiness runs before authentication, which may itself access an old schema.
+    if ($isHealth) (new \OpenWiki\Http\Controllers\HealthController($app))->show($request)->send();
 
     if (!$app->installed() && !str_starts_with($request->path(), '/install') && $request->path() !== '/health') {
         Response::redirect('/install')->send();

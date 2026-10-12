@@ -14,7 +14,7 @@ final class InstallService
     {
     }
 
-    public function requirements(): array
+    public function requirements(bool $prepareStorage = true): array
     {
         $requiredExtensions = ['pdo', 'pdo_mysql', 'mbstring', 'openssl', 'dom', 'phar', 'curl', 'ldap', 'zip', 'gd'];
         $extensions = [];
@@ -23,7 +23,6 @@ final class InstallService
         }
 
         $paths = [
-            $this->basePath,
             $this->basePath . '/storage',
             $this->basePath . '/storage/attachments',
             $this->basePath . '/storage/backups',
@@ -31,10 +30,11 @@ final class InstallService
             $this->basePath . '/storage/logs',
             $this->basePath . '/storage/temp',
         ];
+        if (!is_file($this->basePath . '/storage/installed.lock')) array_unshift($paths, $this->basePath);
 
         $writable = [];
         foreach ($paths as $path) {
-            if (!is_dir($path) && !@mkdir($path, 0770, true) && !is_dir($path)) {
+            if (!is_dir($path) && (!$prepareStorage || !@mkdir($path, 0770, true)) && !is_dir($path)) {
                 $writable[$path] = false;
                 continue;
             }
@@ -158,7 +158,7 @@ final class InstallService
 
         $lockData = json_encode([
             'installed_at' => gmdate(DATE_ATOM),
-            'version' => '0.1.0',
+            'version' => \OpenWiki\System\ReadinessService::manifest($this->basePath)['version'] ?? '0.1.0',
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 
         if (file_put_contents($this->basePath . '/storage/installed.lock', $lockData . PHP_EOL, LOCK_EX) === false) {

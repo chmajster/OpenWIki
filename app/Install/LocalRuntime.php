@@ -132,7 +132,9 @@ final class LocalRuntime
         if (($data['status'] ?? null) === 'degraded') {
             if (($data['checks']['database'] ?? null) !== true) return 'database_error';
             if (($data['checks']['storage'] ?? null) !== true) return 'storage_error';
+            if (($data['checks']['schema'] ?? null) !== true) return 'schema_error';
         }
+        if (($data['status'] ?? null) === 'maintenance') return 'maintenance';
         return 'application_error';
     }
 

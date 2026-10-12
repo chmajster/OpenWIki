@@ -19,7 +19,7 @@ final class Application
         $this->view = new View($basePath . '/resources/views', $this);
     }
 
-    public static function boot(string $basePath): self
+    public static function boot(string $basePath, bool $startSession = true): self
     {
         Env::load($basePath . '/.env');
 
@@ -28,7 +28,7 @@ final class Application
             date_default_timezone_set('UTC');
         }
 
-        Session::start();
+        if ($startSession) Session::start();
 
         return new self($basePath);
     }
@@ -70,6 +70,6 @@ final class Application
 
     public function version(): string
     {
-        return '0.1.0';
+        return (string) (\OpenWiki\System\ReadinessService::manifest($this->basePath)['version'] ?? '0.1.0');
     }
 }

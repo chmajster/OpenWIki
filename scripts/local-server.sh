@@ -63,6 +63,9 @@ local_run_preparation() {
 }
 
 local_mode() {
+  if [[ -L "$SCRIPT_DIR/current" ]]; then
+    SCRIPT_DIR=$(readlink -f "$SCRIPT_DIR/current")
+  fi
   LOCAL_SERVER_PID=""
   LOCAL_PREP_PID=""
   trap 'fail "Uruchomienie lokalne przerwane w linii $LINENO. Sprawdź komunikat powyżej."' ERR
@@ -162,6 +165,8 @@ local_mode() {
     ready) ok "Serwer lokalny działa. Aplikacja, baza i katalog danych są dostępne." ;;
     database_error) fail "Serwer odpowiada, ale /health zgłasza problem z bazą. Sprawdź dostępność MySQL/MariaDB oraz istniejące DB_* w .env; konfiguracja i dane nie zostały zmienione." ;;
     storage_error) fail "Serwer odpowiada, ale /health zgłasza problem z katalogiem danych storage/." ;;
+    schema_error) fail "Serwer odpowiada, ale schemat nie jest zgodny z wydaniem. Sprawdź php bin/console db:status i wznów aktualizację; aplikacja nie jest gotowa." ;;
+    maintenance) fail "Trwa aktualizacja i zapisy są zablokowane. Sprawdź --upgrade-status i użyj --resume." ;;
     wrong_server) fail "Port $LOCAL_PORT obsługuje inny serwer. Wybierz inny --port; obcy proces pozostaje uruchomiony." ;;
     installer_error) fail "Serwer odpowiada setup_required, ale kreator /install nie jest dostępny. Sprawdź log aplikacji powyżej." ;;
     *) fail "Serwer nie przeszedł testu HTTP /health w ciągu 10 sekund (stan: $state). Sprawdź log aplikacji i konfigurację." ;;

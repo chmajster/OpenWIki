@@ -10,9 +10,13 @@ DB_NAME="${OPENWIKI_DB_NAME:-openwiki}"
 DB_USER="${OPENWIKI_DB_USER:-openwiki}"
 WEB_USER=""
 PHP_FPM_SERVICE=""
+PHP_FPM_SOCKET=""
+PHP_FPM_POOL=""
 NGINX_SITE="openwiki"
 CRON_FILE="/etc/cron.d/openwiki"
 MODE="install"
+APP_DIR=""
+RESTORE_DATABASE=""
 EXPLICIT_MODE=""
 INSTALL_DIR_SPECIFIED=0
 LOCAL_HOST="127.0.0.1"
@@ -42,7 +46,14 @@ Użycie:
   bash install.sh --local [--host ADRES] [--port PORT]
 
 Opcje:
-  --install              Instalacja lub naprawa OpenWiki (domyślnie)
+  --install              Świeża instalacja (domyślnie); odmawia zmiany istniejącej
+  --repair               Napraw konfigurację usług i uprawnienia bez zmiany wersji
+  --upgrade REF          Aktualizuj istniejącą instancję do wskazanego ref/SHA Git
+  --resume               Wznów zapisaną, przerwaną aktualizację
+  --upgrade-status       Status etapów i wskazówki diagnostyczne
+  --rollback             Cofnij kod tylko przy zgodnym schemacie
+  --restore DATABASE     Odtwórz zweryfikowaną kopię; potwierdź nazwę bazy
+  --diagnose             Diagnostyka procesu, bazy i gotowości (alias --status)
   --status               Status aplikacji i usług
   --uninstall            Usuń konfigurację usług i pliki OpenWiki
   --install-dir PATH     Katalog instalacji (domyślnie: /var/www/openwiki)
@@ -78,6 +89,13 @@ select_mode() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --install) select_mode install ;;
+    --repair) select_mode repair ;;
+    --upgrade) select_mode upgrade; shift; [[ $# -gt 0 && "$1" != -* ]] || fail "--upgrade wymaga wersji/ref Git."; GIT_REF="$1" ;;
+    --resume) select_mode resume ;;
+    --upgrade-status) select_mode upgrade-status ;;
+    --rollback) select_mode rollback ;;
+    --restore) select_mode restore; shift; [[ $# -gt 0 && "$1" != -* ]] || fail "--restore wymaga potwierdzenia nazwy bazy."; RESTORE_DATABASE="$1" ;;
+    --diagnose) select_mode status ;;
     --status) select_mode status ;;
     --uninstall) select_mode uninstall ;;
     --local) select_mode local ;;
@@ -176,8 +194,14 @@ detect_php_runtime_user() {
   local conf user
   local configs=()
 
-  if [[ "$PKG_FAMILY" == "apt" ]]; then
-    configs=(/etc/php/*/fpm/pool.d/www.conf)
+  if [[ -n "$PHP_FPM_POOL" ]]; then
+    configs=("$PHP_FPM_POOL")
+  elif [[ "$PKG_FAMILY" == "apt" ]]; then
+    if [[ "$PHP_FPM_SERVICE" =~ ^php([0-9]+\.[0-9]+)-fpm\.service$ ]]; then
+      configs=("/etc/php/${BASH_REMATCH[1]}/fpm/pool.d/www.conf")
+    else
+      configs=(/etc/php/*/fpm/pool.d/www.conf)
+    fi
   else
     configs=(/etc/php-fpm.d/www.conf)
   fi
@@ -192,6 +216,33 @@ detect_php_runtime_user() {
   done
 
   id "$WEB_USER" >/dev/null 2>&1 || fail "Nie znaleziono użytkownika runtime PHP-FPM."
+}
+
+detect_installed_fpm_service() {
+  local conf socket resolved_socket candidate pool configured version selected="" selected_pool="" matches=0
+  if [[ "$PKG_FAMILY" == apt ]]; then conf="/etc/nginx/sites-available/$NGINX_SITE";
+  else conf="/etc/nginx/conf.d/$NGINX_SITE.conf"; fi
+  [[ -f "$conf" ]] || fail "Brak zarządzanej konfiguracji Nginx. Najpierw wykonaj --repair."
+  socket=$(awk '/^[[:space:]]*fastcgi_pass[[:space:]]+unix:/{sub(/.*unix:/, ""); sub(/;.*/, ""); print; exit}' "$conf")
+  [[ "$socket" == /* ]] || fail "Konfiguracja Nginx nie używa zarządzanego socketu PHP-FPM."
+  resolved_socket=$(readlink -m -- "$socket")
+  # Socket filenames are configurable; identify the owning pool/service instead
+  # of assuming that www.sock belongs to the RPM service or a versioned socket.
+  for pool in /etc/php/*/fpm/pool.d/*.conf /etc/php-fpm.d/*.conf; do
+    [[ -f "$pool" ]] || continue
+    configured=$(awk -F= '/^[[:space:]]*listen[[:space:]]*=/{gsub(/[[:space:]"]/, "", $2); print $2; exit}' "$pool")
+    [[ "$configured" == /* && "$(readlink -m -- "$configured")" == "$resolved_socket" ]] || continue
+    if [[ "$pool" == /etc/php/* ]]; then
+      version="${pool#/etc/php/}"; version="${version%%/*}"; candidate="php$version-fpm.service"
+    else candidate=php-fpm.service; fi
+    [[ "$(systemctl show "$candidate" --property=LoadState --value)" == loaded ]] || continue
+    selected="$candidate"; selected_pool="$pool"; matches=$((matches + 1))
+    if systemctl is-active --quiet "$candidate"; then matches=1; break; fi
+  done
+  [[ "$matches" == 1 ]] || fail "Nie można jednoznacznie ustalić puli PHP-FPM dla socketu $socket ($resolved_socket). Sprawdź konfigurację usług."
+  PHP_FPM_SERVICE="$selected"
+  PHP_FPM_POOL="$selected_pool"
+  PHP_FPM_SOCKET="$socket"
 }
 
 secure_env_permissions() {
@@ -212,28 +263,41 @@ start_services() {
   ok "MariaDB, Nginx i PHP-FPM działają (runtime: $WEB_USER)."
 }
 
+fresh_checkout() {
+  mkdir -p "$INSTALL_DIR"
+  git -C "$INSTALL_DIR" init
+  git -C "$INSTALL_DIR" remote add origin "$REPO_URL"
+  git -C "$INSTALL_DIR" fetch --no-tags --depth 1 origin "$GIT_REF"
+  git -C "$INSTALL_DIR" checkout --detach FETCH_HEAD
+}
+
 deploy_code() {
   info "[3/8] Pobieranie aplikacji"
   if [[ -d "$INSTALL_DIR/.git" ]]; then
     git -C "$INSTALL_DIR" fetch --prune --depth 1 origin "$GIT_REF"
     git -C "$INSTALL_DIR" checkout --detach FETCH_HEAD
+  elif [[ -d "$SCRIPT_DIR/.git" ]]; then
+    fresh_checkout
   elif [[ -f "$SCRIPT_DIR/composer.json" && -d "$SCRIPT_DIR/app" && -d "$SCRIPT_DIR/public" ]]; then
     mkdir -p "$INSTALL_DIR"
     if [[ "$(readlink -f "$SCRIPT_DIR")" != "$(readlink -f "$INSTALL_DIR")" ]]; then
-      cp -a "$SCRIPT_DIR/." "$INSTALL_DIR/"
+      # A fresh instance must never inherit another instance's key or files.
+      tar -C "$SCRIPT_DIR" --exclude='./.env' --exclude='./storage' --exclude='./.openwiki' --exclude='./current' --exclude='./node_modules' --exclude='./test-results' -cf - . | tar -C "$INSTALL_DIR" -xf -
     fi
   else
     [[ ! -e "$INSTALL_DIR" || -z "$(ls -A "$INSTALL_DIR" 2>/dev/null || true)" ]] ||
       fail "Katalog $INSTALL_DIR istnieje i nie jest pusty."
-    git clone --branch "$GIT_REF" --depth 1 "$REPO_URL" "$INSTALL_DIR"
+    fresh_checkout
   fi
 
   cd "$INSTALL_DIR"
   composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
   if [[ ! -d .git && -s public/assets/wiki-editor.js && -s public/assets/diagram.js && -s public/assets/document-reader.js && -s public/assets/diagram.html ]]; then
     ok "Używam gotowych zasobów z wydania."
-  else
+  elif [[ -f scripts/build-editor.sh ]]; then
     bash scripts/build-editor.sh
+  else
+    [[ -s public/assets/app.js && -s public/assets/app.css ]] || fail "Brak zasobów edytora w starszym wydaniu."
   fi
   mkdir -p storage/{attachments,backups,cache,temp,logs}
   chown -R root:"$WEB_USER" "$INSTALL_DIR"
@@ -419,9 +483,15 @@ nginx_server_names() {
 configure_nginx() {
   info "[6/8] Konfiguracja Nginx"
   local socket
-  socket="$(detect_fpm_socket)" || fail "Nie znaleziono socketu PHP-FPM."
+  socket="$PHP_FPM_SOCKET"
+  if [[ -z "$socket" ]]; then socket="$(detect_fpm_socket)" || fail "Nie znaleziono socketu PHP-FPM."; fi
+  [[ -S "$socket" ]] || fail "Socket PHP-FPM instancji nie jest dostępny: $socket."
 
-  local conf server_names
+  local conf server_names health_exceptions=""
+  if [[ -f "${APP_DIR:-$INSTALL_DIR}/app/Upgrade/WriteGate.php" ]]; then
+    # request_uri survives the internal redirect to index.php.
+    health_exceptions='if ($request_uri ~ "^/health(/live)?(\?|$)") { set $openwiki_maintenance ""; }'
+  fi
   server_names="$(nginx_server_names)"
   if [[ "$PKG_FAMILY" == "apt" ]]; then
     conf="/etc/nginx/sites-available/$NGINX_SITE"
@@ -434,8 +504,13 @@ server {
     listen 80;
     listen [::]:80;
     server_name $server_names;
-    root $INSTALL_DIR/public;
+    root ${APP_DIR:-$INSTALL_DIR}/public;
     index index.php;
+
+    set \$openwiki_maintenance "";
+    if (-f $INSTALL_DIR/.openwiki/maintenance) { set \$openwiki_maintenance "blocked"; }
+    $health_exceptions
+    if (\$openwiki_maintenance = "blocked") { return 503; }
 
     client_max_body_size 64m;
 
@@ -446,7 +521,7 @@ server {
     location ~ \.php$ {
         try_files \$uri =404;
         include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
         fastcgi_param HTTP_PROXY "";
         fastcgi_pass unix:$socket;
     }
@@ -470,7 +545,7 @@ NGINX
 configure_cron() {
   info "[7/8] Konfiguracja zadań cyklicznych"
   cat > "$CRON_FILE" <<EOF
-* * * * * $WEB_USER cd "$INSTALL_DIR" && /usr/bin/php bin/console cron:run >/dev/null 2>&1
+* * * * * $WEB_USER cd "${APP_DIR:-$INSTALL_DIR}" && /usr/bin/php bin/console cron:run >/dev/null 2>&1
 EOF
   chmod 0644 "$CRON_FILE"
   ok "Cron OpenWiki skonfigurowany."
@@ -478,13 +553,13 @@ EOF
 
 verify_installation() {
   info "[8/8] Weryfikacja"
-  cd "$INSTALL_DIR"
+  cd "${APP_DIR:-$INSTALL_DIR}"
   php bin/console system:check
   php bin/console db:status
   if command -v runuser >/dev/null 2>&1; then
     runuser -u "$WEB_USER" -- test -r "$INSTALL_DIR/.env"
     runuser -u "$WEB_USER" -- test -w "$INSTALL_DIR/storage"
-    runuser -u "$WEB_USER" -- php "$INSTALL_DIR/bin/console" db:status
+    runuser -u "$WEB_USER" -- php "${APP_DIR:-$INSTALL_DIR}/bin/console" db:status
     ok "Runtime $WEB_USER ma dostęp do konfiguracji, storage i bazy."
   else
     warn "Brak runuser — pominięto weryfikację uprawnień jako $WEB_USER."
@@ -513,9 +588,10 @@ status_mode() {
   else
     warn "PHP-FPM inactive lub niewykryty"
   fi
-  if [[ -f "$INSTALL_DIR/bin/console" ]]; then
-    (cd "$INSTALL_DIR" && php bin/console system:check) || true
-  fi
+  [[ -f "$APP_DIR/bin/console" ]] || return 1
+  php "$SCRIPT_DIR/scripts/upgrade-tool.php" status "$INSTALL_DIR"
+  php "$APP_DIR/bin/console" system:check
+  php "$APP_DIR/bin/console" readiness
 }
 
 uninstall_mode() {
@@ -551,14 +627,38 @@ if [[ "$MODE" == local ]]; then
 fi
 
 validate_install_dir
+APP_DIR="$INSTALL_DIR"
+[[ ! -L "$INSTALL_DIR/current" ]] || APP_DIR="$INSTALL_DIR/current"
 
 case "$MODE" in
-  status) status_mode; exit 0 ;;
+  status) status_mode; exit $? ;;
+  upgrade-status) php "$SCRIPT_DIR/scripts/upgrade-tool.php" status "$INSTALL_DIR"; exit $? ;;
   uninstall) uninstall_mode; exit 0 ;;
 esac
 
 require_root
 detect_os
+if [[ "$MODE" == upgrade || "$MODE" == resume || "$MODE" == rollback || "$MODE" == restore ]]; then
+  detect_installed_fpm_service
+  detect_php_runtime_user
+  source "$SCRIPT_DIR/scripts/upgrade.sh"
+  upgrade_mode
+  exit $?
+fi
+if [[ "$MODE" == repair ]]; then
+  [[ -f "$INSTALL_DIR/.env" && -f "$INSTALL_DIR/storage/installed.lock" ]] || fail "Repair wymaga istniejącej instalacji."
+  [[ ! -f "$INSTALL_DIR/.openwiki/maintenance" ]] || fail "Trwa aktualizacja. Użyj --resume."
+  start_services
+  secure_env_permissions
+  chown -R "$WEB_USER:$WEB_USER" "$INSTALL_DIR/storage"
+  configure_selinux
+  configure_nginx
+  configure_cron
+  verify_installation
+  ok "Naprawa zakończona; konfiguracja, klucz i wersja zachowane."
+  exit 0
+fi
+[[ ! -f "$INSTALL_DIR/storage/installed.lock" && ! -f "$INSTALL_DIR/.env" ]] || fail "Instancja już istnieje. Użyj --repair albo --upgrade REF."
 install_packages
 start_services
 deploy_code
@@ -567,4 +667,8 @@ run_app_installer
 configure_selinux
 configure_nginx
 configure_cron
+mkdir -p "$INSTALL_DIR/.openwiki"
+chmod 0755 "$INSTALL_DIR/.openwiki"
+touch "$INSTALL_DIR/.openwiki/requests.lock"
+chmod 0644 "$INSTALL_DIR/.openwiki/requests.lock"
 verify_installation

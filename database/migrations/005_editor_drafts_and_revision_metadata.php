@@ -2,10 +2,15 @@
 
 declare(strict_types=1);
 
+use OpenWiki\Database\MigrationStep;
+
 return [
     'version' => '005_editor_drafts_and_revision_metadata',
     'up' => [
-        'ALTER TABLE page_revisions ADD COLUMN slug VARCHAR(255) NULL, ADD COLUMN parent_id BIGINT UNSIGNED NULL, ADD COLUMN tags_json TEXT NULL, ADD COLUMN conversion_backup_json MEDIUMTEXT NULL',
+        MigrationStep::column('page_revisions', 'slug', 'VARCHAR(255) NULL'),
+        MigrationStep::column('page_revisions', 'parent_id', 'BIGINT UNSIGNED NULL'),
+        MigrationStep::column('page_revisions', 'tags_json', 'TEXT NULL'),
+        MigrationStep::column('page_revisions', 'conversion_backup_json', 'MEDIUMTEXT NULL'),
         <<<'SQL'
 CREATE TABLE IF NOT EXISTS page_editor_drafts (
     space_id BIGINT UNSIGNED NOT NULL,
@@ -29,6 +34,7 @@ SELECT p.space_id, d.user_id, CONCAT('page:', d.page_id), 'legacy', 1, d.base_ve
                    'status', p.status, 'tags', COALESCE((SELECT GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ', ') FROM page_tags pt INNER JOIN tags t ON t.id = pt.tag_id WHERE pt.page_id = p.id), ''), 'changeSummary', '', 'format', d.content_format,
                    'html', d.content_html, 'markdown', COALESCE(d.content_markdown, ''), 'baseVersion', d.base_version), d.updated_at
 FROM draft_autosaves d INNER JOIN pages p ON p.id = d.page_id
+ON DUPLICATE KEY UPDATE document_key = VALUES(document_key)
 SQL,
     ],
 ];

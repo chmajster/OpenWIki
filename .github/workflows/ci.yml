@@ -70,6 +70,8 @@ jobs:
           bash -n install.sh
           bash -n scripts/build-editor.sh
           bash -n scripts/local-server.sh
+          bash -n scripts/upgrade.sh
+          bash -n tests/Upgrade/driver.sh
 
       - name: Bash installer help
         run: NO_COLOR=1 bash install.sh --help
@@ -137,6 +139,55 @@ jobs:
           php -r 'require "bootstrap/autoload.php"; $c = new OpenWiki\Wiki\ContentService(); if ($c->normalize("markdown", "", "# Release")["html"] !== "<h1>Release</h1>") exit(1);'
 
 
+  upgrade-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        database: ["mysql:8.0", "mariadb:11.4"]
+    services:
+      database:
+        image: ${{ matrix.database }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot || mariadb-admin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      OPENWIKI_TEST_DB_HOST: 127.0.0.1
+      OPENWIKI_TEST_DB_PORT: 3306
+      OPENWIKI_TEST_DB_DATABASE: openwiki_test
+      OPENWIKI_TEST_DB_USERNAME: root
+      OPENWIKI_TEST_DB_PASSWORD: root
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: pdo_mysql, mbstring, openssl, dom, curl, phar, ldap, zip, gd
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Prepare actual runtime dependencies
+        run: |
+          composer install --prefer-dist --no-interaction --no-progress
+          npm ci
+          npm run build
+      - name: Migration DDL and private recovery tests
+        run: vendor/bin/phpunit --filter 'MigrationRecoveryTest|EditorDraftMigrationTest|RecoverySnapshotTest'
+      - name: Upgrade old schema with accounts, revisions, drafts and attachments
+        run: python3 tests/Upgrade/runtime.py
+
   installer-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -188,10 +239,48 @@ jobs:
           ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
           before="$(sudo sha256sum /var/www/openwiki-ci/.env | awk '{print $1}')"
           sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci OPENWIKI_GIT_REF="$ref" NO_COLOR=1 \
-            bash ./install.sh </dev/null
+            bash ./install.sh --repair </dev/null
           after="$(sudo sha256sum /var/www/openwiki-ci/.env | awk '{print $1}')"
           test "$before" = "$after"
           curl --fail --silent --show-error http://127.0.0.1/health >/dev/null
+
+      - name: Verify existing install refusal and managed upgrade
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          before="$(sudo sha256sum /var/www/openwiki-ci/.env | awk '{print $1}')"
+          if sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --install </dev/null; then exit 1; fi
+          # Exercise an actual socket alias, independently of distro defaults.
+          socket="$(sudo awk '/fastcgi_pass unix:/{sub(/.*unix:/, ""); sub(/;.*/, ""); print; exit}' /etc/nginx/sites-available/openwiki)"
+          sudo ln -sfn "$socket" /run/php/openwiki-ci-alias.sock
+          sudo sed -i 's|fastcgi_pass unix:.*;|fastcgi_pass unix:/run/php/openwiki-ci-alias.sock;|' /etc/nginx/sites-available/openwiki
+          sudo nginx -t
+          sudo systemctl reload nginx
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --upgrade "$ref" </dev/null
+          sudo grep -q 'fastcgi_pass unix:/run/php/openwiki-ci-alias.sock;' /etc/nginx/sites-available/openwiki
+          after="$(sudo sha256sum /var/www/openwiki-ci/.env | awk '{print $1}')"
+          test "$before" = "$after"
+          test -L /var/www/openwiki-ci/current
+          curl --fail --silent --show-error http://127.0.0.1/health >/dev/null
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --upgrade "$ref" </dev/null
+          recovery="$(sudo php -r '$v=json_decode(file_get_contents($argv[1]), true); echo $v["id"].":".$v["backup_sha256"];' /var/www/openwiki-ci/.openwiki/status.json)"
+          socket="$(readlink -f /run/php/openwiki-ci-alias.sock)"
+          service="$(sudo grep -l "^[[:space:]]*listen[[:space:]]*=[[:space:]]*$socket[[:space:]]*$" /etc/php/*/fpm/pool.d/*.conf | head -n1 | cut -d/ -f4)"
+          test -n "$service"
+          sudo systemctl stop "php$service-fpm.service"
+          if sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --upgrade "$ref" </dev/null; then exit 1; fi
+          sudo systemctl start "php$service-fpm.service"
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --resume </dev/null
+          after_recovery="$(sudo php -r '$v=json_decode(file_get_contents($argv[1]), true); echo $v["id"].":".$v["backup_sha256"];' /var/www/openwiki-ci/.openwiki/status.json)"
+          test "$recovery" = "$after_recovery"
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --repair </dev/null
+          sudo touch /var/www/openwiki-ci/.openwiki/maintenance
+          curl --fail --silent --show-error http://127.0.0.1/health/live >/dev/null
+          test "$(curl --silent --output "$RUNNER_TEMP/maintenance.json" --write-out '%{http_code}' http://127.0.0.1/health)" = 503
+          php -r '$v=json_decode(file_get_contents($argv[1]), true); if (($v["status"] ?? null) !== "maintenance" || ($v["checks"]["database"] ?? null) !== true) exit(1);' "$RUNNER_TEMP/maintenance.json"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1/login)" = 503
+          sudo rm /var/www/openwiki-ci/.openwiki/maintenance
 
       - name: Uninstall
         shell: bash
@@ -200,3 +289,51 @@ jobs:
           printf 'DELETE\n' |
             sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --uninstall
           test ! -e /var/www/openwiki-ci
+
+      - name: Install an actual legacy release with schema 004
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          legacy=08425a0029bc60e3cab69bf0206f1276f0a24cf6
+          sudo mkdir /var/www/openwiki-legacy-ci
+          sudo git -C /var/www/openwiki-legacy-ci init
+          sudo git -C /var/www/openwiki-legacy-ci remote add origin https://github.com/chmajster/OpenWIki.git
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-legacy-ci OPENWIKI_GIT_REF="$legacy" NO_COLOR=1 \
+            bash ./install.sh <<'EOF'
+          openwiki_legacy_ci
+          openwiki_legacy_ci
+          OpenWiki-DB-CI-Password-123!
+          OpenWiki Legacy CI
+          http://127.0.0.1
+          UTC
+          ci-admin
+          ci@example.invalid
+          OpenWiki-Admin-CI-Password-123!
+          CI
+          Admin
+          EOF
+          sudo php tests/Upgrade/host-fixture.php seed /var/www/openwiki-legacy-ci > "$RUNNER_TEMP/upgrade-host.json"
+          sudo php tests/Upgrade/host-fixture.php snapshot /var/www/openwiki-legacy-ci > "$RUNNER_TEMP/upgrade-data-before"
+          sudo sha256sum /var/www/openwiki-legacy-ci/.env | awk '{print $1}' > "$RUNNER_TEMP/upgrade-key-before"
+
+      - name: Upgrade actual legacy PHP-FPM runtime and verify preserved data
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-legacy-ci NO_COLOR=1 bash ./install.sh --upgrade "$ref" </dev/null
+          sudo php tests/Upgrade/host-fixture.php snapshot /var/www/openwiki-legacy-ci > "$RUNNER_TEMP/upgrade-data-after"
+          sudo sha256sum /var/www/openwiki-legacy-ci/.env | awk '{print $1}' > "$RUNNER_TEMP/upgrade-key-after"
+          cmp "$RUNNER_TEMP/upgrade-data-before" "$RUNNER_TEMP/upgrade-data-after"
+          cmp "$RUNNER_TEMP/upgrade-key-before" "$RUNNER_TEMP/upgrade-key-after"
+          python3 - <<'PY'
+          import importlib.util, json, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('upgrade', 'tests/Upgrade/runtime.py')
+          module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+          seeded = json.loads((Path(os.environ['RUNNER_TEMP']) / 'upgrade-host.json').read_text())
+          module.verify_http(Path('/var/www/openwiki-legacy-ci/current'), seeded, remote_url='http://127.0.0.1')
+          print('Actual Nginx/PHP-FPM login, page form, API and protected attachment verified.')
+          PY
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-legacy-ci NO_COLOR=1 bash ./install.sh --upgrade-status
+          printf 'DELETE\n' | sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-legacy-ci NO_COLOR=1 bash ./install.sh --uninstall
