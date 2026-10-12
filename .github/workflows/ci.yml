@@ -69,6 +69,7 @@ jobs:
         run: |
           bash -n install.sh
           bash -n scripts/build-editor.sh
+          bash -n scripts/local-server.sh
 
       - name: Bash installer help
         run: NO_COLOR=1 bash install.sh --help
@@ -90,6 +91,15 @@ jobs:
           OPENWIKI_TEST_DB_USERNAME: root
           OPENWIKI_TEST_DB_PASSWORD: root
         run: npm run test:browser
+
+      - name: Non-root local runtime end-to-end
+        env:
+          OPENWIKI_TEST_DB_HOST: 127.0.0.1
+          OPENWIKI_TEST_DB_PORT: 3306
+          OPENWIKI_TEST_DB_DATABASE: openwiki_test
+          OPENWIKI_TEST_DB_USERNAME: root
+          OPENWIKI_TEST_DB_PASSWORD: root
+        run: python3 tests/Local/runtime.py
 
       - name: Browser failure traces
         if: failure()
