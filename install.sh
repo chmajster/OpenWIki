@@ -193,7 +193,11 @@ detect_php_runtime_user() {
   local configs=()
 
   if [[ "$PKG_FAMILY" == "apt" ]]; then
-    configs=(/etc/php/*/fpm/pool.d/www.conf)
+    if [[ "$PHP_FPM_SERVICE" =~ ^php([0-9]+\.[0-9]+)-fpm\.service$ ]]; then
+      configs=("/etc/php/${BASH_REMATCH[1]}/fpm/pool.d/www.conf")
+    else
+      configs=(/etc/php/*/fpm/pool.d/www.conf)
+    fi
   else
     configs=(/etc/php-fpm.d/www.conf)
   fi
@@ -208,6 +212,21 @@ detect_php_runtime_user() {
   done
 
   id "$WEB_USER" >/dev/null 2>&1 || fail "Nie znaleziono użytkownika runtime PHP-FPM."
+}
+
+detect_installed_fpm_service() {
+  local conf socket candidate
+  if [[ "$PKG_FAMILY" == apt ]]; then conf="/etc/nginx/sites-available/$NGINX_SITE";
+  else conf="/etc/nginx/conf.d/$NGINX_SITE.conf"; fi
+  [[ -f "$conf" ]] || fail "Brak zarządzanej konfiguracji Nginx. Najpierw wykonaj --repair."
+  socket=$(awk '/^[[:space:]]*fastcgi_pass[[:space:]]+unix:/{sub(/.*unix:/, ""); sub(/;.*/, ""); print; exit}' "$conf")
+  case "$socket" in
+    /run/php/php*-fpm.sock|/var/run/php/php*-fpm.sock) candidate="$(basename "$socket" .sock).service" ;;
+    /run/php-fpm/www.sock|/var/run/php-fpm/www.sock) candidate=php-fpm.service ;;
+    *) fail "Konfiguracja Nginx nie używa obsługiwanego, zarządzanego socketu PHP-FPM." ;;
+  esac
+  [[ "$(systemctl show "$candidate" --property=LoadState --value)" == loaded ]] || fail "Brak usługi obsługującej socket OpenWiki: $candidate."
+  PHP_FPM_SERVICE="$candidate"
 }
 
 secure_env_permissions() {
@@ -602,8 +621,7 @@ esac
 require_root
 detect_os
 if [[ "$MODE" == upgrade || "$MODE" == resume || "$MODE" == rollback || "$MODE" == restore ]]; then
-  PHP_FPM_SERVICE="$(find_php_fpm_service)"
-  [[ -n "$PHP_FPM_SERVICE" ]] || fail "Nie znaleziono PHP-FPM."
+  detect_installed_fpm_service
   detect_php_runtime_user
   source "$SCRIPT_DIR/scripts/upgrade.sh"
   upgrade_mode
