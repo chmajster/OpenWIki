@@ -10,6 +10,28 @@ use PHPUnit\Framework\TestCase;
 
 final class ContentSecurityTest extends TestCase
 {
+    public function testEveryDescendantAndAttributeIsCheckedAfterUnwrapping(): void
+    {
+        $sanitizer = new HtmlSanitizer();
+        foreach (require dirname(__DIR__) . '/Fixtures/security-html.php' as $index => $input) {
+            $output = $sanitizer->sanitize($input);
+            if ($index !== 2) self::assertStringContainsString('retained', $output);
+            self::assertDoesNotMatchRegularExpression('/<(?:script|style|svg|math|template|noscript|custom|article)\\b|\\bon[a-z]+\\s*=|javascript:/i', $output);
+            self::assertSame($output, $sanitizer->sanitize($output), 'Safe output must survive reparsing.');
+        }
+    }
+
+    public function testHistoricalProjectionDoesNotRewriteSnapshot(): void
+    {
+        $snapshot = ['content_format' => 'visual', 'content_html' => '<article><p onclick="alert(1)">retained</p></article>',
+            'content_markdown' => null, 'document_json' => json_encode(['version' => 1, 'format' => 'visual', 'source' => '<p onclick="alert(1)">retained</p>'])];
+        $before = $snapshot;
+        $safe = (new \OpenWiki\Wiki\ContentService())->safeProjection($snapshot);
+        self::assertSame($before, $snapshot);
+        self::assertSame('<p>retained</p>', $safe['content_html']);
+        self::assertSame('<p>retained</p>', json_decode($safe['document_json'], true)['source']);
+    }
+
     public function testSanitizerRemovesScriptsHandlersAndUnsafeUrls(): void
     {
         $input = '<p onclick="alert(1)">Safe<script>alert(1)</script><a href="javascript:alert(2)">link</a></p>';

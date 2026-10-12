@@ -14,26 +14,26 @@ final class PageTemplateService
 
     public function all(): array
     {
-        return $this->database->fetchAll(
+        return array_map(fn (array $row): array => (new ContentService())->safeProjection($row), $this->database->fetchAll(
             'SELECT pt.id, pt.name, pt.description, pt.content_html, pt.content_markdown,
                     pt.created_by, pt.is_system, pt.created_at, pt.updated_at,
                     u.username AS creator_username
              FROM page_templates pt
              LEFT JOIN users u ON u.id = pt.created_by
              ORDER BY pt.is_system DESC, pt.name ASC'
-        );
+        ));
     }
 
     public function find(int $id): ?array
     {
-        return $this->database->fetchOne(
+        return (new ContentService())->safeProjection($this->database->fetchOne(
             'SELECT pt.*, u.username AS creator_username
              FROM page_templates pt
              LEFT JOIN users u ON u.id = pt.created_by
              WHERE pt.id = :id
              LIMIT 1',
             ['id' => $id]
-        );
+        ));
     }
 
     public function save(?int $id, array $input, int $actorId): int

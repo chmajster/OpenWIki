@@ -35,9 +35,7 @@ final class PageController extends Controller
             return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
-        $templates = $this->app->database()->fetchAll(
-            'SELECT id, name, description, content_html, content_markdown FROM page_templates ORDER BY is_system DESC, name ASC'
-        );
+        $templates = (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->all();
 
         return $this->render('pages/editor', [
             'title' => 'Create page',
@@ -427,9 +425,9 @@ final class PageController extends Controller
         if ($exception->getMessage() === 'EDIT_CONFLICT' && $page !== null) {
             $conflict = [
                 'base_version' => $baseVersion,
-                'base' => $repository->revision((int) $page['id'], $baseVersion),
+                'base' => (new \OpenWiki\Wiki\ContentService())->safeProjection($repository->revision((int) $page['id'], $baseVersion)),
                 'local' => $old,
-                'server' => $repository->findById((int) $page['id']),
+                'server' => (new \OpenWiki\Wiki\ContentService())->safeProjection($repository->findById((int) $page['id'])),
             ];
             if ($conflict['server'] !== null) {
                 $conflict['server']['tags'] = array_column((new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']), 'name');
@@ -455,7 +453,7 @@ final class PageController extends Controller
             'serverDraft' => null,
             'pages' => $this->visibleTree($space),
             'templates' => $page === null
-                ? $this->app->database()->fetchAll('SELECT id, name, description, content_html, content_markdown FROM page_templates ORDER BY is_system DESC, name ASC')
+                ? (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->all()
                 : [],
             'tags' => $page === null
                 ? []
