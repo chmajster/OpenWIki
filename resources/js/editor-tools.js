@@ -1,3 +1,5 @@
+import {TextSelection} from '@tiptap/pm/state';
+
 const t = (text) => window.wikiTranslate(text);
 export function setupEditorTools(root, editor, requestJson, snapshot, fields, canEdit) {
     const q = (selector) => root.querySelector(selector);
@@ -56,6 +58,17 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
     });
     const openLink = () => {
         if (!canEdit()) return;
+        // Native arrow-key selectionchange may arrive after the shortcut keydown.
+        // Read the current selection through ProseMirror's public DOM-position API.
+        const native = editor.view.dom.ownerDocument.getSelection();
+        if (editor.state.selection instanceof TextSelection && native?.anchorNode && native.focusNode
+            && editor.view.dom.contains(native.anchorNode) && editor.view.dom.contains(native.focusNode)) {
+            const doc = editor.state.doc;
+            const selection = TextSelection.between(
+                doc.resolve(editor.view.posAtDOM(native.anchorNode, native.anchorOffset)),
+                doc.resolve(editor.view.posAtDOM(native.focusNode, native.focusOffset)));
+            if (!selection.eq(editor.state.selection)) editor.view.dispatch(editor.state.tr.setSelection(selection));
+        }
         // A cursor inside a link edits its entire range; an explicit selection stays explicit.
         if (editor.state.selection.empty && editor.isActive('link')) editor.commands.extendMarkRange('link');
         linkSelection = editor.state.selection.getBookmark();
