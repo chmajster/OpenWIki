@@ -1886,7 +1886,7 @@ final class ApiV1Controller extends Controller
 
         if (
             $attachment === null
-            || !$this->canViewAttachment($context, $attachment)
+            || !$this->canViewAttachment($context, $attachment, $request->query('revision') === null ? null : (int) $request->query('revision'))
         ) {
             return $this->error('not_found', 'Attachment not found.', 404);
         }
@@ -2133,7 +2133,7 @@ final class ApiV1Controller extends Controller
 
         if (
             $attachment === null
-            || !$this->canViewAttachment($context, $attachment)
+            || !$this->canViewAttachment($context, $attachment, $request->query('revision') === null ? null : (int) $request->query('revision'))
         ) {
             return $this->error('not_found', 'Attachment not found.', 404);
         }
@@ -2176,7 +2176,7 @@ final class ApiV1Controller extends Controller
 
         if (
             $attachment === null
-            || !$this->canViewAttachment($context, $attachment)
+            || !$this->canViewAttachment($context, $attachment, $request->query('revision') === null ? null : (int) $request->query('revision'))
         ) {
             return $this->error('not_found', 'Attachment not found.', 404);
         }
@@ -2232,7 +2232,7 @@ final class ApiV1Controller extends Controller
         $attachment = $attachmentId === null ? null : $service->find($attachmentId, true);
         if (
             $attachment === null
-            || !$this->canViewAttachment($context, $attachment)
+            || !$this->canViewAttachment($context, $attachment, $request->query('revision') === null ? null : (int) $request->query('revision'))
         ) {
             return $this->error('not_found', 'Attachment not found.', 404);
         }
@@ -2272,7 +2272,7 @@ final class ApiV1Controller extends Controller
         if (
             $attachment === null
             || $versionNumber === null
-            || !$this->canViewAttachment($context, $attachment)
+            || !$this->canViewAttachment($context, $attachment, $request->query('revision') === null ? null : (int) $request->query('revision'))
         ) {
             return $this->error('not_found', 'Attachment version not found.', 404);
         }
@@ -2326,10 +2326,10 @@ final class ApiV1Controller extends Controller
         ];
     }
 
-    private function canViewAttachment(array $context, array &$attachment): bool
+    private function canViewAttachment(array $context, array &$attachment, ?int $revision = null): bool
     {
         if (!$this->canViewPage($context, $this->attachmentPage($attachment))) return false;
-        $visible = (new \OpenWiki\Attachments\AttachmentVisibility($this->app->database()))->project($attachment, (int) $context['user']['id'], $this->isSuperAdmin($context), $context['permissions']);
+        $visible = (new \OpenWiki\Attachments\AttachmentVisibility($this->app->database()))->project($attachment, (int) $context['user']['id'], $this->isSuperAdmin($context), $context['permissions'], false, $revision);
         if ($visible === null) return false;
         $attachment = $visible;
         return true;

@@ -70,7 +70,7 @@ final class AttachmentService
     /** Deleting a working file must not remove the current publication's bytes. */
     public function readableFilesCondition(): string
     {
-        return '(a.deleted_at IS NULL OR EXISTS (SELECT 1 FROM page_revision_attachments f INNER JOIN pages fp ON fp.id = f.page_id INNER JOIN spaces fs ON fs.id = fp.space_id WHERE f.attachment_id = a.id AND f.revision_number = fp.published_revision AND (fs.review_workflow = 1 OR fp.published_revision <> fp.version)))';
+        return '(a.deleted_at IS NULL OR EXISTS (SELECT 1 FROM page_revision_attachments f INNER JOIN pages fp ON fp.id = f.page_id INNER JOIN spaces fs ON fs.id = fp.space_id WHERE f.attachment_id = a.id AND (fs.review_workflow = 1 OR (f.revision_number = fp.published_revision AND fp.published_revision <> fp.version))))';
     }
 
     public function upload(int $pageId, int $uploaderId, array $file): int

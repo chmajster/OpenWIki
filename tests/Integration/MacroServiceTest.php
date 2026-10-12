@@ -120,6 +120,8 @@ final class MacroServiceTest extends TestCase
             ]
         );
 
+        $this->app->database()->execute('INSERT INTO attachment_versions (attachment_id, version_number, storage_key, mime_type, size_bytes, sha256, uploader_id, created_at) SELECT id, current_version, storage_key, mime_type, size_bytes, ?, uploader_id, created_at FROM attachments WHERE storage_key = ?', [hash('sha256', str_repeat('x', 32)), 'macro-test-' . $suffix]);
+
         $page = $this->app->database()->fetchOne(
             'SELECT p.*, u.username AS author_username
              FROM pages p

@@ -21,7 +21,19 @@ final class RevisionAccessService
     public function resource(array $revision, array $space, ?int $user, bool $super, ?array $ceiling = null): array
     {
         $row = (new ContentService())->safeProjection($revision);
+        $row['rendered_html'] = self::bindFiles($row['content_html'], (int) $row['revision_number']);
         return $this->metadata($row, $space, $user, $super);
+    }
+
+    /** Bind rendered protected URLs without modifying the stored document source. */
+    public static function bindFiles(string $html, int $number): string
+    {
+        return preg_replace_callback('~\b(href|src)="(/attachments/[1-9][0-9]*/(?:preview|download|thumbnail)(?:[?#][^"]*)?)"~', static function (array $match) use ($number): string {
+            $url = parse_url(html_entity_decode($match[2], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            parse_str($url['query'] ?? '', $query); $query['revision'] = $number;
+            $target = $url['path'] . '?' . http_build_query($query) . (isset($url['fragment']) ? '#' . $url['fragment'] : '');
+            return $match[1] . '="' . htmlspecialchars($target, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"';
+        }, $html) ?? $html;
     }
 
     public function metadata(array $row, array $space, ?int $user, bool $super): array

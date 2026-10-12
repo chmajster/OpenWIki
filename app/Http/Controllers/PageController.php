@@ -153,6 +153,7 @@ final class PageController extends Controller
         $page = $repository->published($page);
         $contentOwnerName = $this->app->database()->fetchOne('SELECT username FROM users WHERE id = ?', [$page['content_owner_id']])['username'] ?? 'Nieaktywne konto';
         $rendered = (new MacroService($this->app))->renderPage($page, $space);
+        if ($page['published_revision'] !== null && ((bool) $space['review_workflow'] || $headVersion > (int) $page['published_revision'])) $rendered['html'] = \OpenWiki\Wiki\RevisionAccessService::bindFiles($rendered['html'], (int) $page['published_revision']);
 
         return $this->render('pages/show', [
             'structureEnabled' => true,
@@ -327,6 +328,7 @@ final class PageController extends Controller
         $revision = $repository->revision((int) $page['id'], (int) $number);
         if ($revision === null || (!(bool) $revision['was_published'] && !(new PageAclService($this->app))->canReadWorking($page, $space))) return $this->render('errors/404', ['title' => 'Revision not found'], 404);
         $safeRevision = (new \OpenWiki\Wiki\ContentService())->safeProjection($revision);
+        $safeRevision['content_html'] = \OpenWiki\Wiki\RevisionAccessService::bindFiles($safeRevision['content_html'], (int) $revision['revision_number']);
         // Historical source is immutable; read-time sanitation never writes it back.
         return $this->render('pages/revision', ['title' => $revision['title'], 'space' => $space, 'page' => $page, 'revision' => $safeRevision, 'html' => $safeRevision['content_html']]);
     }

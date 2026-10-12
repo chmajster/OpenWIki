@@ -165,6 +165,8 @@ final class PageReviewTest extends TestCase
             self::assertSame(200, $api->downloadAttachment($this->request([], $reader), (string) $id)->status());
             $this->decide($draft, 'submit', 'author'); $this->decide($draft, 'approve', 'reviewer'); $this->decide($draft, 'publish', 'publisher');
             self::assertSame(404, $api->downloadAttachment($this->request([], $reader), (string) $id)->status());
+            self::assertSame(200, $api->downloadAttachment($this->request([], $reader, ['revision' => 2]), (string) $id)->status());
+            self::assertSame(404, $api->downloadAttachment($this->request([], $reader, ['revision' => 1]), (string) $id)->status());
         } finally { $files->purgeStorageKeys($keys); }
     }
 }

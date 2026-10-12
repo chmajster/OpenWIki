@@ -26,7 +26,12 @@ if ($argv[1] === 'seed') {
     $data = [];
     foreach (['users', 'user_roles', 'attachments', 'attachment_versions'] as $table) $data[$table] = $db->fetchAll('SELECT * FROM `' . $table . '` ORDER BY 1');
     $data['pages'] = $db->fetchAll('SELECT id, title, slug, content_html, author_id, owner_id, version FROM pages ORDER BY id');
-    $data['history'] = $db->fetchAll('SELECT id, title, content_html FROM page_revisions ORDER BY id');
+    $data['history'] = $db->fetchAll('SELECT id, title, content_html FROM page_revisions WHERE change_summary IS NULL OR change_summary <> "Migration: preserved published page snapshot" ORDER BY id');
+    if ($db->fetchOne('SELECT 1 FROM schema_migrations WHERE version = "011_document_review"') !== null) {
+        $page = $db->fetchOne('SELECT * FROM pages WHERE slug = "preserved"');
+        $snapshot = $db->fetchOne('SELECT * FROM page_revisions WHERE page_id = ? AND revision_number = 3', [$page['id']]);
+        if ((int) $page['published_revision'] !== 3 || $page['workflow_state'] !== 'published' || $snapshot['content_html'] !== $page['content_html'] || !(bool) $snapshot['was_published']) throw new RuntimeException('Publication snapshot changed during host upgrade.');
+    }
     foreach ($data['attachments'] as $file) $data['files'][] = hash_file('sha256', $root . '/storage/attachments/' . $file['storage_key']);
     echo hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
 } else throw new RuntimeException('Unknown host fixture operation.');

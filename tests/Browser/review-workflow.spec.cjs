@@ -127,6 +127,9 @@ test('draft files and later file versions remain private through real API downlo
     await call(request, 'post', 'pages/' + doc.id + '/review', {revision: head.version, action: 'approve', comment: 'Files checked'}, 6);
     const changedFile = await request.post('/api/v1/attachments/' + file.id + '/version', {headers: headers(5), multipart: {attachment: {name: 'later-secret.txt', mimeType: 'text/plain', buffer: Buffer.from('Private v2')}}});
     expect(changedFile.ok(), await changedFile.text()).toBeTruthy();
+    const reviewedFile = await request.get('/api/v1/attachments/' + file.id + '/download?revision=' + head.version, {headers: headers(6)});
+    expect(await reviewedFile.text()).toBe('Private v1');
+    expect((await request.get('/api/v1/attachments/' + file.id + '/download?revision=' + head.version, {headers: headers(8)})).status()).toBe(404);
     await call(request, 'post', 'pages/' + doc.id + '/review', {revision: head.version, action: 'publish'}, 7);
     const downloaded = await request.get('/api/v1/attachments/' + file.id + '/download', {headers: headers(8)});
     expect(downloaded.ok()).toBeTruthy(); expect(await downloaded.text()).toBe('Private v1');
@@ -137,7 +140,9 @@ test('draft files and later file versions remain private through real API downlo
     expect(await anon.text()).toContain('private.txt'); expect(await anon.text()).not.toContain('later-secret');
     const exported = await request.get('/spaces/' + s.key + '/pages/' + doc.slug + '/export/html');
     expect(await exported.text()).not.toContain('later-secret');
-    await call(request, 'delete', 'attachments/' + file.id, {}, 5);
+    const deniedDelete = await request.delete('/api/v1/attachments/' + file.id, {headers: headers(5)});
+    expect(deniedDelete.status()).toBe(403);
+    await call(request, 'delete', 'attachments/' + file.id, {});
     const retained = await request.get('/api/v1/attachments/' + file.id + '/download', {headers: headers(8)});
     expect(retained.status()).toBe(200); expect(await retained.text()).toBe('Private v1');
     const retainedFiles = await call(request, 'get', 'attachments', null, 8);

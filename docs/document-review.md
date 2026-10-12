@@ -77,6 +77,9 @@ Czytelnik pobiera opublikowaną wersję, a bezpośredni URL nowszej wersji jest
 odrzucany. Eksport publikacji pomija pliki robocze również dla edytora.
 Usunięcie pliku w szkicu nie usuwa bajtów bieżącej publikacji. Dopiero publikacja
 rewizji bez tego pliku usuwa go z odczytu czytelnika.
+Podgląd recenzji i historii wiąże chronione adresy plików z numerem rewizji.
+Odczyt `?revision=N` sprawdza dostęp do N oraz jej snapshot plików; API rewizji
+udostępnia taki podgląd jako `rendered_html`, zachowując źródło do porównania.
 Powiadomienia sprawdzają aktualny ACL odbiorcy; decyzje trafiają też do
 uprawnionego autora i właściciela merytorycznego. Zdarzenia robocze webhooków
 nie zawierają roboczego tytułu ani slugu.
