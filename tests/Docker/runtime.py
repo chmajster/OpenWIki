@@ -198,7 +198,7 @@ def run():
             check(b'APP_KEY=' in saved_env, 'Wizard atomically persists the Docker application key')
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
-                cron = instance.php('require "/app/bootstrap/autoload.php"; $a=OpenWiki\Core\Application::boot("/app",false); echo $a->database()->fetchOne("SELECT setting_value FROM settings WHERE setting_key = \'system.cron_last_run\'")["setting_value"] ?? "";')
+            cron = instance.php('require "/app/bootstrap/autoload.php"; $a=OpenWiki\\Core\\Application::boot("/app",false); echo $a->database()->fetchOne("SELECT setting_value FROM settings WHERE setting_key = \'system.cron_last_run\'")["setting_value"] ?? "";')
                 if cron:
                     break
                 time.sleep(1)

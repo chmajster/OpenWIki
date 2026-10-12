@@ -122,3 +122,15 @@ formularz strony, upload, API, worker, ochronę plików, RW, zmiany PHP,
 powtórzenie, rebuild, klucz i dane, zarządzanie, zajęty port oraz drugą kopię
 o tej samej nazwie. Usuwa tylko własne projekty i wolumeny. CI wykonuje ten sam
 test. Bazowy port zmienia `OPENWIKI_DOCKER_TEST_PORT` (domyślnie 18390).
+
+CI włącza również rzeczywistą przeglądarkę dla kreatora na desktopie i telefonie.
+Aby wykonać te dodatkowe sprawdzenia lokalnie, przygotuj narzędzia testowe:
+
+```bash
+npm ci --include=dev
+npx playwright install chromium
+OPENWIKI_DOCKER_BROWSER_TEST=1 python3 tests/Docker/runtime.py --workspace-temp
+```
+
+Node i przeglądarka służą tu wyłącznie testom; instalator nadal działa z PATH
+bez hostowego PHP, Composer, Node i npm.
