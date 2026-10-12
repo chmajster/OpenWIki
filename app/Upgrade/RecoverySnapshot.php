@@ -15,6 +15,7 @@ final class RecoverySnapshot
     public function create(string $destination): array
     {
         if (file_exists($destination)) throw new \RuntimeException('Recovery snapshot already exists; it will not be overwritten.');
+        $writing = dirname($destination) . '/.working-' . bin2hex(random_bytes(8)) . '.tar';
         $temporary = dirname($destination) . '/snapshot-' . bin2hex(random_bytes(8));
         if (!mkdir($temporary, 0700)) throw new \RuntimeException('Cannot prepare private recovery directory.');
         $lock = $this->lock();
@@ -35,7 +36,7 @@ final class RecoverySnapshot
                 elseif ($file->isFile()) $sources[$relative] = $file->getPathname();
                 else throw new \RuntimeException('Storage contains an unsupported file type.');
             }
-            $archive = new PharData($destination);
+            $archive = new PharData($writing);
             $entries = [];
             foreach ($sources as $name => $source) {
                 if (!is_file($source) || !is_readable($source)) throw new \RuntimeException('A recovery source is not readable.');
@@ -46,11 +47,12 @@ final class RecoverySnapshot
                 'tables' => $tables, 'entries' => $entries, 'directories' => $directories];
             $archive->addFromString('manifest.json', json_encode($manifest, JSON_THROW_ON_ERROR));
             unset($archive);
-            chmod($destination, 0600);
-            $this->verify($destination);
+            chmod($writing, 0600);
+            $this->verify($writing);
+            if (!rename($writing, $destination)) throw new \RuntimeException('Cannot commit the verified recovery archive.');
             return ['sha256' => hash_file('sha256', $destination), 'tables' => count($tables), 'files' => count($entries)];
         } catch (\Throwable $error) {
-            if (is_file($destination)) unlink($destination);
+            if (is_file($writing)) unlink($writing);
             throw $error;
         } finally {
             try { $this->database->fetchOne('SELECT RELEASE_LOCK(?)', [$lock]); } catch (\Throwable) { /* Connection loss releases its named locks. */ }
