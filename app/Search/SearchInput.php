@@ -18,6 +18,7 @@ final class SearchInput
         $type = strtolower(trim((string) $request->query('type', $defaultType)));
         $visibility = (string) $request->query('visibility', 'all');
         if (mb_strlen($query) > 200) throw new \InvalidArgumentException('Zapytanie może mieć najwyżej 200 znaków.');
+        if ($query !== '' && self::literal($query) === '') throw new \InvalidArgumentException('Fraza nie może być pusta.');
         if (!in_array($type, self::TYPES, true)) throw new \InvalidArgumentException('Nieprawidłowy typ wyników.');
         if (!in_array($visibility, ['all', 'published', 'working'], true)) throw new \InvalidArgumentException('Nieprawidłowy zakres rewizji.');
         $filters = ['visibility' => $visibility];
@@ -44,7 +45,7 @@ final class SearchInput
     public static function literal(string $query): string
     {
         $query = trim($query);
-        if (strlen($query) >= 2 && $query[0] === '"' && str_ends_with($query, '"')) return substr($query, 1, -1);
+        if (strlen($query) >= 2 && $query[0] === '"' && str_ends_with($query, '"')) return trim(substr($query, 1, -1));
         if (preg_match('/^[\p{L}\p{N}]+(?:\s+[\p{L}\p{N}]+)*\*$/uD', $query) === 1) return substr($query, 0, -1);
         return $query;
     }

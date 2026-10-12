@@ -25,6 +25,9 @@ final class SearchCompletenessTest extends TestCase
                 $db->execute('INSERT INTO role_permissions (role_id,permission_id) SELECT ?,id FROM permissions WHERE name = ?', [$role, $permission]);
             }
             $db->execute('INSERT INTO user_roles (user_id,role_id) VALUES (?,?)', [$users[1], $role]);
+            $viewer = $db->insert('INSERT INTO roles (name,slug,is_system,created_at,updated_at) VALUES ("Search reader","search-reader",0,UTC_TIMESTAMP(),UTC_TIMESTAMP())');
+            $db->execute('INSERT INTO role_permissions (role_id,permission_id) SELECT ?,id FROM permissions WHERE name = "page.view"', [$viewer]);
+            $db->execute('INSERT INTO user_roles (user_id,role_id) VALUES (?,?)', [$users[0], $viewer]);
             $space = $db->insert('INSERT INTO spaces (name,space_key,owner_id,visibility,status,created_at,updated_at) VALUES ("Search","SEARCH",?,"public","active",UTC_TIMESTAMP(),UTC_TIMESTAMP())', [$users[1]]);
             $test($db, $users[0], $users[1], $space);
         });
@@ -103,8 +106,12 @@ final class SearchCompletenessTest extends TestCase
             $db->execute('INSERT INTO page_acl (page_id,principal_type,principal_id,permission,effect,inherit_to_children) VALUES (?,"user",?,"page.view","allow",1)', [$parent, $owner]);
             $tag = $db->insert('INSERT INTO tags (name,slug,created_at) VALUES ("needle-tag","needle-tag",UTC_TIMESTAMP())');
             foreach ([$parent,$child] as $id) $db->execute('INSERT INTO page_tags (page_id,tag_id) VALUES (?,?)', [$id, $tag]);
-            $result = (new SearchService($db))->search($this->input('needle', ['type' => 'all']), $reader, ['page.view']);
+            $private = $db->insert('INSERT INTO spaces (name,space_key,owner_id,visibility,status,created_at,updated_at) VALUES ("SECRET space","PRIVATE",?,"private","active",UTC_TIMESTAMP(),UTC_TIMESTAMP())', [$owner]);
+            $foreign = $this->page($db, $private, $owner, 'SECRET foreign page');
+            $db->execute('INSERT INTO page_tags (page_id,tag_id) VALUES (?,?)', [$foreign, $tag]);
+            $result = (new SearchService($db))->search($this->input('needle', ['type' => 'all', 'space' => 'SEARCH']), $reader, ['page.view']);
             self::assertStringNotContainsString('Hidden parent', json_encode($result, JSON_THROW_ON_ERROR));
+            self::assertStringNotContainsString('SECRET', json_encode($result, JSON_THROW_ON_ERROR));
             $tags = array_values(array_filter($result['data'], static fn ($row) => $row['type'] === 'tag'));
             self::assertCount(1, $tags); self::assertSame(1, $tags[0]['page_count']);
             $guest = (new SearchService($db))->search($this->input('needle', ['type' => 'all']), null, []);
@@ -136,6 +143,56 @@ final class SearchCompletenessTest extends TestCase
             self::assertSame($last, $indexer->processDue(2));
             self::assertSame('First Second', $db->fetchOne('SELECT content_text FROM pages WHERE id = ?', [$ids[0]])['content_text']);
             self::assertStringContainsString('<script>secret</script>', $db->fetchOne('SELECT content_html FROM pages WHERE id = ?', [$ids[4]])['content_html']);
+        });
+    }
+
+    public function testGroupMembershipChangesTheNextSearchWithoutAStaleAclCache(): void
+    {
+        $this->fixture(function (Database $db, int $reader, int $owner, int $space): void {
+            $id = $this->page($db,$space,$owner,'Group-only');
+            $group = $db->insert('INSERT INTO user_groups (name,slug) VALUES ("Search group","search-group")');
+            $db->execute('INSERT INTO page_acl (page_id,principal_type,principal_id,permission,effect,inherit_to_children) VALUES (?,"group",?,"page.view","allow",1)',[$id,$group]);
+            $service = new SearchService($db);
+            self::assertSame(0,$service->search($this->input('Group-only'),$reader,['page.view'])['meta']['total']);
+            $db->execute('INSERT INTO group_users (group_id,user_id) VALUES (?,?)',[$group,$reader]);
+            self::assertSame(1,$service->search($this->input('Group-only'),$reader,['page.view'])['meta']['total']);
+            $db->execute('DELETE FROM group_users WHERE group_id = ? AND user_id = ?',[$group,$reader]);
+            self::assertSame(0,$service->search($this->input('Group-only'),$reader,['page.view'])['meta']['total']);
+        });
+    }
+
+    public function testAttachmentSearchUsesPublicSnapshotsAndKeepsPrivateVersionsPrivate(): void
+    {
+        $this->fixture(function (Database $db, int $reader, int $owner, int $space): void {
+            $id = $this->page($db,$space,$owner,'Files');
+            $file = $db->insert('INSERT INTO attachments (page_id,uploader_id,name,storage_key,mime_type,size_bytes,current_version) VALUES (?, ?, "report-private.txt", "search-file", "text/plain", 200, 2)',[$id,$owner]);
+            foreach ([1,2] as $version) $db->execute('INSERT INTO attachment_versions (attachment_id,version_number,storage_key,mime_type,size_bytes,sha256,uploader_id) VALUES (?, ?, ?, "text/plain", ?, ?, ?)',[$file,$version,'search-file-' . $version,$version * 100,str_repeat((string) $version,64),$owner]);
+            $db->execute('UPDATE spaces SET review_workflow = 1 WHERE id = ?',[$space]);
+            $db->execute('UPDATE pages SET published_revision = 1,version = 2 WHERE id = ?',[$id]);
+            $db->execute('INSERT INTO page_revision_attachments (page_id,revision_number,attachment_id,version_number,name) VALUES (?,1,?,1,"report-public.txt")',[$id,$file]);
+            $service = new SearchService($db);
+            $public = $service->search($this->input('report', ['type'=>'attachment']),$reader,['page.view']);
+            self::assertSame(1,$public['meta']['total']); self::assertSame('report-public.txt',$public['data'][0]['name']); self::assertSame(100,$public['data'][0]['size_bytes']);
+            self::assertSame(0,$service->search($this->input('private',['type'=>'attachment']),$reader,['page.view'])['meta']['total']);
+            self::assertSame(1,$service->search($this->input('private',['type'=>'attachment']),$owner,['page.view','page.edit'])['meta']['total']);
+            $db->execute('UPDATE attachments SET deleted_at = UTC_TIMESTAMP() WHERE id = ?',[$file]);
+            self::assertSame(1,$service->search($this->input('report',['type'=>'attachment']),$reader,['page.view'])['meta']['total']);
+            self::assertSame(0,$service->search($this->input('private',['type'=>'attachment']),$owner,['page.view','page.edit'])['meta']['total']);
+        });
+    }
+
+    public function testFulltextNeedsNoServerAdministrationOrProcessPrivilege(): void
+    {
+        $this->fixture(function (Database $db, int $reader, int $owner, int $space): void {
+            $this->page($db,$space,$owner,'Ordinary title','privilegeterm');
+            $username = 'search_ro_' . bin2hex(random_bytes(6)); $password = bin2hex(random_bytes(16));
+            $name = $db->fetchOne('SELECT DATABASE() AS name')['name'];
+            $db->pdo()->exec("CREATE USER '$username'@'%' IDENTIFIED BY '$password'");
+            try {
+                $db->pdo()->exec("GRANT SELECT ON `$name`.* TO '$username'@'%'");
+                $limited = Database::connect(['host'=>getenv('OPENWIKI_TEST_DB_HOST'),'port'=>(int)getenv('OPENWIKI_TEST_DB_PORT'),'database'=>$name,'username'=>$username,'password'=>$password]);
+                self::assertSame(1,(new SearchService($limited))->search($this->input('privilegeterm'),$reader,['page.view'])['meta']['total']);
+            } finally { $db->pdo()->exec("DROP USER '$username'@'%'"); }
         });
     }
 }

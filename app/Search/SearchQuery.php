@@ -71,8 +71,9 @@ final class SearchQuery
             $from .= ' INNER JOIN attachments a ON a.page_id = p.id INNER JOIN users u ON u.id = a.uploader_id';
             $legacy = '(s.review_workflow = 0 AND p.status = "published" AND (p.published_revision IS NULL OR p.published_revision = p.version))';
             if ($working) {
-                $where[] = 'a.deleted_at IS NULL'; $where[] = '(p.published_revision IS NULL OR p.version <> p.published_revision OR s.review_workflow = 1)';
+                $where[] = 'a.deleted_at IS NULL'; $where[] = 'NOT ' . $legacy; $where[] = '(p.published_revision IS NULL OR p.version <> p.published_revision OR s.review_workflow = 1)';
                 $title = 'a.name'; $body = 'a.mime_type'; $date = 'a.updated_at'; $revision = 'p.version';
+                $fileVersion = 'a.current_version';
                 $extra = ', a.name,a.mime_type,a.size_bytes,a.current_version AS attachment_version';
             } else {
                 $from .= ' LEFT JOIN page_revision_attachments pa ON pa.page_id = p.id AND pa.revision_number = p.published_revision AND pa.attachment_id = a.id LEFT JOIN attachment_versions av ON av.attachment_id = pa.attachment_id AND av.version_number = pa.version_number';
@@ -81,11 +82,13 @@ final class SearchQuery
                 $title = 'CASE WHEN ' . $legacy . ' THEN a.name ELSE pa.name END';
                 $body = 'CASE WHEN ' . $legacy . ' THEN a.mime_type ELSE av.mime_type END';
                 $date = 'CASE WHEN ' . $legacy . ' THEN a.updated_at ELSE av.created_at END';
+                $fileVersion = 'CASE WHEN ' . $legacy . ' THEN a.current_version ELSE pa.version_number END';
                 $extra = ', ' . $title . ' AS name, ' . $body . ' AS mime_type, CASE WHEN ' . $legacy . ' THEN a.size_bytes ELSE av.size_bytes END AS size_bytes, CASE WHEN ' . $legacy . ' THEN a.current_version ELSE pa.version_number END AS attachment_version';
             }
             $id = 'a.id'; $created = 'a.created_at'; $match = '(' . $title . " LIKE ? ESCAPE '!' OR " . $body . " LIKE ? ESCAPE '!')"; $matchParams = [$like, $like]; $extra .= ', p.title AS page_title,p.slug';
         } elseif ($type === 'tag') {
-            $from .= ' INNER JOIN users u ON u.id = p.author_id INNER JOIN page_tags pt ON pt.page_id = p.id INNER JOIN tags t ON t.id = pt.tag_id';
+            if ($ids === null) $from .= ' INNER JOIN users u ON u.id = p.author_id INNER JOIN page_tags pt ON pt.page_id = p.id INNER JOIN tags t ON t.id = pt.tag_id';
+            else { $from = 'tags t'; $where = []; $page = 'NULL'; $space = 'NULL'; $revision = '0'; }
             $id = 't.id'; $title = 't.name'; $body = "''"; $date = 't.created_at'; $created = 't.created_at';
             $match = '(t.name LIKE ? ESCAPE \'!\' OR t.slug LIKE ? ESCAPE \'!\')'; $matchParams = [$like, $like]; $extra = ', t.name,t.slug';
         } else throw new \InvalidArgumentException('Unknown search type.');
@@ -94,6 +97,7 @@ final class SearchQuery
         $params = [$needle, $prefix, $like];
         $variant = $working ? '1' : ($type === 'page' ? '(p.status <> "published" AND p.published_revision IS NULL)' : '0');
         $select = 'SELECT "' . $type . '" AS type,' . $id . ' AS id,' . $page . ' AS page_id,' . $space . ' AS space_id,' . $revision . ' AS revision,' . $variant . ' AS working,' . $score . ' AS relevance,' . $date . ' AS updated_at,' . $created . ' AS created_at';
+        if ($type === 'attachment' && $ids === null) $select .= ', ' . $fileVersion . ' AS attachment_version, ' . $title . ' AS attachment_name';
         if ($ids !== null) {
             $where[] = $id . ' IN (' . implode(',', array_map('intval', $ids)) . ')';
             $select .= ', ' . $title . ' AS title, ' . $this->snippet($body) . ' AS snippet' . $extra;
@@ -117,7 +121,8 @@ final class SearchQuery
         }
         if (($filters['author'] ?? '') !== '' && $type !== 'space') { $where[] = "u.username LIKE ? ESCAPE '!'"; $params[] = SearchInput::like($filters['author']); }
         if (($filters['tag'] ?? '') !== '' && !in_array($type, ['space', 'user'], true)) {
-            if ($working && $type === 'page') { $where[] = 'JSON_CONTAINS(COALESCE(r.tags_json,"[]"), ?)'; $params[] = json_encode($filters['tag'], JSON_THROW_ON_ERROR); }
+            if ($type === 'tag') { $where[] = '(t.name = ? OR t.slug = ?)'; array_push($params, $filters['tag'], $filters['tag']); }
+            elseif ($working && $type === 'page') { $where[] = 'JSON_CONTAINS(COALESCE(r.tags_json,"[]"), ?)'; $params[] = json_encode($filters['tag'], JSON_THROW_ON_ERROR); }
             else { $where[] = 'EXISTS (SELECT 1 FROM page_tags fpt INNER JOIN tags ft ON ft.id = fpt.tag_id WHERE fpt.page_id = p.id AND (ft.name = ? OR ft.slug = ?))'; array_push($params, $filters['tag'], $filters['tag']); }
         }
         foreach (['created_from' => [$created, '>='], 'created_to' => [$created, '<='], 'updated_from' => [$date, '>='], 'updated_to' => [$date, '<=']] as $key => [$column, $operator]) if (($filters[$key] ?? '') !== '') { $where[] = $column . ' ' . $operator . ' ?'; $params[] = $filters[$key]; }

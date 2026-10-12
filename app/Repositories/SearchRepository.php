@@ -8,6 +8,9 @@ use OpenWiki\Core\Database;
 
 final class SearchRepository
 {
+    // Default InnoDB list on MySQL/MariaDB. Reading its information_schema table requires PROCESS,
+    // which the application database account must not need. Custom lists use the literal fallback.
+    private const STOPWORDS = ['a','about','an','are','as','at','be','by','com','de','en','for','from','how','i','in','is','it','la','of','on','or','that','the','this','to','was','what','when','where','who','will','with','und','www'];
     public function __construct(private readonly Database $database)
     {
     }
@@ -47,9 +50,8 @@ final class SearchRepository
         if (preg_match('/^[\p{L}\p{N}]+(?:\s+[\p{L}\p{N}]+)*\*?$/uD', $query) !== 1) return false;
         $config = $this->database->fetchOne('SELECT @@innodb_ft_min_token_size AS minimum, @@innodb_ft_max_token_size AS maximum, @@innodb_ft_server_stopword_table AS custom_stopwords, @@innodb_ft_user_stopword_table AS user_stopwords');
         if (($config['custom_stopwords'] ?? '') !== '' || ($config['user_stopwords'] ?? '') !== '') return false;
-        $stopwords = array_map('mb_strtolower', array_column($this->database->fetchAll('SELECT value FROM information_schema.INNODB_FT_DEFAULT_STOPWORD'), 'value'));
         foreach (preg_split('/\s+/u', \OpenWiki\Search\SearchInput::literal($query), -1, PREG_SPLIT_NO_EMPTY) as $word) {
-            if (mb_strlen($word) < (int) $config['minimum'] || mb_strlen($word) > (int) $config['maximum'] || in_array(mb_strtolower($word), $stopwords, true)) return false;
+            if (mb_strlen($word) < (int) $config['minimum'] || mb_strlen($word) > (int) $config['maximum'] || in_array(mb_strtolower($word), self::STOPWORDS, true)) return false;
         }
         return true;
     }

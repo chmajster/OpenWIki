@@ -19,12 +19,17 @@ final class SearchService
             $spaceIds = array_filter(array_column($candidates, 'space_id'));
             $workingIds = array_column(array_filter($candidates, static fn ($row) => (bool) $row['working']), 'page_id');
             $access = new SearchAccess($this->db, $spaceIds, array_filter(array_column($candidates, 'page_id')), $workingIds, $user, $permissions);
-            $visible = []; $tagPages = [];
+            $visible = []; $tagPages = []; $files = [];
             foreach ($candidates as $row) {
                 $type = $row['type']; $pageId = (int) ($row['page_id'] ?? 0);
                 if ($pageId !== 0 && !$access->visible($pageId, (bool) $row['working'])) continue;
                 if ($type === 'space' && !($access->spaces[(int) $row['space_id']]['search_visible'] ?? false)) continue;
                 if ($type === 'user' && $user === null) continue;
+                if ($type === 'attachment') {
+                    $signature = $row['id'] . ':' . $row['attachment_version'] . ':' . $row['attachment_name'];
+                    if (isset($files[$signature])) continue;
+                    $files[$signature] = true;
+                }
                 $key = self::key($row);
                 if ($type === 'tag') $tagPages[$key][$pageId] = true;
                 $visible[$key] = $row;
@@ -55,8 +60,9 @@ final class SearchService
                     $result['page_id'] = $pageId; $result['path'] = $access->path($pageId);
                     if ($type === 'page' && (bool) $row['working'] && $result['path'] !== []) $result['path'][count($result['path']) - 1]['title'] = $row['title'];
                     $pageRow = $access->pages[$pageId]; $slug = $row['slug'] ?? $pageRow['slug'];
-                    $result['url'] = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($slug);
-                    if ($type === 'page' && (bool) $row['working']) $result['url'] .= '/revisions/' . $row['revision'];
+                    $privateRevision = $type === 'page' && (bool) $row['working'] && $pageRow['published_revision'] !== null;
+                    $result['url'] = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($privateRevision ? $pageRow['slug'] : $slug);
+                    if ($privateRevision) $result['url'] .= '/revisions/' . $row['revision'];
                     $result['meta'] = $space['name'] . ' · ' . implode(' / ', array_column($result['path'], 'title'));
                     if ($type === 'page') { $result['slug'] = $slug; $result['status'] = $row['status']; }
                     if ($type === 'comment') { $result['url'] .= '#comment-' . $id; $result['page_title'] = $row['title']; $result['author'] = $row['author']; }

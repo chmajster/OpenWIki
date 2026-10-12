@@ -47,7 +47,7 @@ for (const viewport of [{width: 1280, height: 900}, {width: 390, height: 844}]) 
         await page.goto('/search');
         await page.route('**/search/suggest?**', route => route.fulfill({status: 503, contentType: 'application/json', body: '{}'}));
         await page.locator('[name=type]').selectOption('page'); await page.locator('main [data-search-form] [name=q]').fill(sample.query);
-        await expect(page.locator('[data-search-suggestion-status]')).toContainText('chwilowo niedostępne');
+        await expect(page.locator('main [data-search-suggestion-status]')).toContainText('chwilowo niedostępne');
         await page.locator('main [data-search-form] [name=q]').press('Enter'); await expect(page.locator('[data-search-total]')).toHaveText('36');
         expect(errors).toEqual([]);
     });

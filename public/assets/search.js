@@ -37,7 +37,7 @@
         }, 250);
     });
     input.addEventListener('keydown', event => {
-        if (event.key === 'Escape') { invalidate(); return; }
+        if (event.key === 'Escape') { event.preventDefault(); invalidate(); return; }
         if (list.hidden) return;
         const options = [...list.children];
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {

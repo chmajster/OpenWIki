@@ -58,7 +58,7 @@ final class SearchAccess
                 // Working content is a separate resource even if the public projection remains readable.
                 if ($this->visible[(int) $page['id']] && isset($workingNeeded[(int) $page['id']])) {
                     $this->working[(int) $page['id']] = $acl->canReadWorkingFor($page, $space, $user, $this->can('*'), $permissions)
-                        || (!(bool) $space['review_workflow'] && $page['published_revision'] === null);
+                        || (!(bool) $space['review_workflow'] && $page['published_revision'] === null && $page['status'] !== 'published');
                 }
             }
         }

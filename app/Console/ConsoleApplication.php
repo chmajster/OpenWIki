@@ -26,7 +26,7 @@ final class ConsoleApplication
 
         try {
             $writeGate = new \OpenWiki\Upgrade\WriteGate();
-            if (!in_array($command, ['help', '--help', '-h', 'install', 'db:status', 'system:check', 'readiness', 'upgrade:status'], true)) {
+            if (!in_array($command, ['help', '--help', '-h', 'install', 'db:status', 'system:check', 'readiness', 'upgrade:status', 'search:status'], true)) {
                 $writeGate->acquire($this->basePath, $command === 'migrate');
             }
             return match ($command) {
