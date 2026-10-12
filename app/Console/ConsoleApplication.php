@@ -151,9 +151,10 @@ TEXT);
             throw new \RuntimeException('OpenWiki is not installed.');
         }
 
+        $manifest = \OpenWiki\System\ReadinessService::manifest($this->basePath);
         $runner = new MigrationRunner($app->database(), $this->basePath . '/database/migrations');
         $applied = $runner->migrate();
-        if (!$runner->schemaState(\OpenWiki\System\ReadinessService::manifest($this->basePath)['compatible_extra_migrations'] ?? [])['ready']) {
+        if (!$runner->schemaState($manifest['compatible_extra_migrations'] ?? [])['ready']) {
             throw new \RuntimeException('Migration finished without a compatible schema. No upgrade success may be reported.');
         }
 

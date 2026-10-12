@@ -23,27 +23,27 @@ final class SystemInfoService
         $readiness = (new ReadinessService($this->app))->check();
         $db = []; $dbSize = []; $migrations = []; $cron = null;
         try {
-        $database = $this->app->database();
-        $db = $database->fetchOne(
+            $database = $this->app->database();
+            $db = $database->fetchOne(
             'SELECT VERSION() AS version, DATABASE() AS database_name'
-        ) ?? [];
-        $dbSize = $database->fetchOne(
+            ) ?? [];
+            $dbSize = $database->fetchOne(
             'SELECT COALESCE(SUM(data_length + index_length), 0) AS size_bytes
              FROM information_schema.tables
              WHERE table_schema = DATABASE()'
-        );
+            );
 
-        $migrations = (new MigrationRunner(
+            $migrations = (new MigrationRunner(
             $database,
             $basePath . '/database/migrations'
-        ))->status();
+            ))->status();
 
-        $cron = $database->fetchOne(
+            $cron = $database->fetchOne(
             'SELECT setting_value
              FROM settings
              WHERE setting_key = "system.cron_last_run"
              LIMIT 1'
-        );
+            );
         } catch (\Throwable) { /* Keep runtime and storage diagnostics available when DB/schema is unavailable. */ }
         $requirements = (new InstallService($basePath))->requirements(false);
         $cronLastRun = $cron === null ? null : (string) $cron['setting_value'];

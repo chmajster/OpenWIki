@@ -37,6 +37,10 @@ final class ReadinessService
         $path = $codePath . '/release.json';
         $value = is_file($path) ? json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR) : [];
         if (!is_array($value) || !is_array($value['compatible_extra_migrations'] ?? [])) throw new \RuntimeException('Invalid release compatibility manifest.');
+        if (isset($value['version']) && (!is_string($value['version']) || !preg_match('/^[a-zA-Z0-9.+_-]{1,128}$/D', $value['version']))) throw new \RuntimeException('Invalid release version.');
+        foreach ($value['compatible_extra_migrations'] ?? [] as $version) {
+            if (!is_string($version) || !preg_match('/^[a-zA-Z0-9_]{1,191}$/D', $version)) throw new \RuntimeException('Invalid compatible migration version.');
+        }
         return $value;
     }
 }

@@ -37,7 +37,7 @@ final class MigrationStep
         $where = "TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$table' AND INDEX_NAME = '$name'";
         return [
             'sql' => "ALTER TABLE `$table` ADD INDEX `$name` (`" . implode('`, `', $columns) . '`)',
-            'check' => "SELECT COUNT(*) FROM (SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS columns_list FROM information_schema.STATISTICS WHERE $where HAVING columns_list = '" . implode(',', $columns) . "') AS matching_index",
+            'check' => "SELECT COUNT(*) FROM (SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS columns_list FROM information_schema.STATISTICS WHERE $where AND NON_UNIQUE = 1 AND INDEX_TYPE = 'BTREE' HAVING columns_list = '" . implode(',', $columns) . "') AS matching_index",
             'exists' => 'SELECT EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE ' . $where . ')',
         ];
     }

@@ -226,6 +226,7 @@ upgrade_mode() {
     bash "$stage/scripts/build-editor.sh"
     php "$stage/scripts/local-runtime.php" php-ready
     php "$stage/scripts/local-runtime.php" assets-ready
+    upgrade_tool manifest "$stage"
     rm -rf -- "$stage/node_modules"
     printf '%s\n' "$sha" > "$stage/.release-sha"
     # Integrity receipt also covers vendor/assets. Shared storage and .env are excluded.

@@ -70,6 +70,7 @@ try {
         exit($result['ready'] ? 0 : 1);
     }
     if ($command === 'database-name') { echo Env::get('DB_DATABASE'); exit(0); }
+    if ($command === 'manifest') { ReadinessService::manifest($code); exit(0); }
     // Recovery can only operate while the shell coordinator holds the exclusive gate.
     if (!WriteGate::maintenance($code) || !is_readable($directory . '/owner')
         || !hash_equals(trim((string) file_get_contents($directory . '/owner')), (string) getenv('OPENWIKI_UPGRADE_OWNER'))) {
