@@ -1,0 +1,135 @@
+x-php: &php
+  image: "${COMPOSE_PROJECT_NAME}-php:local"
+  build:
+    context: "${OPENWIKI_PROJECT_DIR}"
+    dockerfile: docker/php/Dockerfile
+  user: "${OPENWIKI_UID}:${OPENWIKI_GID}"
+  working_dir: /app
+  environment: &environment
+    OPENWIKI_CONFIG_DIR: /runtime
+    OPENWIKI_STORAGE_DIR: /runtime/storage
+    OPENWIKI_MANAGED_DATABASE: 'true'
+    APP_URL: "${OPENWIKI_URL}"
+    SESSION_SECURE_COOKIE: 'false'
+    SESSION_COOKIE_NAME: "${OPENWIKI_COOKIE}"
+    DB_HOST: db
+    DB_PORT: '3306'
+    DB_DATABASE: openwiki
+    DB_USERNAME: openwiki
+    DB_PASSWORD: "${OPENWIKI_DB_PASSWORD}"
+    COMPOSER_HOME: /composer-cache
+    COMPOSER_ALLOW_SUPERUSER: '1'
+    OPENWIKI_WORKER_INTERVAL: "${OPENWIKI_WORKER_INTERVAL:-60}"
+  volumes:
+    - type: bind
+      source: "${OPENWIKI_PROJECT_DIR}"
+      target: /app
+    - type: bind
+      source: "${OPENWIKI_RUNTIME_DIR}"
+      target: /runtime
+    - type: volume
+      source: vendor
+      target: /app/vendor
+      volume: {nocopy: true}
+    - composer-cache:/composer-cache
+
+services:
+  php:
+    <<: *php
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: ['CMD', 'php', '-r', 'exit(@fsockopen("127.0.0.1",9000) ? 0 : 1);']
+      interval: 5s
+      timeout: 3s
+      retries: 18
+  web:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    ports:
+      - target: 80
+        published: "${OPENWIKI_PORT}"
+        host_ip: "${OPENWIKI_HOST}"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: "${OPENWIKI_PROJECT_DIR}"
+        target: /app
+        read_only: true
+      - type: bind
+        source: "${OPENWIKI_PROJECT_DIR}/docker/nginx.conf"
+        target: /etc/nginx/conf.d/default.conf
+        read_only: true
+    depends_on:
+      php: {condition: service_healthy}
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1/health/live']
+      interval: 5s
+      timeout: 3s
+      retries: 18
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: openwiki
+      MARIADB_USER: openwiki
+      MARIADB_PASSWORD: "${OPENWIKI_DB_PASSWORD}"
+      MARIADB_ROOT_PASSWORD: "${OPENWIKI_DB_ROOT_PASSWORD}"
+    volumes: [database:/var/lib/mysql]
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+  worker:
+    <<: *php
+    restart: unless-stopped
+    command: ['openwiki-worker']
+    depends_on:
+      web: {condition: service_healthy}
+    healthcheck:
+      test: ['CMD', 'php', '/app/scripts/container-runtime.php', 'worker-health']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+  assets:
+    image: node:22-bookworm-slim
+    profiles: [tools]
+    user: "${OPENWIKI_UID}:${OPENWIKI_GID}"
+    working_dir: /app
+    environment:
+      npm_config_cache: /npm-cache
+    volumes:
+      - type: bind
+        source: "${OPENWIKI_PROJECT_DIR}"
+        target: /app
+      - type: volume
+        source: node-modules
+        target: /app/node_modules
+        volume: {nocopy: true}
+      - npm-cache:/npm-cache
+    command: ['sh', '-c', 'npm ci --include=dev --no-audit --no-fund && npm run build']
+  permissions:
+    <<: *php
+    profiles: [tools]
+    user: '0:0'
+    entrypoint: ['sh', '-c']
+    environment:
+      OPENWIKI_UID: "${OPENWIKI_UID}"
+      OPENWIKI_GID: "${OPENWIKI_GID}"
+    volumes:
+      - vendor:/app/vendor
+      - node-modules:/app/node_modules
+      - composer-cache:/composer-cache
+      - npm-cache:/npm-cache
+    command: ['chown -R "$$OPENWIKI_UID:$$OPENWIKI_GID" /app/vendor /app/node_modules /composer-cache /npm-cache']
+
+volumes:
+  database:
+  vendor:
+  node-modules:
+  composer-cache:
+  npm-cache:
