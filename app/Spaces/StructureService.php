@@ -58,6 +58,7 @@ final class StructureService
                         $original = $this->page($old);
                         $parent = $old === $id ? $plan['parent'] : $mapping[(int) $original['parent_id']];
                         $inputPage = $this->pageInput($original, $parent, $plan['slugs'][$old], 'Kopia dokumentu');
+                        if ((bool) $destination['review_workflow'] && $inputPage['status'] === 'published') $inputPage['status'] = 'draft';
                         if ($old === $id) $inputPage['title'] = $plan['title'];
                         // The eventual direct ACL is included in authorization before creation.
                         $can = fn (string $permission, ?array $page): bool => $this->copyAllowed($plan, $actor, $permission, $old);
@@ -65,8 +66,11 @@ final class StructureService
                         $new = (int) $saved['id']; $mapping[$old] = $new;
                         $db->execute('UPDATE pages SET inherit_acl = ? WHERE id = ?', [$original['inherit_acl'], $new]);
                         $db->execute('INSERT INTO page_acl (page_id, principal_type, principal_id, permission, effect, inherit_to_children, created_at) SELECT ?, principal_type, principal_id, permission, effect, inherit_to_children, UTC_TIMESTAMP() FROM page_acl WHERE page_id = ?', [$new, $old]);
-                        foreach ($files->listForPage($old) as $attachment) {
-                            $versions = array_reverse($files->versions((int) $attachment['id'])); $newAttachment = null;
+                        $visibleFiles = (new \OpenWiki\Attachments\AttachmentVisibility($db))->forPage($files->listForPage($old, true), $user, $actor->can('*'), $ceiling, $original['published_revision'] !== null);
+                        foreach ($visibleFiles as $attachment) {
+                            $versions = array_reverse($files->versions((int) $attachment['id']));
+                            if (isset($attachment['_allowed_versions'])) $versions = array_values(array_filter($versions, static fn (array $v): bool => in_array((int) $v['version_number'], $attachment['_allowed_versions'], true)));
+                            $newAttachment = null;
                             foreach ($versions as $version) {
                                 $path = $files->versionPath((int) $attachment['id'], (int) $version['version_number'])['path'] ?? throw new \RuntimeException('Brak wersji załącznika.');
                                 if (!hash_equals($version['sha256'], hash_file('sha256', $path) ?: '')) throw new \RuntimeException('Załącznik źródłowy nie przeszedł weryfikacji integralności.');
@@ -86,17 +90,21 @@ final class StructureService
                         $document = json_encode(['version' => 1, 'format' => $content['format'], 'source' => $content['format'] === 'visual' ? $decorated['html'] : $content['markdown']], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
                         foreach (['pages' => 'id = ?', 'page_revisions' => 'page_id = ? AND revision_number = 1'] as $table => $where) $db->execute('UPDATE ' . $table . ' SET content_html = ?, content_markdown = ?, content_text = ?, document_json = ? WHERE ' . $where, [$decorated['html'], $content['markdown'], $content['text'], $document, $new]);
                         (new WikiMetadataService($db))->syncLinks($new, (int) $destination['id'], $decorated['references']);
+                        $db->execute('DELETE FROM page_revision_attachments WHERE page_id = ? AND revision_number = 1', [$new]);
+                        (new \OpenWiki\Wiki\PageReviewService($db))->snapshotFiles($new, 1);
                     }
                 } else {
                     // A page-only move leaves its children at the original level, retaining their own IDs.
                     foreach ($plan['detached'] as $childId) {
                         $child = $this->page($childId);
+                        $child = $repository->working($child);
+                        if ((bool) $source['review_workflow'] && $child['status'] === 'published') $child['status'] = 'draft';
                         $writer->save($source, $child, $this->pageInput($child, $plan['root']['parent_id'] === null ? null : (int) $plan['root']['parent_id'], $child['slug'], 'Zmiana struktury: pozostawienie dzieci'), $user, $request,
                             fn (string $permission, ?array $page): bool => $this->mutationAllowed($actor, $source, $permission, $page, 'page.move'), false, null, false);
                     }
                     $transform = new StructureContent($source, $destination, $plan['rows'], $plan['slugs'], array_fill_keys($plan['selected'], 0), [], $plan['redirects']);
                     foreach ($plan['selected'] as $old) {
-                        $original = $this->page($old); $mapping[$old] = $old;
+                        $original = $repository->working($this->page($old)); $mapping[$old] = $old;
                         if ((int) $source['id'] !== (int) $destination['id']) {
                             $db->execute('INSERT INTO page_redirects (space_id, old_slug, page_id, created_at) VALUES (?, ?, ?, UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE page_id = VALUES(page_id)', [$source['id'], $original['slug'], $old]);
                             $db->execute('UPDATE pages SET space_id = ? WHERE id = ?', [$destination['id'], $old]);
@@ -104,10 +112,13 @@ final class StructureService
                         $current = $this->page($old);
                         $parent = $old === $id ? $plan['parent'] : ($original['parent_id'] === null ? null : (int) $original['parent_id']);
                         $pageInput = $this->pageInput($original, $parent, $plan['slugs'][$old], 'Przeniesienie dokumentu');
+                        if ((bool) $destination['review_workflow'] && $pageInput['status'] === 'published') $pageInput['status'] = 'draft';
                         $content = $transform->transform($original);
                         $pageInput['content_html'] = $content['html']; $pageInput['content_markdown'] = $content['markdown'];
                         $writer->save($destination, $current, $pageInput, $user, $request,
                             fn (string $permission, ?array $page): bool => $this->mutationAllowed($actor, $destination, $permission, $page, 'page.move'), false, null, false);
+                        // The explicit structure operation owns the physical route; content stays revision-bound.
+                        $db->execute('UPDATE pages SET slug = ? WHERE id = ?', [$plan['slugs'][$old], $old]);
                     }
                     if ((int) $source['id'] !== (int) $destination['id']) $db->execute('UPDATE spaces SET home_page_id = NULL, management_version = management_version + 1 WHERE id = ? AND home_page_id IN (' . implode(',', array_fill(0, count($plan['selected']), '?')) . ')', [$source['id'], ...$plan['selected']]);
                 }
@@ -251,7 +262,8 @@ final class StructureService
     private function pageInput(array $page, ?int $parent, string $slug, string $summary): array
     {
         return ['title' => $page['title'], 'slug' => $slug, 'parent_id' => $parent, 'status' => $page['status'], 'content_format' => $page['content_format'], 'content_html' => $page['content_html'], 'content_markdown' => $page['content_markdown'] ?? '', 'base_version' => (int) $page['version'], 'change_summary' => $summary,
-            'tags' => array_column((new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']), 'name')];
+            'content_owner_id' => $page['content_owner_id'], 'review_due_at' => $page['review_due_at'],
+            'tags' => $page['tags'] ?? array_column((new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']), 'name')];
     }
 
     private function page(int $id): array

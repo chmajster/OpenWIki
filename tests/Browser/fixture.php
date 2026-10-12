@@ -23,7 +23,7 @@ if (($argv[1] ?? '') === 'seed') {
     $permission = $database->fetchOne('SELECT id FROM permissions WHERE name = "*"');
     $database->execute('INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)', [$roleId, $permission['id']]);
     $users = [];
-    foreach ([1, 2, 3, 4, 5] as $index) {
+    foreach (range(1, 9) as $index) {
         $username = 'browser-' . $suffix . '-' . $index;
         $password = 'BrowserRegression!42';
         $id = $database->insert('INSERT INTO users (username, email, password_hash, status, auth_source, force_password_change, created_at, updated_at) VALUES (?, ?, ?, "active", "local", 0, UTC_TIMESTAMP(), UTC_TIMESTAMP())', [$username, $username . '@example.test', password_hash($password, PASSWORD_DEFAULT)]);
@@ -53,12 +53,24 @@ if (($argv[1] ?? '') === 'seed') {
         foreach ($index === 3 ? ['space.view'] : ['space.view', 'space.edit'] as $name) $database->execute('INSERT INTO space_acl (space_id, principal_type, principal_id, permission, effect) VALUES (?, "user", ?, ?, "allow")', [$spaceId, $users[$index]['id'], $name]);
     }
     $scopes = ['pages:read', 'pages:write', 'spaces:read', 'spaces:write', 'attachments:read', 'attachments:write', 'users:read', 'users:write', 'roles:read', 'roles:write', 'groups:read', 'groups:write'];
+    $workflowRoles = []; $workflowTokens = [];
+    foreach ([5 => ['page.view', 'page.create', 'page.edit', 'attachment.upload'], 6 => ['page.view', 'page.review', 'page.verify'], 7 => ['page.view', 'page.publish'], 8 => ['page.view']] as $index => $names) {
+        $role = $database->insert('INSERT INTO roles (name, slug) VALUES (?, ?)', ['Workflow browser ' . $suffix . '-' . $index, 'workflow-browser-' . $suffix . '-' . $index]);
+        $workflowRoles[] = $role;
+        foreach ($names as $name) {
+            $database->execute('INSERT IGNORE INTO permissions (name) VALUES (?)', [$name]);
+            $database->execute('INSERT INTO role_permissions (role_id, permission_id) SELECT ?, id FROM permissions WHERE name = ?', [$role, $name]);
+        }
+        $database->execute('INSERT INTO user_roles VALUES (?, ?)', [$users[$index]['id'], $role]);
+        $workflowTokens[$index] = (new ApiTokenService($database))->create($users[$index]['id'], 'Workflow browser', $scopes, null)['token'];
+    }
     $token = (new ApiTokenService($database))->create($users[0]['id'], 'Browser tests', $scopes, null)['token'];
     $delegateToken = (new ApiTokenService($database))->create($users[4]['id'], 'Browser security tests', $scopes, null)['token'];
     $wildcardPermissionId = (int) $database->fetchOne('SELECT id FROM permissions WHERE name = "*"')['id'];
     $image = imagecreatetruecolor(256, 128);
     ob_start(); imagepng($image); $imageBase64 = base64_encode((string) ob_get_clean()); imagedestroy($image);
     echo json_encode(['imageBase64' => $imageBase64, 'users'  => $users, 'roleId' => $roleId, 'limitedRoleId' => $limitedRole, 'securityRoleIds' => $securityRoles,
+        'workflowRoleIds' => $workflowRoles, 'workflowTokens' => $workflowTokens,
         'wildcardPermissionId' => $wildcardPermissionId, 'delegateToken' => $delegateToken, 'spaceId' => $spaceId, 'spaceKey' => $spaceKey, 'token' => $token], JSON_THROW_ON_ERROR);
 } elseif (in_array($argv[1] ?? '', ['acl-search-scale', 'acl-search-cleanup'], true)) {
     $data = json_decode(file_get_contents(dirname(__DIR__, 2) . '/storage/temp/editor-browser.json'), true, 512, JSON_THROW_ON_ERROR);
@@ -111,4 +123,5 @@ if (($argv[1] ?? '') === 'seed') {
     $database->execute('DELETE FROM roles WHERE id = ?', [$data['roleId']]);
     $database->execute('DELETE FROM roles WHERE id = ?', [$data['limitedRoleId']]);
     foreach ($data['securityRoleIds'] as $id) $database->execute('DELETE FROM roles WHERE id = ?', [$id]);
+    foreach ($data['workflowRoleIds'] as $id) $database->execute('DELETE FROM roles WHERE id = ?', [$id]);
 }

@@ -199,33 +199,36 @@ final class SearchRepository
         $limit = max(1, min($limit, 250));
         $like = '%' . $this->escapeLike($query) . '%';
         $where = [
-            'a.deleted_at IS NULL',
+            '(a.deleted_at IS NULL OR (pa.attachment_id IS NOT NULL AND (s.review_workflow = 1 OR p.published_revision <> p.version)))',
+            '((s.review_workflow = 0 AND p.status = "published" AND (p.published_revision IS NULL OR p.published_revision = p.version)) OR pa.attachment_id IS NOT NULL)',
             'p.deleted_at IS NULL',
             's.deleted_at IS NULL',
-            '(a.name LIKE ? ESCAPE "\\\\" OR a.mime_type LIKE ? ESCAPE "\\\\")',
+            '(CASE WHEN (s.review_workflow = 0 AND p.status = "published" AND (p.published_revision IS NULL OR p.published_revision = p.version)) THEN a.name ELSE pa.name END LIKE ? ESCAPE "\\\\" OR CASE WHEN (s.review_workflow = 0 AND p.status = "published" AND (p.published_revision IS NULL OR p.published_revision = p.version)) THEN a.mime_type ELSE pav.mime_type END LIKE ? ESCAPE "\\\\")',
         ];
         $params = [$like, $like];
         $this->appendPageFilters($where, $params, $filters, 'p', 's', 'u');
 
         return $this->database->fetchAll(
-            'SELECT a.id AS attachment_id, a.name AS attachment_name, a.mime_type, a.size_bytes,
-                    a.created_at, a.updated_at,
+            'SELECT a.id AS attachment_id, CASE WHEN (s.review_workflow = 0 AND p.status = "published" AND (p.published_revision IS NULL OR p.published_revision = p.version)) THEN a.name ELSE pa.name END AS attachment_name, CASE WHEN (s.review_workflow = 0 AND p.status = "published" AND (p.published_revision IS NULL OR p.published_revision = p.version)) THEN a.mime_type ELSE pav.mime_type END AS mime_type, CASE WHEN (s.review_workflow = 0 AND p.status = "published" AND (p.published_revision IS NULL OR p.published_revision = p.version)) THEN a.size_bytes ELSE pav.size_bytes END AS size_bytes,
+                    a.created_at, CASE WHEN (s.review_workflow = 0 AND p.status = "published" AND (p.published_revision IS NULL OR p.published_revision = p.version)) THEN a.updated_at ELSE pav.created_at END AS updated_at,
                     p.id, p.space_id, p.parent_id, p.inherit_acl, p.owner_id, p.author_id,
                     p.title, p.slug, p.status,
                     u.username AS uploader_username,
                     s.space_key, s.name AS space_name, s.visibility,
                     s.status AS space_status, s.owner_id AS space_owner_id, s.deleted_at AS space_deleted_at,
                     CASE
-                        WHEN LOWER(a.name) = LOWER(?) THEN 100
-                        WHEN a.name LIKE ? ESCAPE "\\\\" THEN 70
+                        WHEN LOWER(CASE WHEN (s.review_workflow = 0 AND p.status = "published" AND (p.published_revision IS NULL OR p.published_revision = p.version)) THEN a.name ELSE pa.name END) = LOWER(?) THEN 100
+                        WHEN CASE WHEN (s.review_workflow = 0 AND p.status = "published" AND (p.published_revision IS NULL OR p.published_revision = p.version)) THEN a.name ELSE pa.name END LIKE ? ESCAPE "\\\\" THEN 70
                         ELSE 25
                     END AS relevance
              FROM attachments a
              INNER JOIN pages p ON p.id = a.page_id
              INNER JOIN spaces s ON s.id = p.space_id
+             LEFT JOIN page_revision_attachments pa ON pa.page_id = p.id AND pa.revision_number = p.published_revision AND pa.attachment_id = a.id
+             LEFT JOIN attachment_versions pav ON pav.attachment_id = pa.attachment_id AND pav.version_number = pa.version_number
              INNER JOIN users u ON u.id = a.uploader_id
              WHERE ' . implode(' AND ', $where) . '
-             ORDER BY relevance DESC, a.updated_at DESC
+             ORDER BY relevance DESC, CASE WHEN (s.review_workflow = 0 AND p.status = "published" AND (p.published_revision IS NULL OR p.published_revision = p.version)) THEN a.updated_at ELSE pav.created_at END DESC
              LIMIT ' . $limit,
             array_merge([$query, $like], $params)
         );

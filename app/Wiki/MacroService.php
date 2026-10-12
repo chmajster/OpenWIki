@@ -239,14 +239,9 @@ final class MacroService
 
     private function attachments(int $pageId): string
     {
-        $rows = $this->app->database()->fetchAll(
-            'SELECT id, name, mime_type, size_bytes
-             FROM attachments
-             WHERE page_id = :page_id AND deleted_at IS NULL
-             ORDER BY name ASC',
-            ['page_id' => $pageId]
-        );
+        $rows = (new \OpenWiki\Attachments\AttachmentService($this->app->database(), $this->app->basePath()))->listForPage($pageId, true);
 
+        $rows = (new \OpenWiki\Attachments\AttachmentVisibility($this->app->database()))->forPage($rows, $this->app->auth()->user()['id'] ?? null, $this->app->auth()->can('*'), null, true);
         if ($rows === []) {
             return '<div class="macro-empty">No attachments.</div>';
         }

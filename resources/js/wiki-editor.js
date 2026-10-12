@@ -117,6 +117,7 @@ if (editorRoot) {
         userId, documentKey, editorId, sequence: generation, savedAt: new Date().toISOString(),
         baseVersion: Number(baseVersionField.value), title: form.elements.title.value,
         slug: form.elements.slug.value, parentId: form.elements.parent_id.value,
+        content_owner_id: form.elements.content_owner_id.value, review_due_at: form.elements.review_due_at.value,
         status: form.elements.status.value, tags: form.elements.tags.value,
         changeSummary: form.elements.change_summary.value, format: formatInput.value,
         html: getVisualHtml(), markdown: markdownEditor.value, conversionBackup,
@@ -176,7 +177,7 @@ if (editorRoot) {
         if (sourceOverride !== null) setVisualHtml(sourceOverride);
     });
     const restoreSnapshot = (data) => {
-        for (const key of ['title', 'slug', 'status', 'tags']) {
+        for (const key of ['title', 'slug', 'status', 'tags', 'content_owner_id', 'review_due_at']) {
             if (typeof data[key] === 'string') form.elements[key].value = data[key];
         }
         if (typeof data.parentId === 'string') form.elements.parent_id.value = data.parentId;
@@ -255,6 +256,7 @@ if (editorRoot) {
         _token: csrfToken, editor_user_id: userId, document_key: documentKey, editor_id: editorId,
         draft_sequence: data.sequence, base_version: data.baseVersion,
         document: data.document,
+        content_owner_id: data.content_owner_id, review_due_at: data.review_due_at,
         title: data.title, slug: data.slug, parent_id: data.parentId, status: data.status,
         tags: data.tags, change_summary: data.changeSummary, content_format: data.format,
         content_html: data.html, content_markdown: data.markdown, conversion_backup: data.conversionBackup,

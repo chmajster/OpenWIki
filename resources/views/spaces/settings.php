@@ -28,6 +28,9 @@ $labels = ['space.view' => 'Odczyt', 'space.edit' => 'Edycja', 'space.manage_acc
     <p class="form-help">Przekazanie własności może odebrać Ci dostęp. Nowy właściciel musi mieć aktywne konto.</p>
     <?php else: ?><p>Właściciel: <?= $e($owner['username'] ?? 'Właściciel') ?></p><?php endif; ?>
     <label>Stan <select name="status" <?= !$capabilities['space.archive'] ? 'disabled' : '' ?>><option value="active" <?= $value('status') === 'active' ? 'selected' : '' ?>>Aktywna</option><option value="archived" <?= $value('status') === 'archived' ? 'selected' : '' ?>>Zarchiwizowana</option></select></label>
+    <label>Obieg recenzji <select name="review_workflow" <?= !$capabilities['space.manage_access'] ? 'disabled' : '' ?>><option value="0" <?= !(bool) $value('review_workflow') ? 'selected' : '' ?>>Wyłączony — uprawniony publikujący publikuje bez recenzji</option><option value="1" <?= (bool) $value('review_workflow') ? 'selected' : '' ?>>Włączony — szkic, recenzja, akceptacja, publikacja</option></select></label>
+    <label>Zatwierdzanie własnych zmian <select name="allow_self_review" <?= !$capabilities['space.manage_access'] ? 'disabled' : '' ?>><option value="0" <?= !(bool) $value('allow_self_review') ? 'selected' : '' ?>>Zabronione</option><option value="1" <?= (bool) $value('allow_self_review') ? 'selected' : '' ?>>Dozwolone recenzentowi</option></select></label>
+    <p>Recenzja i publikacja wymagają osobnych uprawnień globalnych page.review / page.publish oraz ACL dokumentu i prawa zmian w przestrzeni. Zmiana polityki nie publikuje szkiców.</p>
     <button class="button button--primary" type="submit">Zapisz ustawienia</button>
     </fieldset>
 </form>

@@ -1,0 +1,23 @@
+<?php
+$e = static fn (mixed $v): string => htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$url = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($page['slug']);
+$state = $page['workflow_state'];
+?>
+<section class="content-container">
+<div class="page-heading"><div><h1>Obieg dokumentu: <?= $e($head['title']) ?></h1><p>Robocza rewizja <?= (int) $page['version'] ?> · <?= $e(\OpenWiki\Wiki\PageReviewService::STATES[$state]) ?>. Opublikowana rewizja: <?= $page['published_revision'] === null ? 'brak' : (int) $page['published_revision'] ?>.</p></div><a class="button" href="<?= $e($url) ?>">Widok czytelnika</a></div>
+<?php if ($canSubmit): ?><a class="button" href="<?= $e($url) ?>/edit">Edytuj szkic</a><?php endif; ?>
+<a class="button" href="<?= $e($url) ?>/history">Historia i porównanie rewizji</a>
+<section class="card panel"><h2>Decyzja dla rewizji <?= (int) $page['version'] ?></h2>
+<p>Każdy kolejny zapis wymaga nowej recenzji. Zatwierdzenie nie publikuje dokumentu.</p>
+<?php if (($canSubmit && (bool) $space['review_workflow'] && in_array($state, ['draft', 'rejected'], true)) || ($canReview && $state === 'in_review') || ($canPublish && ($state === 'approved' || (!(bool) $space['review_workflow'] && in_array($state, ['draft', 'rejected'], true))))): ?>
+<form method="post" action="<?= $e($url) ?>/review"><input type="hidden" name="_token" value="<?= $e($csrfToken) ?>"><input type="hidden" name="revision" value="<?= (int) $page['version'] ?>">
+<label>Komentarz decyzji<textarea name="comment" maxlength="5000" rows="3" <?= $state === 'in_review' ? 'required' : '' ?>></textarea></label>
+<?php if ($canSubmit && in_array($state, ['draft', 'rejected'], true) && (bool) $space['review_workflow']): ?><button class="button button--primary" name="action" value="submit">Przekaż do recenzji</button><?php endif; ?>
+<?php if ($canReview && $state === 'in_review'): ?><button class="button button--primary" name="action" value="approve" <?= !$canApprove ? 'disabled' : '' ?>>Zatwierdź rewizję</button><button class="button" name="action" value="reject">Odrzuć rewizję</button><?php if (!$canApprove): ?><p>Autor nie może zatwierdzić własnej rewizji w tej przestrzeni.</p><?php endif; ?><?php endif; ?>
+<?php if ($canPublish && ($state === 'approved' || (!(bool) $space['review_workflow'] && in_array($state, ['draft', 'rejected'], true)))): ?><button class="button button--primary" name="action" value="publish">Opublikuj rewizję <?= (int) $page['version'] ?></button><?php endif; ?>
+</form><?php else: ?><p>Brak dostępnej decyzji w obecnym stanie obiegu.</p><?php endif; ?></section>
+<?php if ($canVerify && $page['published_revision'] !== null): ?><section class="card panel"><h2>Potwierdzenie aktualności opublikowanej wiedzy</h2><p>Potwierdzona rewizja: <?= $page['verified_revision'] === null ? 'brak' : (int) $page['verified_revision'] ?> · <?= $e($page['verified_at'] ?? '') ?></p><form method="post" action="<?= $e($url) ?>/review"><input type="hidden" name="_token" value="<?= $e($csrfToken) ?>"><input type="hidden" name="action" value="verify"><input type="hidden" name="revision" value="<?= (int) $page['published_revision'] ?>"><label>Następny przegląd<input type="date" name="review_due_at" required min="<?= gmdate('Y-m-d', time() + 86400) ?>"></label><label>Komentarz<input name="comment" maxlength="5000"></label><button class="button">Potwierdź aktualność</button></form></section><?php endif; ?>
+<section class="card panel"><h2>Robocza treść</h2><article class="document-content" data-review-content><?= $head['content_html'] ?></article><dl><dt>Właściciel merytoryczny (konto)</dt><dd><?= (int) $head['content_owner_id'] ?></dd><dt>Termin przeglądu</dt><dd><?= $e($head['review_due_at'] ?? 'Nie wyznaczono') ?></dd></dl></section>
+<section class="card panel"><h2>Decyzje</h2><?php if ($decisions === []): ?><p>Brak decyzji.</p><?php endif; ?><?php foreach ($decisions as $decision): ?><article><h3>Rewizja <?= (int) $decision['revision_number'] ?> · <?= $e(['submit' => 'Zgłoszenie', 'approve' => 'Akceptacja', 'reject' => 'Odrzucenie', 'publish' => 'Publikacja', 'verify' => 'Przegląd aktualności'][$decision['action']]) ?></h3><p><?= $e($decision['comment']) ?></p><small><?= $e($decision['username']) ?> · <?= $e($decision['created_at']) ?></small></article><?php endforeach; ?></section>
+<nav aria-label="Strony decyzji"><?php if ($decisionsPage > 1): ?><a class="button" href="<?= $e($url) ?>/review?decisions_page=<?= $decisionsPage - 1 ?>">Nowsze decyzje</a><?php endif; ?><?php if ($decisionsPage * 50 < $decisionsTotal): ?><a class="button" href="<?= $e($url) ?>/review?decisions_page=<?= $decisionsPage + 1 ?>">Starsze decyzje</a><?php endif; ?></nav>
+</section>

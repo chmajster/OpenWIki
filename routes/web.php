@@ -253,3 +253,14 @@ $router->post('/admin/templates', [TemplateAdminController::class, 'save']);
 $router->get('/admin/templates/{id}/edit', [TemplateAdminController::class, 'edit']);
 $router->post('/admin/templates/{id}', [TemplateAdminController::class, 'save']);
 $router->post('/admin/templates/{id}/delete', [TemplateAdminController::class, 'delete']);
+
+$router->get('/knowledge/overdue', [\OpenWiki\Http\Controllers\PageReviewController::class, 'overdue']);
+$router->get('/knowledge/review', [\OpenWiki\Http\Controllers\PageReviewController::class, 'queue']);
+$router->get('/spaces/{spaceKey}/pages/{slug}/review', [\OpenWiki\Http\Controllers\PageReviewController::class, 'show']);
+$router->post('/spaces/{spaceKey}/pages/{slug}/review', [\OpenWiki\Http\Controllers\PageReviewController::class, 'decide']);
+$router->post('/api/v1/pages/{id}/review', [ApiV1Controller::class, 'reviewPage']);
+$router->get('/api/v1/pages/{id}/review', [ApiV1Controller::class, 'pageReview']);
+$router->get('/api/v1/pages/{id}/revisions', [ApiV1Controller::class, 'pageRevisions']);
+$router->get('/api/v1/pages/{id}/revisions/{number}', [ApiV1Controller::class, 'pageRevision']);
+$router->get('/api/v1/pages/{id}/diff', [ApiV1Controller::class, 'pageDiff']);
+$router->post('/api/v1/pages/{id}/restore', [ApiV1Controller::class, 'restorePage']);

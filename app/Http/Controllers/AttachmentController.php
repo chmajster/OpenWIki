@@ -368,7 +368,7 @@ final class AttachmentController extends Controller
         }
 
         $versionNumber = $this->positiveId($version);
-        if ($versionNumber === null) {
+        if ($versionNumber === null || (isset($attachment['_allowed_versions']) && !in_array($versionNumber, $attachment['_allowed_versions'], true))) {
             return $this->render('errors/404', ['title' => 'Attachment version not found'], 404);
         }
 
@@ -416,7 +416,7 @@ final class AttachmentController extends Controller
             return $this->render('errors/404', ['title' => 'Attachment not found'], 404);
         }
 
-        $attachment = $this->service()->find($attachmentId);
+        $attachment = $this->service()->find($attachmentId, true);
         if ($attachment === null) {
             return $this->render('errors/404', ['title' => 'Attachment not found'], 404);
         }
@@ -442,7 +442,8 @@ final class AttachmentController extends Controller
             return $this->render('errors/404', ['title' => 'Attachment not found'], 404);
         }
 
-        return $attachment;
+        return (new \OpenWiki\Attachments\AttachmentVisibility($this->app->database()))->project($attachment, $this->app->auth()->user()['id'] ?? null, $this->app->auth()->can('*'))
+            ?? $this->render('errors/404', ['title' => 'Attachment not found'], 404);
     }
 
     private function service(): AttachmentService

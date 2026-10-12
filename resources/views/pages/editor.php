@@ -11,6 +11,7 @@ $titleValue = $field('title', $page['title'] ?? '');
 $slugValue = $field('slug', $page['slug'] ?? '');
 $parentValue = $field('parent_id', $page['parent_id'] ?? '');
 $statusValue = $field('status', $page['status'] ?? 'draft');
+if ((bool) $space['review_workflow'] && $statusValue === 'published') $statusValue = 'draft';
 $formatValue = $field('content_format', $page['content_format'] ?? 'visual');
 $markdownValue = $field('content_markdown', $page['content_markdown'] ?? '');
 $visualValue = (new \OpenWiki\Security\HtmlSanitizer())->sanitize($text($field('content_html', $page['content_html'] ?? '<p></p>')));
@@ -230,6 +231,8 @@ $preserveParent = $isEdit && (int) $parentValue > 0
                 <?php endif; ?>
             </div>
 
+                        <label>Właściciel merytoryczny (ID konta)<input type="number" name="content_owner_id" min="1" required value="<?= $e($field('content_owner_id', $page['content_owner_id'] ?? $currentUser['id'])) ?>"></label>
+                        <label>Termin przeglądu wiedzy<input type="date" name="review_due_at" value="<?= $e($field('review_due_at', $page['review_due_at'] ?? '')) ?>"></label>
                         <label><?= $e($t('Change summary')) ?>
                 <textarea name="change_summary" rows="3" maxlength="500" placeholder="<?= $e($t('Describe this change')) ?>"><?= $e($changeSummary) ?></textarea>
             </label>
