@@ -1,5 +1,8 @@
 import hljs from './syntax.js';
 import {diagramPreview} from './diagram-preview.js';
+import './space-settings.js';
+import './documentation-tree.js';
+import './structure-dialog.js';
 
 document.querySelectorAll('[data-document-content] pre, [data-revision-content] pre').forEach((pre) => {
     const code = pre.querySelector('code'); if (!code) return;

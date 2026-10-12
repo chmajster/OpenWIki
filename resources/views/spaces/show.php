@@ -12,11 +12,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             </a>
         </div>
         <nav aria-label="<?= $e($t('Pages')) ?>">
-            <?php if ($pages === []): ?>
-                <div class="sidebar-empty"><?= $e($t('No pages yet.')) ?></div>
-            <?php else: ?>
-                <?php $activePageId = null; require __DIR__ . '/../partials/page-tree.php'; ?>
-            <?php endif; ?>
+            <?php $activePageId = null; require __DIR__ . '/../partials/page-tree.php'; ?>
         </nav>
         <?php if ($canCreatePage): ?>
             <a class="button button--secondary button--block" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create"><?= $e($t('Create page')) ?></a>
@@ -27,13 +23,14 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
     <article class="wiki-content">
         <div class="page-heading">
             <div>
-                <div class="eyebrow"><?= $e($space['visibility']) ?> space</div>
-                <h1><?= $e($space['name']) ?></h1>
+                <div class="eyebrow"><?= $e(['public' => 'Publiczna', 'private' => 'Prywatna', 'restricted' => 'Ograniczona'][$space['visibility']]) ?> przestrzeń · <?= $space['status'] === 'archived' ? 'Archiwum' : 'Aktywna' ?></div>
+                <h1><?= $e($space['icon'] ?? '') ?> <?= $e($space['name']) ?></h1>
                 <?php if ($space['description']): ?>
                     <p class="lead"><?= nl2br($e($space['description'])) ?></p>
                 <?php endif; ?>
             </div>
             <div class="page-actions">
+                <?php if ($canSettings): ?><a class="button button--secondary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/settings">Ustawienia przestrzeni</a><?php endif; ?>
                 <?php if ($currentUser !== null): ?>
                     <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/watch">
                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
@@ -49,16 +46,9 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             </div>
         </div>
 
-        <?php if ($pages === []): ?>
-            <div class="card empty-hero">
-                <h2><?= $e($t('This space has no pages')) ?></h2>
-                <p><?= $e($t('Create the first page to start building its documentation tree.')) ?></p>
-            </div>
-        <?php else: ?>
-            <div class="card panel">
-                <div class="panel__header"><h2><?= $e($t('Pages')) ?></h2><span class="count"><?= count($pages) ?></span></div>
-                <?php $activePageId = null; require __DIR__ . '/../partials/page-tree.php'; ?>
-            </div>
-        <?php endif; ?>
+        <div class="card panel">
+            <?php if ($homePage !== null): ?><h2>Strona startowa</h2><a href="<?= $e(\OpenWiki\Spaces\DocumentationTreeService::url($space, $homePage)) ?>"><?= $e($homePage['title']) ?></a><?php else: ?><h2>Dokumentacja</h2><p>Wybierz stronę z drzewa lub wyszukaj ją w tej przestrzeni. Strzałki rozwijają gałęzie; F2 otwiera operacje strony.</p><?php endif; ?>
+            <?php if ($space['status'] === 'archived'): ?><p role="status">Archiwum jest dostępne do odczytu zgodnie z dotychczasowymi uprawnieniami. Aby edytować dokumenty, przywróć przestrzeń w ustawieniach.</p><?php endif; ?>
+        </div>
     </article>
 </section>
