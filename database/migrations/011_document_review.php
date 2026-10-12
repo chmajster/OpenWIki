@@ -40,7 +40,7 @@ return ['version' => '011_document_review', 'up' => [
         actor_id BIGINT UNSIGNED NOT NULL, comment TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_review_revision (page_id, revision_number, id),
         CONSTRAINT fk_review_page FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE,
-        CONSTRAINT fk_review_actor FOREIGN KEY (actor_id) REFERENCES users(id)
+        CONSTRAINT fk_review_actor FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE RESTRICT
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci', ['id' => 'bigint', 'page_id' => 'bigint', 'revision_number' => 'int', 'action' => 'varchar', 'actor_id' => 'bigint', 'comment' => 'text', 'created_at' => 'datetime'], 'id', ['page_id' => ['pages', 'CASCADE'], 'actor_id' => ['users', 'RESTRICT']]),
     $table('page_revision_attachments', 'CREATE TABLE page_revision_attachments (
         page_id BIGINT UNSIGNED NOT NULL, revision_number INT UNSIGNED NOT NULL,
