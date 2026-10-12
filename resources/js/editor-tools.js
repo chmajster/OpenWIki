@@ -1,3 +1,5 @@
+import {TextSelection} from '@tiptap/pm/state';
+
 const t = (text) => window.wikiTranslate(text);
 export function setupEditorTools(root, editor, requestJson, snapshot, fields, canEdit) {
     const q = (selector) => root.querySelector(selector);
@@ -20,7 +22,11 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
         root.querySelectorAll('[data-insert-table], [data-open-link], [data-open-code], [data-open-callout], [data-open-macro], [data-image-picker], [data-attachment-picker], [data-heading]').forEach((control) => { control.disabled = !canEdit(); });
         root.querySelectorAll('[data-rich-command]').forEach((button) => {
             const name = button.dataset.richCommand;
-            button.disabled = !canEdit() || (['undo', 'redo'].includes(name) && !editor.can()[name]());
+            const listType = editor.isActive('taskItem') ? 'taskItem' : 'listItem';
+            const available = ['sink', 'lift'].includes(name)
+                ? editor.can()[name === 'sink' ? 'sinkListItem' : 'liftListItem'](listType)
+                : !['undo', 'redo'].includes(name) || editor.can()[name]();
+            button.disabled = !canEdit() || !available;
             if (!['undo', 'redo', 'sink', 'lift'].includes(name)) button.setAttribute('aria-pressed', String(editor.isActive(name)));
         });
         root.querySelectorAll('[data-table-command]').forEach((button) => { button.disabled = !canEdit() || !editor.can()[button.dataset.tableCommand](); });
@@ -41,10 +47,35 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
     });
     root.querySelectorAll('[data-table-command]').forEach((button) => button.addEventListener('click', () => { if (canEdit()) focusedChain()[button.dataset.tableCommand]().run(); }));
     root.querySelectorAll('[data-dialog-close]').forEach((button) => button.addEventListener('click', () => button.closest('dialog').close()));
+    let linkSelection = null, linkAttributes = {};
+    editor.on('transaction', ({transaction}) => {
+        if (linkSelection) linkSelection = linkSelection.map(transaction.mapping);
+    });
+    for (const name of ['table', 'link', 'code', 'callout', 'macro']) dialog(name).addEventListener('close', () => {
+        if (dialog(name).open) return;
+        if (name === 'link') { linkSelection = null; linkAttributes = {}; ++searchSequence; clearTimeout(searchTimer); }
+        if (canEdit()) editor.view.focus();
+    });
     const openLink = () => {
         if (!canEdit()) return;
-        q('[data-link-url]').value = editor.getAttributes('link').href || '';
+        // Native arrow-key selectionchange may arrive after the shortcut keydown.
+        // Read the current selection through ProseMirror's public DOM-position API.
+        const native = editor.view.dom.ownerDocument.getSelection();
+        if (editor.state.selection instanceof TextSelection && native?.anchorNode && native.focusNode
+            && editor.view.dom.contains(native.anchorNode) && editor.view.dom.contains(native.focusNode)) {
+            const doc = editor.state.doc;
+            const selection = TextSelection.between(
+                doc.resolve(editor.view.posAtDOM(native.anchorNode, native.anchorOffset)),
+                doc.resolve(editor.view.posAtDOM(native.focusNode, native.focusOffset)));
+            if (!selection.eq(editor.state.selection)) editor.view.dispatch(editor.state.tr.setSelection(selection));
+        }
+        // A cursor inside a link edits its entire range; an explicit selection stays explicit.
+        if (editor.state.selection.empty && editor.isActive('link')) editor.commands.extendMarkRange('link');
+        linkSelection = editor.state.selection.getBookmark();
+        linkAttributes = editor.getAttributes('link');
+        q('[data-link-url]').value = linkAttributes.href || '';
         q('[data-link-text]').value = editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ');
+        q('[data-link-remove]').disabled = !editor.isActive('link');
         q('[data-link-error]').textContent = '';
         dialog('link').showModal();
         q('[data-link-search]').focus();
@@ -68,13 +99,34 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
             }
         } catch (error) { if (sequence === searchSequence) q('[data-link-status]').textContent = error.message; }
     };
-    q('[data-link-search]').addEventListener('input', () => { ++searchSequence; clearTimeout(searchTimer); searchTimer = setTimeout(searchPages, 250); });
+    q('[data-link-search]').addEventListener('input', () => {
+        ++searchSequence; clearTimeout(searchTimer);
+        q('[data-link-results]').replaceChildren(); q('[data-link-status]').textContent = t('Searching…');
+        searchTimer = setTimeout(searchPages, 250);
+    });
     q('[data-link-insert]').addEventListener('click', () => {
         if (!canEdit()) { close('link'); return; }
-        const href = q('[data-link-url]').value.trim(), text = q('[data-link-text]').value.trim();
+        const href = q('[data-link-url]').value.trim(), text = q('[data-link-text]').value;
         if (!/^(https?:\/\/|mailto:|\/[^/]|#)/i.test(href)) { q('[data-link-error]').textContent = t('Enter a safe URL or choose a page.'); return; }
-        if (editor.state.selection.empty) focusedChain().insertContent({type: 'text', text: text || href, marks: [{type: 'link', attrs: {href, target: null}}]}).run();
-        else focusedChain().extendMarkRange('link').setLink({href, target: null}).run();
+        if (!linkSelection) return;
+        const selection = linkSelection.resolve(editor.state.doc);
+        const original = editor.state.doc.textBetween(selection.from, selection.to, ' ');
+        const attrs = {...linkAttributes, href, target: linkAttributes.target || null};
+        if (href !== linkAttributes.href) {
+            for (const name of ['data-draft-file-id', 'data-attachment-id', 'data-file-size', 'data-file-type']) attrs[name] = null;
+        }
+        const chain = focusedChain().setTextSelection({from: selection.from, to: selection.to});
+        if (!selection.empty && (!text || text === original)) chain.setLink(attrs).run();
+        else {
+            const marks = selection.$from.marks().filter(mark => mark.type.name !== 'link').map(mark => mark.toJSON());
+            chain.insertContent({type: 'text', text: text || href, marks: [...marks, {type: 'link', attrs}]}).run();
+        }
+        close('link');
+    });
+    q('[data-link-remove]').addEventListener('click', () => {
+        if (!canEdit() || !linkSelection) return;
+        const selection = linkSelection.resolve(editor.state.doc);
+        focusedChain().setTextSelection({from: selection.from, to: selection.to}).unsetLink().run();
         close('link');
     });
     q('[data-open-code]').addEventListener('click', () => { if (!canEdit()) return; q('[data-code-language]').value = editor.getAttributes('codeBlock').language || ''; dialog('code').showModal(); });
@@ -126,7 +178,7 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
     });
     root.addEventListener('keydown', (event) => {
         if (!(event.ctrlKey || event.metaKey)) return;
-        if (event.key.toLowerCase() === 'k' && !event.target.closest('dialog')) { event.preventDefault(); openLink(); }
+        if (event.key.toLowerCase() === 'k' && canEdit() && event.target.closest('[data-visual-editor]')) { event.preventDefault(); openLink(); }
     });
     root.querySelectorAll('[data-editor-mode]').forEach((tab) => tab.addEventListener('keydown', (event) => {
         if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;

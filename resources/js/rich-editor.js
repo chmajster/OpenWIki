@@ -124,9 +124,10 @@ export function createRichEditor(element, html, sanitize, onUpdate, onSelection)
     editor.view.dom.addEventListener('paste', event => {
         if (event.clipboardData?.files.length) return;
         const html = event.clipboardData?.getData('text/html') || '';
-        if (!html) return;
-        const parsed = new DOMParser().parseFromString(html, 'text/html'), stack = [[parsed.body, 0]];
-        let count = 0, exceeded = html.length > 2000000;
+        const text = event.clipboardData?.getData('text/plain') || '';
+        let count = 0, exceeded = html.length > 2000000 || text.length > 2000000;
+        // Reject excessive input before parsing it or replacing the selected document.
+        const stack = html && !exceeded ? [[new DOMParser().parseFromString(html, 'text/html').body, 0]] : [];
         while (!exceeded && stack.length) {
             const [node, depth] = stack.pop(); exceeded = depth > 100 || ++count > 50000;
             for (const child of node.children) stack.push([child, depth + 1]);

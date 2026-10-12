@@ -32,6 +32,8 @@ Wpisz `/`, aby szukać polecenia; strzałki i Enter wybierają wynik, Escape zam
 
 Kontekstowe narzędzia zależą od zaznaczenia tekstu, tabeli, obrazu lub kodu. Uchwytem „Blok” można przeciągać bloki; przyciski i Alt+Shift+strzałka zapewniają alternatywę. Kopiowanie bloku wymaga dostępu przeglądarki do schowka. Duplikowanie, przenoszenie, usuwanie i zamiana tekstu podlegają undo/redo.
 
+Ctrl/Cmd+K w treści Visual otwiera odnośnik. Kursor wewnątrz istniejącego linku wybiera cały link do zmiany adresu lub tekstu; przy zaznaczeniu operacja obejmuje wskazany fragment. Sama zmiana adresu zachowuje formatowanie tekstu. „Usuń odnośnik” pozostawia tekst, a undo pozwala cofnąć zmianę. Anulowanie i Escape wracają do dokumentu. W metadanych i Markdown Ctrl/Cmd+K przechodzi do wyszukiwarki aplikacji.
+
 „Znajdź i zamień” wyszukuje dosłowny tekst w Visual. Panel nagłówków przenosi do wybranego miejsca; licznik pokazuje słowa i znaki. Tryb skupienia ukrywa otoczenie dokumentu i zachowuje informację o zapisie.
 
 ## Tabele
@@ -53,6 +55,8 @@ Użyj „Obraz”, „Dodaj plik”, schowka lub przeciągania. Kolejka pokazuje
 Kliknij obraz, aby zmienić alt, podpis, wyrównanie, wymiary i proporcje albo otworzyć chroniony podgląd. PNG/JPEG/GIF/WebP mają bezpiecznie generowane miniatury. Załącznik prezentuje nazwę, typ, rozmiar i odnośnik pobierania. Limit pojedynczego pliku to 50 MiB; kolejka lokalna i prywatne pliki konta mają limity 50 plików/100 MiB.
 
 Wklejanie z zewnętrznych dokumentów zachowuje dozwoloną strukturę i usuwa aktywny HTML oraz dowolny CSS. Nadmiernie duża lub głęboka struktura jest odrzucana przed zastąpieniem zaznaczenia.
+
+Przekroczenie limitu wklejanej tabeli albo tekstu również pozostawia bieżący dokument i zaznaczenie bez zmian. Komunikat przy narzędziach bloku wyjaśnia odmowę; można wkleić mniejszy fragment.
 
 ## Visual, Markdown i starsze dokumenty
 

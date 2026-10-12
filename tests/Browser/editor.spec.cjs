@@ -613,6 +613,8 @@ test('page link search, macro results and editor endpoints enforce actual ACL', 
     const unauthenticated = await request.get('/spaces/' + fixture().spaceKey + '/editor-pages?document_key=page:' + parent.id, {headers: {Accept: 'application/json'}});
     expect(unauthenticated.status()).toBe(401);
     await limited.goto(pathFor(visibleChild));
+    // The tree loads fifty rows at a time; finding a later root uses its real search.
+    await limited.locator('[data-tree-search]').fill(visibleChild.title);
     await expect(limited.locator('[data-page-panel]')).toContainText(visibleChild.title);
     await expect(limited.locator('[data-page-panel]')).not.toContainText(hidden.title);
     await limited.goto(pathFor(visibleChild) + '/edit');
