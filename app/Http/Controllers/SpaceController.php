@@ -177,6 +177,6 @@ final class SpaceController extends Controller
         return $this->render('spaces/settings', ['title' => 'Ustawienia przestrzeni', 'space' => $space, 'pages' => $pages,
             'capabilities' => $capabilities, 'rules' => $capabilities['space.manage_access'] ? $service->entries((int) $space['id']) : [],
             'owner' => $owner, 'selectedPrincipal' => $selectedPrincipal,
-            'formError' => $error, 'old' => $old], $status);
+            'formError' => $error, 'hasConflict' => $status === 409, 'old' => $old], $status);
     }
 }

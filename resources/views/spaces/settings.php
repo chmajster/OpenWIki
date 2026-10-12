@@ -5,7 +5,7 @@ $baseVersion = (int) ($old['base_version'] ?? $space['management_version']);
 $labels = ['space.view' => 'Odczyt', 'space.edit' => 'Edycja', 'space.manage_access' => 'Zarządzanie dostępem', 'space.manage_owner' => 'Zmiana właściciela', 'space.archive' => 'Archiwizacja i przywracanie', 'space.delete' => 'Usuwanie'];
 ?>
 <div class="page-heading"><div><div class="breadcrumbs"><a href="<?= $e($base) ?>"><?= $e($space['name']) ?></a><span>/</span><span>Ustawienia przestrzeni</span></div><h1>Ustawienia przestrzeni</h1></div><a class="button button--ghost" href="<?= $e($base) ?>">Wróć do dokumentacji</a></div>
-<?php if ($formError): ?><div class="alert alert--error" role="alert"><?= $e($formError) ?></div><?php endif; ?>
+<?php if ($formError): ?><div class="alert alert--error" role="alert"><?= $e($formError) ?><?php if ($hasConflict): ?><p><a href="<?= $e($base) ?>/settings">Wczytaj aktualne ustawienia z serwera</a> — odrzuci niezapisane zmiany formularza.</p><?php endif; ?></div><?php endif; ?>
 <?php if ($space['status'] === 'archived'): ?><div class="alert" role="status">Przestrzeń zarchiwizowana. Dokumenty są dostępne do odczytu zgodnie z ACL.</div><?php endif; ?>
 <section class="card panel">
 <h2>Informacje i widoczność</h2>

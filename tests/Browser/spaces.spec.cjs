@@ -119,7 +119,7 @@ test('settings validation and stale versions preserve input without overwriting 
         await expect(page.locator('[data-space-settings] [name=base_version]')).toHaveValue(originalVersion);
     }
     expect((await api(request, 'get', `spaces/${space.id}`)).name).toBe('Nowsza nazwa serwera');
-    await page.reload();
+    await page.getByRole('link', {name: 'Wczytaj aktualne ustawienia z serwera'}).click();
     const acl = page.locator('#access form[data-principal-picker]'), groupName = unique('space-browser');
     const group = await api(request, 'post', 'groups', {name: groupName, slug: groupName, user_ids: []});
     await acl.locator('[name=principal_type]').selectOption('group'); await acl.locator('[data-principal-query]').fill(groupName);
