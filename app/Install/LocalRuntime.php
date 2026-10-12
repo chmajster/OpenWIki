@@ -66,7 +66,8 @@ final class LocalRuntime
         if (is_file($this->root . '/storage/installed.lock') && !is_readable($this->root . '/.env')) {
             throw new \RuntimeException('Istnieje storage/installed.lock bez czytelnego .env. Przywróć konfigurację istniejącej instancji; dane nie zostały zmienione.');
         }
-        if (!is_file($this->root . '/.env') && !is_writable($this->root)) throw new \RuntimeException('Kreator potrzebuje prawa zapisu .env w katalogu projektu.');
+        if (is_file($this->root . '/.env') && !is_readable($this->root . '/.env')) throw new \RuntimeException('Brak prawa odczytu istniejącego .env. Przywróć dostęp do konfiguracji; plik nie został zmieniony.');
+        if (!is_file($this->root . '/storage/installed.lock') && !is_writable($this->root)) throw new \RuntimeException('Kreator potrzebuje prawa zapisu .env w katalogu projektu.');
         foreach (['storage', 'storage/attachments', 'storage/backups', 'storage/cache', 'storage/logs', 'storage/temp', 'storage/temp/local-sessions'] as $directory) {
             $path = $this->root . '/' . $directory;
             if (!is_dir($path) && !@mkdir($path, 0700, true) && !is_dir($path)) throw new \RuntimeException('Nie można utworzyć katalogu: ' . $path);

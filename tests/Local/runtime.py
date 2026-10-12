@@ -2,7 +2,7 @@
 """Real non-root Bash -> PHP -> browser wizard -> MySQL -> restart verification."""
 import fcntl
 import hashlib
-import http.cookiejar
+from http.cookiejar import CookieJar
 import json
 import os
 from pathlib import Path
@@ -50,7 +50,7 @@ def fixture(action, root):
 
 def opener():
     return urllib.request.build_opener(urllib.request.ProxyHandler({}),
-                                      urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+                                      urllib.request.HTTPCookieProcessor(CookieJar()))
 
 
 def http(client, url, data=None, token=None):
@@ -102,12 +102,12 @@ class Server:
             time.sleep(0.1)
         raise AssertionError('Local runtime preparation exceeded the test deadline')
 
-    def stop(self, keyboard=False):
+    def stop(self, keyboard=False, sig=signal.SIGTERM):
         if self.process.poll() is None:
             if keyboard:
                 os.write(self.master, b'\x03')
             else:
-                self.process.send_signal(signal.SIGTERM)
+                self.process.send_signal(sig)
         result = self.process.wait(timeout=8)
         self.log.close()
         os.close(self.master)
@@ -222,7 +222,7 @@ def run():
             check('pomijam ponowną instalację' in server.output() and 'pomijam npm ci i build' in server.output(), 'Repeated startup skips compatible dependencies and assets')
             url = 'http://127.0.0.1:' + str(NEXT_PORT); browser = opener()
             status, body, headers = http(browser, url + '/login')
-            check('Secure' not in headers.get('Set-Cookie', '') and 'OPENWIKI_LOCAL_' in headers.get('Set-Cookie', ''), 'Local cookie overrides are confined to this process')
+            check('secure' not in headers.get('Set-Cookie', '').lower() and 'OPENWIKI_LOCAL_' in headers.get('Set-Cookie', ''), 'Local cookie overrides are confined to this process')
             status, body, headers = http(browser, url + '/login', {'_token': csrf(body), 'identifier': 'local-tester', 'password': setup['admin_password']})
             check(status == 200 and b'name="identifier"' not in body, 'HTTPS production configuration still permits local login')
             status, body, headers = http(browser, url + '/attachments/' + str(seeded['attachment']) + '/download')
@@ -244,8 +244,11 @@ def run():
             source = root / 'resources/js/document-reader.js'; source.write_text(source.read_text() + '\n// local source edit\n')
             server = Server(root, elsewhere, 'rebuild', ['--port', str(NEXT_PORT)]); servers.append(server); server.ready()
             check('Buduję zasoby edytora' in server.output() and 'Przygotowuję zależności edytora' not in server.output(), 'Changed sources rebuild without an unnecessary npm ci')
-            server.stop(); free_port(NEXT_PORT)
+            check(server.stop(sig=signal.SIGINT) == 130, 'Direct SIGINT stops the owned server'); free_port(NEXT_PORT)
             print('Local test: failed health and the port bind race', flush=True)
+            invalid_key = Server(root, elsewhere, 'invalid-key', ['--port', str(NEXT_PORT)], dict(ENV, APP_KEY='')); servers.append(invalid_key)
+            check(invalid_key.process.wait(timeout=40) != 0 and 'APP_KEY' in invalid_key.output(), 'An installed instance with an invalid key is not offered a destructive reinstall')
+            invalid_key.cleanup(); free_port(NEXT_PORT)
             degraded = Server(root, elsewhere, 'degraded', ['--port', str(NEXT_PORT)], dict(ENV, DB_HOST='127.0.0.1', DB_PORT='1')); servers.append(degraded)
             check(degraded.process.wait(timeout=40) != 0 and 'problem z bazą' in degraded.output(), 'Installed database failure is distinguished from setup_required')
             degraded.cleanup(); free_port(NEXT_PORT)
@@ -268,6 +271,22 @@ def run():
                 check(race.process.wait(timeout=15) != 0 and 'nie wystartował' in race.output(), 'A bind error during actual startup propagates nonzero')
                 check(listener.fileno() >= 0, 'The competing listener is not stopped')
             race.cleanup(); free_port(NEXT_PORT)
+            # Interrupt a delayed real Composer invocation and all of its owned children.
+            prep = Path(temporary) / 'preparation gate'; prep.mkdir()
+            child_file = prep / 'child'; composer = shutil.which('composer')
+            command_wrapper = prep / 'composer'
+            command_wrapper.write_text('#!/usr/bin/env bash\nsleep 120 &\nchild=$!\nprintf "%s" "$child" > ' + shlex.quote(str(child_file)) + '\nwait "$child"\nexec ' + shlex.quote(composer) + ' "$@"\n')
+            command_wrapper.chmod(0o755)
+            interrupted = Server(root, elsewhere, 'preparation-stop', ['--port', str(NEXT_PORT)], dict(ENV, PATH=str(prep) + os.pathsep + ENV['PATH'])); servers.append(interrupted)
+            deadline = time.monotonic() + 30
+            while not child_file.exists() and interrupted.process.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.05)
+            check(child_file.exists(), 'Dependency preparation started the controlled delay')
+            child_id = int(child_file.read_text())
+            check(interrupted.stop() == 143, 'SIGTERM interrupts dependency preparation')
+            process_state = Path('/proc/' + str(child_id) + '/stat')
+            check(not process_state.exists() or process_state.read_text().split()[2] == 'Z', 'Only the owned preparation process group is stopped')
+            free_port(NEXT_PORT)
             check(env_file.read_bytes() == saved_env and (root / 'storage/installed.lock').read_bytes() == saved_lock, 'Failed runs preserve the configured instance')
             print('Local runtime end-to-end passed: ' + str(checks) + ' checks; non-root, real wizard/MySQL, spaces, routing, restart, signals and bind race.')
         finally:

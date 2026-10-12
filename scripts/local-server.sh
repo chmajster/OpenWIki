@@ -97,6 +97,9 @@ local_mode() {
     ok "Zależności PHP są zgodne z composer.lock; pomijam ponowną instalację."
   else
     info "Przygotowuję zależności PHP z composer.lock."
+    local_run_preparation composer check-platform-reqs --lock || {
+      local_dependency_hint; fail "Brak wymagań PHP potrzebnych do composer install. Sprawdź brakujące rozszerzenia powyżej.";
+    }
     local_run_preparation composer install --prefer-dist --no-interaction
     php scripts/local-runtime.php php-ready || fail "Zależności PHP są niekompletne. Sprawdź wynik Composer."
   fi
@@ -133,7 +136,7 @@ local_mode() {
   (
     unset PHP_CLI_SERVER_WORKERS
     export APP_URL="$local_url" SESSION_SECURE_COOKIE=false SESSION_COOKIE_NAME="$session_name" OPENWIKI_LOCAL_PROBE_TOKEN="$token"
-    exec php -d opcache.enable_cli=0 -d upload_max_filesize=50M -d post_max_size=64M \
+    exec php -d opcache.enable=0 -d opcache.enable_cli=0 -d upload_max_filesize=50M -d post_max_size=64M \
       -d "session.save_path=$SCRIPT_DIR/storage/temp/local-sessions" \
       -S "$bind_host:$LOCAL_PORT" -t "$SCRIPT_DIR/public" "$SCRIPT_DIR/scripts/local-router.php"
   ) &
@@ -152,6 +155,7 @@ local_mode() {
   done
   case "$state" in
     setup)
+      [[ ! -f "$SCRIPT_DIR/storage/installed.lock" ]] || fail "Istnieje storage/installed.lock, ale aplikacja zgłasza setup_required. Przywróć prawidłowy APP_KEY istniejącej instancji; konfiguracja i dane nie zostały zmienione."
       ok "Serwer lokalny działa. Dokończ konfigurację:"
       printf '%s/install\n' "$local_url"
       info "Kreator wymaga dostępnego serwera MySQL/MariaDB i danych konta z odpowiednimi uprawnieniami." ;;

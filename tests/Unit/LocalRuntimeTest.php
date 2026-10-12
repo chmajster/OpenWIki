@@ -110,4 +110,29 @@ final class LocalRuntimeTest extends TestCase
         self::assertSame('APP_KEY=existing', file_get_contents($this->root . '/.env'));
         self::assertSame('existing', file_get_contents($this->root . '/storage/installed.lock'));
     }
+
+    public function testFreshPreconfiguredInstanceStillNeedsAWritableProjectDirectory(): void
+    {
+        file_put_contents($this->root . '/.env', 'APP_KEY=existing');
+        chmod($this->root, 0555);
+        try {
+            if (is_writable($this->root)) self::markTestSkipped('Filesystem does not enforce POSIX write permissions for this user.');
+            try { (new LocalRuntime($this->root))->prepareStorage(); self::fail('Read-only project accepted by the installer.'); }
+            catch (\RuntimeException $error) { self::assertStringContainsString('zapisu .env', $error->getMessage()); }
+            self::assertSame('APP_KEY=existing', file_get_contents($this->root . '/.env'));
+        } finally { chmod($this->root, 0700); }
+    }
+
+    public function testStoragePreparationRejectsAnUnwritableDataDirectory(): void
+    {
+        $runtime = new LocalRuntime($this->root); $runtime->prepareStorage();
+        $path = $this->root . '/storage/attachments';
+        chmod($path, 0500);
+        try {
+            if (is_writable($path)) self::markTestSkipped('Filesystem does not enforce POSIX write permissions for this user.');
+            try { $runtime->prepareStorage(); self::fail('Read-only storage accepted.'); }
+            catch (\RuntimeException $error) { self::assertStringContainsString('Brak prawa zapisu', $error->getMessage()); }
+            self::assertDirectoryExists($path);
+        } finally { chmod($path, 0700); }
+    }
 }

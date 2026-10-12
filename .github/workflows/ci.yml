@@ -132,6 +132,8 @@ jobs:
           test ! -d "$RUNNER_TEMP/openwiki-runtime/node_modules"
           test ! -f "$RUNNER_TEMP/openwiki-runtime/.env"
           cd "$RUNNER_TEMP/openwiki-runtime"
+          php scripts/local-runtime.php php-ready
+          php scripts/local-runtime.php assets-ready
           php -r 'require "bootstrap/autoload.php"; $c = new OpenWiki\Wiki\ContentService(); if ($c->normalize("markdown", "", "# Release")["html"] !== "<h1>Release</h1>") exit(1);'
 
 
