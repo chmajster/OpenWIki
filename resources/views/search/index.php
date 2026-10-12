@@ -31,9 +31,13 @@ $typeLabels = [
         </div>
     </div>
 
-    <form class="card form-card form-stack" method="get" action="/search">
+    <form class="card form-card form-stack" method="get" action="/search" data-search-form>
         <div class="search-page-form">
-            <input type="search" name="q" value="<?= $e($query) ?>" placeholder="<?= $e($t('Search knowledge…')) ?>" autofocus required>
+            <div class="search-combobox">
+                <input type="search" name="q" value="<?= $e($query) ?>" placeholder="<?= $e($t('Search knowledge…')) ?>" autofocus required aria-label="<?= $e($t('Search')) ?>" aria-autocomplete="list" aria-controls="search-suggestions" aria-expanded="false" autocomplete="off" data-search-query>
+                <ul id="search-suggestions" class="search-suggestions" role="listbox" aria-label="Podpowiedzi wyszukiwania" hidden></ul>
+                <span data-search-suggestion-status class="muted" role="status" aria-live="polite"></span>
+            </div>
             <button class="button button--primary" type="submit"><?= $e($t('Search')) ?></button>
         </div>
 
@@ -58,6 +62,18 @@ $typeLabels = [
 
             <label><?= $e($t('Tag')) ?>
                 <input name="tag" maxlength="100" value="<?= $e($filters['tag'] ?? '') ?>" placeholder="<?= $e($t('Tag name or slug')) ?>">
+            </label>
+            <label>Treść
+                <select name="visibility">
+                    <?php foreach (['all' => 'Publikacje i dostępne szkice', 'published' => 'Tylko opublikowane', 'working' => 'Tylko wersje robocze'] as $value => $label): ?>
+                        <option value="<?= $value ?>" <?= ($filters['visibility'] ?? 'all') === $value ? 'selected' : '' ?>><?= $e($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label>Wyników na stronie
+                <select name="per_page">
+                    <?php foreach ([10,25,50,100] as $size): ?><option value="<?= $size ?>" <?= (int) ($searchMeta['per_page'] ?? 25) === $size ? 'selected' : '' ?>><?= $size ?></option><?php endforeach; ?>
+                </select>
             </label>
         </div>
 
@@ -88,8 +104,8 @@ $typeLabels = [
 
     <?php if ($query !== '' && empty($searchError)): ?>
         <p class="muted">
-            <?= count($results) ?> result<?= count($results) === 1 ? '' : 's' ?>
-            for “<?= $e($query) ?>”.
+            <span data-search-total><?= (int) $searchMeta['total'] ?></span> wyników dla „<?= $e($query) ?>”.
+            Strona <?= (int) $searchMeta['page'] ?> z <?= max(1, (int) $searchMeta['total_pages']) ?>.
         </p>
 
         <?php if ($results === []): ?>
@@ -100,9 +116,10 @@ $typeLabels = [
         <?php else: ?>
             <div class="search-results">
                 <?php foreach ($results as $result): ?>
-                    <article class="card search-result">
+                    <article class="card search-result" data-search-key="<?= $e($result['result_key']) ?>">
                         <div class="search-result__meta">
                             <?= $e(strtoupper((string) $result['type'])) ?> · <?= $e($result['meta']) ?>
+                            <?php if ($result['working']): ?><span class="badge">Wersja robocza · <?= (int) $result['revision'] ?></span><?php endif; ?>
                         </div>
 
                         <h2>
@@ -127,6 +144,13 @@ $typeLabels = [
                     </article>
                 <?php endforeach; ?>
             </div>
+        <?php endif; ?>
+        <?php if ((int) $searchMeta['total_pages'] > 1): ?>
+            <?php $pageUrl = static fn (int $page): string => '/search?' . http_build_query(array_replace($filters, ['q' => $query, 'type' => $type, 'page' => $page, 'per_page' => $searchMeta['per_page']])); ?>
+            <nav class="form-actions search-pagination" aria-label="Strony wyników">
+                <?php if ((int) $searchMeta['page'] > 1): ?><a class="button button--secondary" rel="prev" href="<?= $e($pageUrl((int) $searchMeta['page'] - 1)) ?>">Poprzednia</a><?php endif; ?>
+                <?php if ((int) $searchMeta['page'] < (int) $searchMeta['total_pages']): ?><a class="button button--secondary" rel="next" href="<?= $e($pageUrl((int) $searchMeta['page'] + 1)) ?>">Następna</a><?php endif; ?>
+            </nav>
         <?php endif; ?>
     <?php endif; ?>
 </section>
