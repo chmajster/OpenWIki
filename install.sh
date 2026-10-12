@@ -11,6 +11,7 @@ DB_USER="${OPENWIKI_DB_USER:-openwiki}"
 WEB_USER=""
 PHP_FPM_SERVICE=""
 PHP_FPM_SOCKET=""
+PHP_FPM_POOL=""
 NGINX_SITE="openwiki"
 CRON_FILE="/etc/cron.d/openwiki"
 MODE="install"
@@ -193,7 +194,9 @@ detect_php_runtime_user() {
   local conf user
   local configs=()
 
-  if [[ "$PKG_FAMILY" == "apt" ]]; then
+  if [[ -n "$PHP_FPM_POOL" ]]; then
+    configs=("$PHP_FPM_POOL")
+  elif [[ "$PKG_FAMILY" == "apt" ]]; then
     if [[ "$PHP_FPM_SERVICE" =~ ^php([0-9]+\.[0-9]+)-fpm\.service$ ]]; then
       configs=("/etc/php/${BASH_REMATCH[1]}/fpm/pool.d/www.conf")
     else
@@ -216,18 +219,28 @@ detect_php_runtime_user() {
 }
 
 detect_installed_fpm_service() {
-  local conf socket candidate
+  local conf socket candidate pool configured version selected="" selected_pool="" matches=0
   if [[ "$PKG_FAMILY" == apt ]]; then conf="/etc/nginx/sites-available/$NGINX_SITE";
   else conf="/etc/nginx/conf.d/$NGINX_SITE.conf"; fi
   [[ -f "$conf" ]] || fail "Brak zarządzanej konfiguracji Nginx. Najpierw wykonaj --repair."
   socket=$(awk '/^[[:space:]]*fastcgi_pass[[:space:]]+unix:/{sub(/.*unix:/, ""); sub(/;.*/, ""); print; exit}' "$conf")
-  case "$socket" in
-    /run/php/php*-fpm.sock|/var/run/php/php*-fpm.sock) candidate="$(basename "$socket" .sock).service" ;;
-    /run/php-fpm/www.sock|/var/run/php-fpm/www.sock) candidate=php-fpm.service ;;
-    *) fail "Konfiguracja Nginx nie używa obsługiwanego, zarządzanego socketu PHP-FPM." ;;
-  esac
-  [[ "$(systemctl show "$candidate" --property=LoadState --value)" == loaded ]] || fail "Brak usługi obsługującej socket OpenWiki: $candidate."
-  PHP_FPM_SERVICE="$candidate"
+  [[ "$socket" == /* ]] || fail "Konfiguracja Nginx nie używa zarządzanego socketu PHP-FPM."
+  # Socket filenames are configurable; identify the owning pool/service instead
+  # of assuming that www.sock belongs to the RPM service or a versioned socket.
+  for pool in /etc/php/*/fpm/pool.d/*.conf /etc/php-fpm.d/*.conf; do
+    [[ -f "$pool" ]] || continue
+    configured=$(awk -F= '/^[[:space:]]*listen[[:space:]]*=/{gsub(/[[:space:]"]/, "", $2); print $2; exit}' "$pool")
+    [[ "$configured" == "$socket" ]] || continue
+    if [[ "$pool" == /etc/php/* ]]; then
+      version="${pool#/etc/php/}"; version="${version%%/*}"; candidate="php$version-fpm.service"
+    else candidate=php-fpm.service; fi
+    [[ "$(systemctl show "$candidate" --property=LoadState --value)" == loaded ]] || continue
+    selected="$candidate"; selected_pool="$pool"; matches=$((matches + 1))
+    if systemctl is-active --quiet "$candidate"; then matches=1; break; fi
+  done
+  [[ "$matches" == 1 ]] || fail "Nie można jednoznacznie ustalić puli PHP-FPM dla socketu OpenWiki. Sprawdź konfigurację usług."
+  PHP_FPM_SERVICE="$selected"
+  PHP_FPM_POOL="$selected_pool"
   PHP_FPM_SOCKET="$socket"
 }
 
