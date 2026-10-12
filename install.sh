@@ -228,20 +228,31 @@ start_services() {
   ok "MariaDB, Nginx i PHP-FPM działają (runtime: $WEB_USER)."
 }
 
+fresh_checkout() {
+  mkdir -p "$INSTALL_DIR"
+  git -C "$INSTALL_DIR" init
+  git -C "$INSTALL_DIR" remote add origin "$REPO_URL"
+  git -C "$INSTALL_DIR" fetch --no-tags --depth 1 origin "$GIT_REF"
+  git -C "$INSTALL_DIR" checkout --detach FETCH_HEAD
+}
+
 deploy_code() {
   info "[3/8] Pobieranie aplikacji"
   if [[ -d "$INSTALL_DIR/.git" ]]; then
     git -C "$INSTALL_DIR" fetch --prune --depth 1 origin "$GIT_REF"
     git -C "$INSTALL_DIR" checkout --detach FETCH_HEAD
+  elif [[ -d "$SCRIPT_DIR/.git" ]]; then
+    fresh_checkout
   elif [[ -f "$SCRIPT_DIR/composer.json" && -d "$SCRIPT_DIR/app" && -d "$SCRIPT_DIR/public" ]]; then
     mkdir -p "$INSTALL_DIR"
     if [[ "$(readlink -f "$SCRIPT_DIR")" != "$(readlink -f "$INSTALL_DIR")" ]]; then
-      cp -a "$SCRIPT_DIR/." "$INSTALL_DIR/"
+      # A fresh instance must never inherit another instance's key or files.
+      tar -C "$SCRIPT_DIR" --exclude='./.env' --exclude='./storage' --exclude='./.openwiki' --exclude='./current' --exclude='./node_modules' --exclude='./test-results' -cf - . | tar -C "$INSTALL_DIR" -xf -
     fi
   else
     [[ ! -e "$INSTALL_DIR" || -z "$(ls -A "$INSTALL_DIR" 2>/dev/null || true)" ]] ||
       fail "Katalog $INSTALL_DIR istnieje i nie jest pusty."
-    git clone --branch "$GIT_REF" --depth 1 "$REPO_URL" "$INSTALL_DIR"
+    fresh_checkout
   fi
 
   cd "$INSTALL_DIR"

@@ -26,7 +26,7 @@ final class ConsoleApplication
 
         try {
             $writeGate = new \OpenWiki\Upgrade\WriteGate();
-            if (!in_array($command, ['help', '--help', '-h', 'install', 'db:status', 'system:check', 'readiness'], true)) {
+            if (!in_array($command, ['help', '--help', '-h', 'install', 'db:status', 'system:check', 'readiness', 'upgrade:status'], true)) {
                 $writeGate->acquire($this->basePath, $command === 'migrate');
             }
             return match ($command) {
@@ -38,6 +38,7 @@ final class ConsoleApplication
                 'cron:run' => $this->cronRun(),
                 'system:check' => $this->systemCheck(),
                 'readiness' => $this->readiness(),
+                'upgrade:status' => $this->upgradeStatus(),
                 'user:create' => $this->userCreate(),
                 'user:disable' => $this->userDisable($argv[2] ?? null),
                 'admin:reset-password' => $this->adminResetPassword($argv[2] ?? null),
@@ -67,6 +68,7 @@ Commands:
   cron:run      Run scheduled housekeeping tasks
   system:check          Validate runtime, database and writable storage
   readiness             Check database, storage and release/schema compatibility
+  upgrade:status        Show persistent upgrade checkpoints and recovery status
   user:create           Create a local user
   user:disable <user>   Disable a user by ID, username or email
   admin:reset-password <user>
@@ -360,6 +362,13 @@ TEXT);
         $state = (new \OpenWiki\System\ReadinessService(Application::boot($this->basePath)))->check();
         fwrite(STDOUT, json_encode($state, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL);
         return $state['ready'] ? 0 : 1;
+    }
+
+    private function upgradeStatus(): int
+    {
+        $state = (new \OpenWiki\Upgrade\UpgradeState(\OpenWiki\Upgrade\WriteGate::instancePath($this->basePath) . '/.openwiki'))->read();
+        fwrite(STDOUT, json_encode($state, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL);
+        return 0;
     }
 
     private function searchIndex(): int
