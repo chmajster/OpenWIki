@@ -590,6 +590,9 @@ test('page link search, macro results and editor endpoints enforce actual ACL', 
     await page.locator('[name=effect]').selectOption('deny');
     await page.getByRole('button', {name: 'Save ACL rule', exact: true}).click();
     await api(request, 'patch', 'pages/' + parent.id, {base_version: 1, content_html: '<p>{{child-pages}}</p>'});
+    const {execFileSync} = require('node:child_process');
+    const {phpArguments} = require('./php-command.cjs');
+    execFileSync('php', [...phpArguments, 'tests/Browser/fixture.php', 'acl-search-scale', String(hidden.id)]);
     const visibleChild = await create(request, unique('Visible child'), {parent_id: hidden.id});
     const ownerCsrf = await page.locator('[name=_token]').first().inputValue();
     await page.request.post(pathFor(visibleChild) + '/permissions/inheritance', {form: {_token: ownerCsrf, inherit_acl: '0'}});

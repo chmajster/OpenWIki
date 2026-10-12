@@ -15,23 +15,36 @@ final class PageAclService
     private array $snapshotPrincipals = [];
     private array $snapshotAccess = [];
 
-    /** Used only for one subtree operation while its space row is locked. */
-    public function snapshot(array $space, int $userId, bool $superAdmin): void
+    /** One consistent read operation, or a subtree mutation holding its space lock. */
+    public function snapshot(array $space, ?int $userId, bool $superAdmin): void
     {
         $db = $this->app->database();
-        if (!$db->pdo()->inTransaction()) throw new \LogicException('An ACL snapshot requires a locked transaction.');
+        if (!$db->pdo()->inTransaction()) throw new \LogicException('An ACL snapshot requires a transaction.');
         $this->snapshotSpace = (int) $space['id']; $this->snapshotUser = $userId;
         $this->snapshotPages = array_column($db->fetchAll('SELECT id, parent_id, inherit_acl FROM pages WHERE space_id = ?', [$space['id']]), null, 'id');
         $this->snapshotRules = [];
         foreach ($db->fetchAll('SELECT a.* FROM page_acl a INNER JOIN pages p ON p.id = a.page_id WHERE p.space_id = ?', [$space['id']]) as $rule) {
             $this->snapshotRules[(int) $rule['page_id']][$rule['permission']][] = $rule;
         }
-        $this->snapshotPrincipals = ['user:' . $userId => true];
+        $this->snapshotPrincipals = $userId === null ? [] : ['user:' . $userId => true];
         foreach (['role' => ['user_roles', 'role_id'], 'group' => ['group_users', 'group_id']] as $kind => [$table, $column]) {
-            foreach ($db->fetchAll('SELECT ' . $column . ' AS id FROM ' . $table . ' WHERE user_id = ?', [$userId]) as $row) $this->snapshotPrincipals[$kind . ':' . $row['id']] = true;
+            if ($userId !== null) foreach ($db->fetchAll('SELECT ' . $column . ' AS id FROM ' . $table . ' WHERE user_id = ?', [$userId]) as $row) $this->snapshotPrincipals[$kind . ':' . $row['id']] = true;
         }
         $access = new SpaceAccessService($this->app);
-        $this->snapshotAccess = ['view' => $access->canViewFor($space, $userId, $superAdmin), 'edit' => $access->canEditFor($space, $userId, $superAdmin)];
+        $this->snapshotAccess = ['view' => $access->canViewFor($space, $userId, $superAdmin), 'edit' => $userId !== null && $access->canEditFor($space, $userId, $superAdmin)];
+    }
+
+    public function visiblePages(array $space, callable $fetchRows): array
+    {
+        try {
+            return $this->app->database()->transaction(function () use ($space, $fetchRows): array {
+                $user = $this->app->auth()->user();
+                $this->snapshot($space, $user === null ? null : (int) $user['id'], $this->app->auth()->can('*'));
+                return array_values(array_filter($fetchRows(), fn (array $page): bool => $this->canView($page, $space)));
+            });
+        } finally {
+            $this->snapshotSpace = null;
+        }
     }
 
     public function __construct(private readonly Application $app)
@@ -283,7 +296,7 @@ final class PageAclService
 
     private function usesSnapshot(array $space, ?int $userId): bool
     {
-        return $this->snapshotSpace === (int) $space['id'] && $this->snapshotUser === $userId;
+        return $this->app->database()->pdo()->inTransaction() && $this->snapshotSpace === (int) $space['id'] && $this->snapshotUser === $userId;
     }
 
     private function lockedMutation(int $pageId, callable $operation): mixed
@@ -301,12 +314,13 @@ final class PageAclService
 
     private function decision(array $page, string $permission, ?int $userId): ?bool
     {
-
+        $snapshot = $this->usesSnapshot(['id' => $page['space_id'] ?? -1], $userId);
         $direct = $this->scopeDecision(
             (int) $page['id'],
             $userId,
             $permission,
-            false
+            false,
+            $snapshot
         );
         if ($direct !== null) {
             return $direct;
@@ -325,7 +339,7 @@ final class PageAclService
             }
             $visited[$parentId] = true;
 
-            $parent = $this->snapshotSpace !== null ? ($this->snapshotPages[$parentId] ?? null) : $this->app->database()->fetchOne(
+            $parent = $snapshot ? ($this->snapshotPages[$parentId] ?? null) : $this->app->database()->fetchOne(
                 'SELECT id, parent_id, inherit_acl
                  FROM pages
                  WHERE id = :id
@@ -340,7 +354,8 @@ final class PageAclService
                 (int) $parent['id'],
                 $userId,
                 $permission,
-                true
+                true,
+                $snapshot
             );
             if ($decision !== null) {
                 return $decision;
@@ -360,9 +375,10 @@ final class PageAclService
         int $pageId,
         ?int $userId,
         string $permission,
-        bool $inheritedOnly
+        bool $inheritedOnly,
+        bool $snapshot = false
     ): ?bool {
-        if ($this->snapshotSpace !== null && $userId === $this->snapshotUser) {
+        if ($snapshot) {
             $allowList = false; $allowed = false;
             foreach ($this->snapshotRules[$pageId][$permission] ?? [] as $rule) {
                 if ($inheritedOnly && !(bool) $rule['inherit_to_children']) continue;

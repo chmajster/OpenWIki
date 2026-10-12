@@ -120,10 +120,8 @@ final class SpaceController extends Controller
 
         $canEdit = $access->canEdit($space);
         $pageAccess = new PageAclService($this->app);
-        $pages = array_values(array_filter(
-            (new PageRepository($this->app->database()))->tree((int) $space['id']),
-            fn (array $page): bool => $pageAccess->canView($page, $space)
-        ));
+        $pages = $pageAccess->visiblePages($space,
+            fn (): array => (new PageRepository($this->app->database()))->tree((int) $space['id']));
 
         return $this->render('spaces/show', [
             'title' => $space['name'],

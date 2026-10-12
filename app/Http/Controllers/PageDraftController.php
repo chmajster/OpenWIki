@@ -218,15 +218,14 @@ final class PageDraftController extends Controller
         if ($context instanceof Response) return $context;
         $query = $request->query('q', '');
         if (!is_string($query) || mb_strlen($query) > 100) return Response::json(['error' => ['message' => 'Search is limited to 100 characters.']], 422);
-        $rows = $this->app->database()->fetchAll(
+        $acl = new PageAclService($this->app);
+        $rows = $acl->visiblePages($context['space'], fn (): array => $this->app->database()->fetchAll(
             'SELECT id, space_id, parent_id, inherit_acl, owner_id, author_id, title, slug, status FROM pages WHERE space_id = :space AND deleted_at IS NULL
              AND (title LIKE :title OR slug LIKE :slug) ORDER BY title, id LIMIT 100',
             ['space' => $context['space']['id'], 'title' => '%' . $query . '%', 'slug' => '%' . $query . '%']
-        );
-        $acl = new PageAclService($this->app);
+        ));
         $results = [];
         foreach ($rows as $row) {
-            if (!$acl->canView($row, $context['space'])) continue;
             $results[] = ['id' => (int) $row['id'], 'title' => $row['title'], 'url' => '/spaces/' . rawurlencode($spaceKey) . '/pages/' . rawurlencode($row['slug'])];
             if (count($results) === 20) break;
         }

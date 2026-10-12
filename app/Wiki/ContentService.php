@@ -53,13 +53,14 @@ final class ContentService
     {
         $row = self::storedSource($row);
         if ($row === null) return null;
-        $content = $this->normalize((string) ($row['content_format'] ?? (($row['content_markdown'] ?? null) !== null ? 'markdown' : 'visual')),
-            (string) ($row['content_html'] ?? ''), (string) ($row['content_markdown'] ?? ''), false);
         // Historical Markdown HTML is a rendered snapshot. Filter it without replacing
         // its supported structure/macros with output from a newer renderer.
-        if ($content['format'] === 'markdown' && (string) ($row['content_html'] ?? '') !== '') {
-            $content['html'] = $this->sanitizer->sanitize((string) $row['content_html']);
-        }
+        $format = (string) ($row['content_format'] ?? (($row['content_markdown'] ?? null) !== null ? 'markdown' : 'visual'));
+        $content = $format === 'markdown' && (string) ($row['content_html'] ?? '') !== ''
+            ? ['format' => 'markdown', 'html' => $this->sanitizer->sanitize((string) $row['content_html']),
+                'markdown' => (string) ($row['content_markdown'] ?? ''),
+                'document' => ['version' => self::SCHEMA_VERSION, 'format' => 'markdown', 'source' => (string) ($row['content_markdown'] ?? '')]]
+            : $this->normalize($format, (string) ($row['content_html'] ?? ''), (string) ($row['content_markdown'] ?? ''), false);
         $row['content_format'] = $content['format'];
         $row['content_html'] = $content['html'];
         $row['content_markdown'] = $content['markdown'];

@@ -60,6 +60,18 @@ if (($argv[1] ?? '') === 'seed') {
     ob_start(); imagepng($image); $imageBase64 = base64_encode((string) ob_get_clean()); imagedestroy($image);
     echo json_encode(['imageBase64' => $imageBase64, 'users'  => $users, 'roleId' => $roleId, 'limitedRoleId' => $limitedRole, 'securityRoleIds' => $securityRoles,
         'wildcardPermissionId' => $wildcardPermissionId, 'delegateToken' => $delegateToken, 'spaceId' => $spaceId, 'spaceKey' => $spaceKey, 'token' => $token], JSON_THROW_ON_ERROR);
+} elseif (($argv[1] ?? '') === 'acl-search-scale') {
+    $data = json_decode(file_get_contents(dirname(__DIR__, 2) . '/storage/temp/editor-browser.json'), true, 512, JSON_THROW_ON_ERROR);
+    $parentId = filter_var($argv[2] ?? '', FILTER_VALIDATE_INT);
+    $parent = $parentId === false ? null : $database->fetchOne('SELECT id FROM pages WHERE id = ? AND space_id = ?', [$parentId, $data['spaceId']]);
+    if ($parent === null) throw new RuntimeException('Browser fixture parent required.');
+    $database->transaction(function () use ($database, $data, $parentId): void {
+        for ($index = 0; $index < 100; $index++) {
+            $database->execute('INSERT INTO pages (space_id, parent_id, title, slug, content_html, content_format, author_id, owner_id, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, "<p>Protected scale document</p>", "visual", ?, ?, "draft", UTC_TIMESTAMP(), UTC_TIMESTAMP())',
+                [$data['spaceId'], $parentId, 'A protected scale document ' . $index, 'scale-' . $parentId . '-' . $index, $data['users'][0]['id'], $data['users'][0]['id']]);
+        }
+    });
 } elseif (in_array($argv[1] ?? '', ['legacy-html', 'legacy-snapshot'], true)) {
     $data = json_decode(file_get_contents(dirname(__DIR__, 2) . '/storage/temp/editor-browser.json'), true, 512, JSON_THROW_ON_ERROR);
     $id = filter_var($argv[2] ?? '', FILTER_VALIDATE_INT);

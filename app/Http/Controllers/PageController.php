@@ -153,10 +153,7 @@ final class PageController extends Controller
             'title' => $page['title'],
             'space' => $space,
             'page' => $page,
-            'pages' => array_values(array_filter(
-                $repository->tree((int) $space['id']),
-                fn (array $treePage): bool => $pageAccess->canView($treePage, $space)
-            )),
+            'pages' => $this->visibleTree($space),
             'canEdit' => $pageAccess->canEdit($page, $space),
             'canManagePermissions' => $pageAccess->canEdit($page, $space),
             'canDeletePage' => $user !== null && $pageAccess->can($page, $space, 'page.delete'),
@@ -384,13 +381,8 @@ final class PageController extends Controller
 
     private function visibleTree(array $space): array
     {
-        $access = new PageAclService($this->app);
-        $pages = (new PageRepository($this->app->database()))->tree((int) $space['id']);
-
-        return array_values(array_filter(
-            $pages,
-            fn (array $page): bool => $access->canView($page, $space)
-        ));
+        return (new PageAclService($this->app))->visiblePages($space,
+            fn (): array => (new PageRepository($this->app->database()))->tree((int) $space['id']));
     }
 
     private function space(string $spaceKey): array|Response

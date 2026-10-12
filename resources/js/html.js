@@ -1,5 +1,9 @@
 export const sanitizeHtml = (html, policy) => {
     const doc = new DOMParser().parseFromString(String(html), 'text/html');
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_COMMENT);
+    const comments = [];
+    while (walker.nextNode()) comments.push(walker.currentNode);
+    comments.forEach((comment) => comment.remove());
         for (const node of Array.from(doc.body.querySelectorAll('*')).reverse()) {
             const tag = node.tagName.toLowerCase();
             if (['script', 'style', 'iframe', 'object', 'embed', 'svg', 'math', 'template', 'noscript', 'xmp', 'plaintext'].includes(tag)
