@@ -45,11 +45,11 @@ final class PageReviewService
             // Restore only public document fields. Structure and ACL are separate operations.
             $public = $this->db->fetchOne('SELECT * FROM page_revisions WHERE page_id = ? AND revision_number = ?', [$id, $pointer]) ?? throw new \RuntimeException('Brak opublikowanej rewizji.');
             $this->project($id, $public, $head['status'] === 'archived' ? 'archived' : 'published', $previous);
-            $oldKnowledge = json_decode($public['knowledge_json'] ?? '{}', true, 512, JSON_THROW_ON_ERROR);
-            $this->db->execute('UPDATE pages SET content_owner_id = ?, review_due_at = ? WHERE id = ?', [$oldKnowledge['content_owner_id'] ?? $previous['content_owner_id'], $oldKnowledge['review_due_at'] ?? null, $id]);
+            $this->db->execute('UPDATE pages SET content_owner_id = ?, review_due_at = ? WHERE id = ?', [$previous['content_owner_id'], $previous['review_due_at'], $id]);
             $this->db->execute('UPDATE pages SET published_at = ?, updated_at = ? WHERE id = ?', [$previous['published_at'], $previous['updated_at'], $id]);
         }
         $head['published_revision'] = $pointer; $head['workflow_state'] = $state;
+        if (!$published && $pointer !== null) $head['published_at'] = $previous['published_at'];
         return array_replace($head, $knowledge);
     }
 
@@ -118,8 +118,14 @@ final class PageReviewService
         });
     }
 
-    public function decisions(int $id): array
+    public function decisionCount(int $id): int
     {
-        return $this->db->fetchAll('SELECT d.*, u.username FROM page_review_decisions d INNER JOIN users u ON u.id = d.actor_id WHERE d.page_id = ? ORDER BY d.id DESC', [$id]);
+        return (int) $this->db->fetchOne('SELECT COUNT(*) AS total FROM page_review_decisions WHERE page_id = ?', [$id])['total'];
+    }
+
+    public function decisions(int $id, int $limit = 50, int $offset = 0): array
+    {
+        $limit = max(1, min(100, $limit)); $offset = max(0, $offset);
+        return $this->db->fetchAll('SELECT d.*, u.username FROM page_review_decisions d INNER JOIN users u ON u.id = d.actor_id WHERE d.page_id = ? ORDER BY d.id DESC LIMIT ' . $limit . ' OFFSET ' . $offset, [$id]);
     }
 }

@@ -110,6 +110,7 @@ final class PageReviewTest extends TestCase
         self::assertSame(404, $api->pageRevision($this->request([], $reader), (string) $page['id'], '2')->status());
         self::assertSame(404, $api->pageDiff($this->request([], $reader, ['from' => '1', 'to' => '2']), (string) $page['id'])->status());
         self::assertSame(404, $api->page($this->request([], $reader, ['view' => 'working']), (string) $page['id'])->status());
+        self::assertSame(404, $api->pageReview($this->request([], $reader), (string) $page['id'])->status());
         self::assertSame(200, $api->pageRevision($this->request([], $publisher), (string) $page['id'], '2')->status());
         self::assertSame(200, $api->restorePage($this->request(['revision' => 2, 'base_version' => 2], $author), (string) $page['id'])->status());
         self::assertSame('draft', $this->app->database()->fetchOne('SELECT workflow_state FROM pages WHERE id = ?', [$page['id']])['workflow_state']);
@@ -133,5 +134,37 @@ final class PageReviewTest extends TestCase
         $verified = $this->decide($published, 'verify', 'reviewer', ['review_due_at' => gmdate('Y-m-d', time() + 86400 * 30)]);
         self::assertSame($number, (int) $verified['verified_revision']); self::assertNotNull($verified['verified_at']);
         self::assertCount(6, (new PageReviewService($this->app->database()))->decisions((int) $page['id']));
+        $draft = $this->write($verified, ['base_version' => $published['version'], 'content_html' => '<p>Later private edit</p>']);
+        self::assertSame($verified['review_due_at'], (new PageRepository($this->app->database()))->findById((int) $page['id'])['review_due_at']);
+        $api = new ApiV1Controller($this->app);
+        $decisions = json_decode($api->pageReview($this->request([], $this->token('reviewer'), ['per_page' => 2]), (string) $page['id'])->body(), true);
+        self::assertCount(2, $decisions['data']); self::assertSame(6, $decisions['meta']['total']);
+        $this->app->database()->execute('UPDATE spaces SET allow_self_review = 1 WHERE id = ?', [$this->space['id']]);
+        $this->decide($draft, 'submit', 'author');
+        self::assertSame('approved', $this->decide($draft, 'approve', 'author')['workflow_state']);
+    }
+
+    public function testDeletingWorkingAttachmentPreservesPublishedBytesUntilNextPublication(): void
+    {
+        $this->enable(); $db = $this->app->database();
+        $page = $this->write(null, ['title' => 'Files', 'content_html' => '<p>File</p>']);
+        $files = new \OpenWiki\Attachments\AttachmentService($db, $this->app->basePath());
+        $source = tempnam(sys_get_temp_dir(), 'wiki-review-file-'); file_put_contents($source, 'Approved bytes');
+        $id = $files->createFromSource((int) $page['id'], $this->users['author'], $source, 'approved.txt'); unlink($source);
+        $keys = $files->storageKeysForPage((int) $page['id']);
+        try {
+            $head = $this->write($page, ['base_version' => 1, 'content_html' => '<p>Approved file</p>']);
+            $this->decide($head, 'submit', 'author'); $this->decide($head, 'approve', 'reviewer'); $published = $this->decide($head, 'publish', 'publisher');
+            self::assertTrue($files->delete($id)); self::assertNull($files->find($id));
+            $api = new ApiV1Controller($this->app); $reader = $this->token('reader');
+            self::assertSame(200, $api->downloadAttachment($this->request([], $reader), (string) $id)->status());
+            $visibility = new \OpenWiki\Attachments\AttachmentVisibility($db);
+            $visible = $visibility->forPage($files->listForPage((int) $page['id'], true), $this->users['reader']);
+            self::assertSame('approved.txt', $visible[0]['name']); self::assertSame('Approved bytes', file_get_contents($files->currentPath($visible[0])));
+            $draft = $this->write($published, ['base_version' => 2, 'content_html' => '<p>File removed</p>']);
+            self::assertSame(200, $api->downloadAttachment($this->request([], $reader), (string) $id)->status());
+            $this->decide($draft, 'submit', 'author'); $this->decide($draft, 'approve', 'reviewer'); $this->decide($draft, 'publish', 'publisher');
+            self::assertSame(404, $api->downloadAttachment($this->request([], $reader), (string) $id)->status());
+        } finally { $files->purgeStorageKeys($keys); }
     }
 }

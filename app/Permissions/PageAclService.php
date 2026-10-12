@@ -113,7 +113,8 @@ final class PageAclService
         array $space,
         ?int $userId,
         bool $superAdmin = false,
-        bool $hasPageViewPermission = true
+        bool $hasPageViewPermission = true,
+        ?array $ceiling = null
     ): bool {
         $spaceAccess = new SpaceAccessService($this->database, $this->lockingReads);
         if (!($this->usesSnapshot($space, $userId) ? $this->snapshotAccess['view'] : $spaceAccess->canViewFor($space, $userId, $superAdmin))) {
@@ -137,7 +138,7 @@ final class PageAclService
         }
 
         $workflow = $space['review_workflow'] ?? ($this->reviewSpaces[(int) $space['id']] ??= $this->database->fetchOne('SELECT review_workflow FROM spaces WHERE id = ?', [$space['id']])['review_workflow'] ?? 0);
-        if ((bool) $workflow) return $this->canReadWorkingFor($page, $space, $userId, $superAdmin);
+        if ((bool) $workflow) return $this->canReadWorkingFor($page, $space, $userId, $superAdmin, $ceiling);
 
         if ($userId === null) {
             return false;

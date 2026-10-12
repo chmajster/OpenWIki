@@ -25,7 +25,7 @@ final class AttachmentVisibility
                 $working = $acl->canReadWorkingFor($page, $space, $user, $super, $ceiling);
                 $legacy = !(bool) $space['review_workflow'] && $page['status'] === 'published' && ($page['published_revision'] === null || (int) $page['published_revision'] === (int) $page['version']);
                 $context = ['unrestricted' => (!$publishedOnly && $working) || $legacy || ($page['published_revision'] === null && $working), 'files' => [], 'versions' => []];
-                if (!$context['unrestricted'] && $page['published_revision'] !== null) {
+                if ($page['published_revision'] !== null) {
                     $rows = $this->db->fetchAll('SELECT f.attachment_id, f.name, f.version_number AS current_version, v.storage_key, v.mime_type, v.size_bytes, v.sha256, v.created_at AS updated_at FROM page_revision_attachments f INNER JOIN attachment_versions v ON v.attachment_id = f.attachment_id AND v.version_number = f.version_number WHERE f.page_id = ? AND f.revision_number = ?', [$id, $page['published_revision']]);
                     $context['files'] = array_column($rows, null, 'attachment_id');
                     foreach ($this->db->fetchAll('SELECT DISTINCT f.attachment_id, f.version_number FROM page_revision_attachments f INNER JOIN page_revisions r ON r.page_id = f.page_id AND r.revision_number = f.revision_number AND r.was_published = 1 WHERE f.page_id = ?', [$id]) as $row) $context['versions'][(int) $row['attachment_id']][] = (int) $row['version_number'];
@@ -35,7 +35,7 @@ final class AttachmentVisibility
         }
         $context = $this->contexts[$key];
         if ($context === null) return null;
-        if ($context['unrestricted']) return $file;
+        if ($context['unrestricted'] && empty($file['deleted_at'])) return $file;
         $published = $context['files'][(int) $file['id']] ?? null;
         return $published === null ? null : array_replace($file, $published, ['_allowed_versions' => $context['versions'][(int) $file['id']] ?? []]);
     }

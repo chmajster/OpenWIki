@@ -14,7 +14,7 @@ final class RevisionAccessService
     {
         $row = (new PageRepository($this->db))->revision((int) $page['id'], $number);
         $acl = new PageAclService($this->db);
-        if ($row === null || !$acl->canViewFor($page, $space, $user, $super) || (!$row['was_published'] && !$acl->canReadWorkingFor($page, $space, $user, $super, $ceiling))) throw new \OutOfBoundsException('Nie znaleziono dostępnej rewizji.');
+        if ($row === null || !$acl->canViewFor($page, $space, $user, $super, true, $ceiling) || (!$row['was_published'] && !$acl->canReadWorkingFor($page, $space, $user, $super, $ceiling))) throw new \OutOfBoundsException('Nie znaleziono dostępnej rewizji.');
         return $row;
     }
 
