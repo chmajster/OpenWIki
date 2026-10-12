@@ -30,7 +30,7 @@ try {
             Response::json(['status' => 'maintenance', 'message' => 'Trwa aktualizacja OpenWiki. Spróbuj ponownie później.'], 503)->send();
         }
     }
-    $app = Application::boot($basePath);
+    $app = Application::boot($basePath, !$isHealth);
     SecurityHeaders::send();
 
     $request = Request::fromGlobals();

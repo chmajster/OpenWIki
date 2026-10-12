@@ -452,8 +452,8 @@ configure_nginx() {
 
   local conf server_names health_exceptions=""
   if [[ -f "${APP_DIR:-$INSTALL_DIR}/app/Upgrade/WriteGate.php" ]]; then
-    health_exceptions='if ($uri = /health) { set $openwiki_maintenance ""; }
-    if ($uri = /health/live) { set $openwiki_maintenance ""; }'
+    # request_uri survives the internal redirect to index.php.
+    health_exceptions='if ($request_uri ~ "^/health(/live)?(\?|$)") { set $openwiki_maintenance ""; }'
   fi
   server_names="$(nginx_server_names)"
   if [[ "$PKG_FAMILY" == "apt" ]]; then
