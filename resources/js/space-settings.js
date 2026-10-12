@@ -6,7 +6,7 @@ const message = async response => {
 document.querySelectorAll('[data-principal-picker]').forEach(picker => {
     const query = picker.querySelector('[data-principal-query]'), results = picker.querySelector('[data-principal-results]');
     const type = picker.querySelector('[data-principal-type]'), status = picker.querySelector('[data-picker-status]');
-    const initial = [...results.options].map(option => ({value: option.value, text: option.text}));
+    let initial = [...results.options].map(option => ({value: option.value, text: option.text}));
     let timer, controller, sequence = 0;
     const search = async () => {
         const current = ++sequence; controller?.abort(); controller = new AbortController(); status.textContent = 'Wyszukiwanie…';
@@ -14,7 +14,7 @@ document.querySelectorAll('[data-principal-picker]').forEach(picker => {
             const url = new URL(picker.dataset.url, location.origin);
             url.searchParams.set('type', type?.value || picker.dataset.type || 'user'); url.searchParams.set('q', query.value);
             const rows = await message(await fetch(url, {signal: controller.signal, headers: {Accept: 'application/json'}}));
-            if (current !== sequence) return;
+            if (current !== sequence || url.searchParams.get('q') !== query.value || url.searchParams.get('type') !== (type?.value || picker.dataset.type || 'user')) return;
             const selected = results.selectedOptions[0], options = new Map(initial.map(item => [item.value, item.text]));
             if (selected && selected.value) options.set(selected.value, selected.text);
             rows.forEach(row => options.set(String(row.id), row.name));
@@ -23,7 +23,7 @@ document.querySelectorAll('[data-principal-picker]').forEach(picker => {
         } catch (error) { if (error.name !== 'AbortError' && current === sequence) status.textContent = error.message; }
     };
     query.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 250); });
-    type?.addEventListener('change', () => { results.replaceChildren(new Option('Wybierz adresata', '')); search(); });
+    type?.addEventListener('change', () => { clearTimeout(timer); initial = [{value: '', text: 'Wybierz adresata'}]; results.replaceChildren(new Option('Wybierz adresata', '')); search(); });
     query.addEventListener('focus', () => { if (!query.value) search(); });
 });
 document.querySelectorAll('[data-effective-access]').forEach(panel => {
@@ -35,6 +35,7 @@ document.querySelectorAll('[data-effective-access]').forEach(panel => {
             if (user) url.searchParams.set('user_id', user);
             const page = panel.querySelector('[data-effective-page]').value; if (page) url.searchParams.set('page_id', page);
             const decisions = await message(await fetch(url, {headers: {Accept: 'application/json'}}));
+            if (user !== panel.querySelector('[data-effective-user]').value || page !== panel.querySelector('[data-effective-page]').value) { result.textContent = 'Wybór zmienił się. Sprawdź dostęp ponownie.'; return; }
             const list = document.createElement('ul');
             Object.entries(decisions).forEach(([permission, decision]) => {
                 const item = document.createElement('li');

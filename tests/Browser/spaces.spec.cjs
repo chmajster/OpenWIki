@@ -119,6 +119,19 @@ test('settings validation and stale versions preserve input without overwriting 
         await expect(page.locator('[data-space-settings] [name=base_version]')).toHaveValue(originalVersion);
     }
     expect((await api(request, 'get', `spaces/${space.id}`)).name).toBe('Nowsza nazwa serwera');
+    await page.reload();
+    const acl = page.locator('#access form[data-principal-picker]'), groupName = unique('space-browser');
+    const group = await api(request, 'post', 'groups', {name: groupName, slug: groupName, user_ids: []});
+    await acl.locator('[name=principal_type]').selectOption('group'); await acl.locator('[data-principal-query]').fill(groupName);
+    await expect(acl.locator(`option[value="${group.id}"]`)).toHaveCount(1); await acl.locator('[name=principal_id]').selectOption(String(group.id));
+    await acl.locator('[name=effect]').selectOption('deny');
+    await acl.locator('[name=permission]').evaluate(select => { select.add(new Option('Invalid permission', 'invalid.permission')); select.value = 'invalid.permission'; });
+    const rejectedRule = page.waitForResponse(response => response.url().endsWith('/access') && response.request().method() === 'POST');
+    await acl.getByRole('button', {name: 'Zapisz regułę'}).click(); expect((await rejectedRule).status()).toBe(422);
+    await expect(acl.locator('[name=principal_type]')).toHaveValue('group'); await expect(acl.locator('[name=principal_id]')).toHaveValue(String(group.id)); await expect(acl.locator('[name=effect]')).toHaveValue('deny');
+    await acl.locator('[name=principal_type]').selectOption('role'); await acl.locator('[data-principal-query]').fill(''); await acl.locator('[data-principal-query]').focus();
+    await expect(acl.locator('[data-picker-status]')).toContainText('Wyniki:');
+    await expect(acl.locator('[name=principal_id]')).toHaveValue(''); await expect(acl.locator('[name=principal_id]')).not.toContainText(groupName);
 });
 
 test('an older position search cannot replace a newer selection or its committed order', async ({page, request}) => {

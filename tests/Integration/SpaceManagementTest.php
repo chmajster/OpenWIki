@@ -281,4 +281,30 @@ final class SpaceManagementTest extends TestCase
             self::assertSame($result['id'], (int) $db->fetchOne('SELECT parent_id FROM pages WHERE id = ?', [$result['mapping'][$pages[2]['id']]])['parent_id']);
         });
     }
+
+    public function testGroupAndRoleChangesCannotCutOffTheLastManagerAndDeniedViewGatesManagement(): void
+    {
+        $this->instance(function (Application $app, Database $db): void {
+            $admin = $this->user($db, 'admin', true); $owner = $this->user($db, 'owner'); $manager = $this->user($db, 'manager');
+            $service = new SpaceService($app); $space = $service->create(['name' => 'Group management', 'visibility' => 'restricted', 'owner_id' => $owner], $admin, $this->request());
+            $role = $db->insert('INSERT INTO roles (name, slug) VALUES ("Manager", "manager-test")');
+            $db->execute('INSERT INTO role_permissions (role_id, permission_id) SELECT ?, id FROM permissions WHERE name IN ("space.view", "space.manage_access")', [$role]);
+            $db->execute('INSERT INTO user_roles VALUES (?, ?)', [$manager, $role]);
+            $group = $db->insert('INSERT INTO user_groups (name, slug) VALUES ("Managers", "managers-test")'); $db->execute('INSERT INTO group_users VALUES (?, ?)', [$group, $manager]);
+            foreach (['space.view', 'space.manage_access'] as $permission) $service->rule((int) $space['id'], ['principal_type' => 'group', 'principal_id' => $group, 'permission' => $permission, 'effect' => 'allow'], $admin, $this->request());
+            // Simulate a legacy space whose inactive owner is no longer an active manager.
+            $db->execute('UPDATE users SET status = "disabled" WHERE id = ?', [$owner]);
+            $directory = new DirectoryAdminService($db, AdminActor::user($admin));
+            try { $directory->saveGroup($group, ['name' => 'Managers', 'slug' => 'managers-test', 'user_ids' => []]); self::fail('Removing the last manager from the group must fail.'); }
+            catch (\DomainException) { self::assertSame($manager, (int) $db->fetchOne('SELECT user_id FROM group_users WHERE group_id = ?', [$group])['user_id']); }
+            try { $directory->saveRole($role, ['name' => 'Manager', 'slug' => 'manager-test', 'permission_ids' => []]); self::fail('Removing the last manager capability must fail.'); }
+            catch (\DomainException) { self::assertTrue($service->effective($space, $manager)['space.manage_access']['allowed']); }
+            // Restore a separate active owner so a view denial itself is allowed.
+            $db->execute('UPDATE users SET status = "active" WHERE id = ?', [$owner]);
+            $service->rule((int) $space['id'], ['principal_type' => 'user', 'principal_id' => $manager, 'permission' => 'space.view', 'effect' => 'deny'], $admin, $this->request());
+            self::assertFalse($service->allowed($space, new \OpenWiki\Spaces\SpaceActor($db, $manager), 'space.manage_access'));
+            self::assertFalse($service->effective($space, $manager)['space.manage_access']['allowed']);
+            self::assertStringContainsString('deny', $service->effective($space, $manager)['space.manage_access']['reason']);
+        });
+    }
 }

@@ -139,9 +139,11 @@ final class SpaceService
         return $this->app->database()->transaction(function () use ($space, $id, $pageId, $viewer): array {
         $actor = $id === null ? null : new SpaceActor($this->app->database(), $id);
         $result = [];
+        $view = (new SpaceAccessService($this->app))->explainFor($space, $id, 'space.view', $actor?->can('*') ?? false);
         foreach (self::PERMISSIONS as $permission) {
             $result[$permission] = (new SpaceAccessService($this->app))->explainFor($space, $id, $permission, $actor?->can('*') ?? false, $actor?->can($permission) ?? false);
-            if ($permission === 'space.edit' && $space['status'] === 'archived') $result[$permission] = ['allowed' => false, 'effect' => 'deny', 'reason' => 'Archiwum: dokumenty są tylko do odczytu.', 'rules' => []];
+            if ($permission !== 'space.view' && !$view['allowed']) $result[$permission] = ['allowed' => false, 'effect' => 'deny', 'reason' => 'Brak dostępu do przestrzeni. ' . $view['reason'], 'rules' => $view['rules']];
+            if ($permission === 'space.edit' && $space['status'] === 'archived') $result[$permission]['reason'] .= ' Archiwum: dokumenty są tylko do odczytu; uprawnienie edycji dotyczy ustawień.';
         }
         if ($pageId !== null) {
             $page = $this->app->database()->fetchOne('SELECT * FROM pages WHERE id = ? AND space_id = ? AND deleted_at IS NULL', [$pageId, $space['id']]);
