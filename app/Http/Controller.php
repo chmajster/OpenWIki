@@ -12,7 +12,7 @@ use OpenWiki\Security\Csrf;
 
 abstract class Controller
 {
-    protected function pageWritePolicy(array $space, ?array $context = null): callable
+    protected function pageWritePolicy(array $space, ?array $context = null, bool $subtreeSnapshot = false): callable
     {
         $tokens = new \OpenWiki\Auth\ApiTokenService($this->app->database());
         $userId = (int) ($context['user']['id'] ?? $this->app->auth()->user()['id']);
@@ -20,10 +20,18 @@ abstract class Controller
             ? $this->app->auth()->can($name) : $tokens->hasPermission($context, $name);
         $superAdmin = $permission('*');
         $acl = new \OpenWiki\Permissions\PageAclService($this->app);
-        return static function (string $name, ?array $page) use ($space, $userId, $permission, $superAdmin, $acl): bool {
+        $db = $this->app->database();
+        $snapshot = null;
+        return static function (string $name, ?array $page) use ($space, $userId, $permission, $superAdmin, $acl, $db, $subtreeSnapshot, &$snapshot): bool {
             if ($page === null) return $permission($name);
-            if ($name === 'page.view') return $acl->canViewFor($page, $space, $userId, $superAdmin, $permission($name));
-            return $acl->canFor($page, $space, $name, $userId, $superAdmin, $permission($name));
+            $freshSpace = $snapshot ?? $db->fetchOne('SELECT * FROM spaces WHERE id = ? AND deleted_at IS NULL', [(int) $space['id']]);
+            if ($freshSpace === null || (int) $page['space_id'] !== (int) $freshSpace['id']) return false;
+            if ($subtreeSnapshot && $snapshot === null) {
+                $acl->snapshot($freshSpace, $userId, $superAdmin);
+                $snapshot = $freshSpace;
+            }
+            if ($name === 'page.view') return $acl->canViewFor($page, $freshSpace, $userId, $superAdmin, $permission($name));
+            return $acl->canFor($page, $freshSpace, $name, $userId, $superAdmin, $permission($name));
         };
     }
 

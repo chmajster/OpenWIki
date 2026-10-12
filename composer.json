@@ -15,7 +15,8 @@
     "ext-pdo": "*",
     "ext-phar": "*",
     "ext-zip": "*",
-    "league/commonmark": "^2.10"
+    "league/commonmark": "^2.10",
+    "masterminds/html5": "^2.11"
   },
   "autoload": {
     "psr-4": {

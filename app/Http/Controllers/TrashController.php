@@ -4,18 +4,13 @@ declare(strict_types=1);
 
 namespace OpenWiki\Http\Controllers;
 
-use OpenWiki\Attachments\AttachmentService;
-use OpenWiki\Audit\AuditLogger;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
 use OpenWiki\Http\Controller;
 use OpenWiki\Permissions\PageAclService;
-use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
-use OpenWiki\Wiki\WikiMetadataService;
-use OpenWiki\Webhooks\WebhookService;
 
 final class TrashController extends Controller
 {
@@ -75,36 +70,10 @@ final class TrashController extends Controller
             return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
-        $user = $this->app->auth()->user();
-        $this->app->database()->transaction(function () use ($page, $space): void {
-            $this->app->database()->execute(
-                'UPDATE pages SET deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
-                 WHERE id = :id AND deleted_at IS NULL',
-                ['id' => (int) $page['id']]
-            );
-            (new WikiMetadataService($this->app->database()))->refreshSpaceLinks((int) $space['id']);
-        });
-
-        (new AuditLogger($this->app->database()))->log(
-            'PAGE_DELETED',
-            'page',
-            (int) $page['id'],
-            (int) $user['id'],
-            $request,
-            ['title' => $page['title'], 'slug' => $page['slug'], 'status' => $page['status']],
-            ['deleted' => true]
-        );
-
         try {
-            (new WebhookService($this->app->database()))->queue('page.deleted', [
-                'id' => (int) $page['id'],
-                'space_id' => (int) $space['id'],
-                'title' => (string) $page['title'],
-                'slug' => (string) $page['slug'],
-                'deleted_by' => (int) $user['id'],
-            ]);
-        } catch (\Throwable $webhookError) {
-            error_log('[OpenWiki webhook queue] ' . $webhookError->getMessage());
+            $this->lifecycle()->trash($space, (int) $page['id'], (int) $this->app->auth()->user()['id'], $this->pageWritePolicy($space, subtreeSnapshot: true), $request);
+        } catch (\Throwable $exception) {
+            return $this->lifecycleError($exception);
         }
 
         Session::flash('success', 'Page moved to trash.');
@@ -125,36 +94,11 @@ final class TrashController extends Controller
             return $failure;
         }
 
-        $conflict = $this->app->database()->fetchOne(
-            'SELECT id
-             FROM pages
-             WHERE space_id = :space_id AND slug = :slug AND deleted_at IS NULL
-             LIMIT 1',
-            ['space_id' => (int) $page['space_id'], 'slug' => (string) $page['slug']]
-        );
-        if ($conflict !== null) {
-            Session::flash('error', 'Cannot restore this page because its slug is already in use.');
-            return Response::redirect('/trash');
+        try {
+            $this->lifecycle()->restore($space, (int) $page['id'], (int) $this->app->auth()->user()['id'], $this->pageWritePolicy($space, subtreeSnapshot: true), $request);
+        } catch (\Throwable $exception) {
+            return $this->lifecycleError($exception);
         }
-
-        $this->app->database()->transaction(function () use ($page, $space): void {
-            $this->app->database()->execute(
-                'UPDATE pages SET deleted_at = NULL, updated_at = UTC_TIMESTAMP() WHERE id = :id',
-                ['id' => (int) $page['id']]
-            );
-            (new WikiMetadataService($this->app->database()))->refreshSpaceLinks((int) $space['id']);
-        });
-
-        $user = $this->app->auth()->user();
-        (new AuditLogger($this->app->database()))->log(
-            'PAGE_RESTORED',
-            'page',
-            (int) $page['id'],
-            (int) $user['id'],
-            $request,
-            ['deleted' => true],
-            ['deleted' => false]
-        );
 
         Session::flash('success', 'Page restored.');
         return Response::redirect(
@@ -177,31 +121,30 @@ final class TrashController extends Controller
             return $failure;
         }
 
-        $attachments = new AttachmentService($this->app->database(), $this->app->basePath());
-        $storageKeys = $attachments->storageKeysForPage((int) $page['id']);
-
-        $this->app->database()->transaction(function () use ($page, $space): void {
-            $this->app->database()->execute(
-                'DELETE FROM pages WHERE id = :id AND deleted_at IS NOT NULL',
-                ['id' => (int) $page['id']]
-            );
-            (new WikiMetadataService($this->app->database()))->refreshSpaceLinks((int) $space['id']);
-        });
-
-        $attachments->purgeStorageKeys($storageKeys);
-
-        $user = $this->app->auth()->user();
-        (new AuditLogger($this->app->database()))->log(
-            'PAGE_PERMANENTLY_DELETED',
-            'page',
-            (int) $page['id'],
-            (int) $user['id'],
-            $request,
-            ['title' => $page['title'], 'slug' => $page['slug'], 'deleted_at' => $page['deleted_at']],
-            ['permanent' => true]
-        );
+        try {
+            $this->lifecycle()->destroy($space, (int) $page['id'], (int) $this->app->auth()->user()['id'], $this->pageWritePolicy($space, subtreeSnapshot: true), $request);
+        } catch (\Throwable $exception) {
+            return $this->lifecycleError($exception);
+        }
 
         Session::flash('success', 'Page permanently deleted.');
+        return Response::redirect('/trash');
+    }
+
+    private function lifecycle(): \OpenWiki\Wiki\PageLifecycleService
+    {
+        return new \OpenWiki\Wiki\PageLifecycleService($this->app->database(), $this->app->basePath());
+    }
+
+    private function lifecycleError(\Throwable $exception): Response
+    {
+        if ($exception instanceof \DomainException) return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
+        if ($exception instanceof \InvalidArgumentException) {
+            Session::flash('error', $exception->getMessage());
+            return Response::redirect('/trash');
+        }
+        error_log('[OpenWiki page lifecycle] ' . $exception->getMessage());
+        Session::flash('error', 'Unable to change the page subtree. Your pages remain recoverable.');
         return Response::redirect('/trash');
     }
 

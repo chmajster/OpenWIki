@@ -25,6 +25,7 @@ $sections = [
     </div>
     <div class="stat-grid">
         <?php foreach ($sections as [$label, $url, $count]): ?>
+            <?php if (in_array($url, ['/admin/backups', '/admin/mfa', '/admin/ldap'], true) && !$app->auth()->can('*')) continue; ?>
             <a class="card stat-card" href="<?= $e($url) ?>">
                 <span><?= $e($label) ?></span>
                 <strong><?= (int) $count ?></strong>

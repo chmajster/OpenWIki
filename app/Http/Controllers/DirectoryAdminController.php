@@ -177,7 +177,11 @@ final class DirectoryAdminController extends Controller
             return $this->render('errors/404', ['title' => 'User not found'], 404);
         }
 
-        $password = $this->service()->resetPassword($userId);
+        try {
+            $password = $this->service()->resetPassword($userId);
+        } catch (\DomainException $exception) {
+            return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
+        }
         Session::flash('admin_new_password', ['user_id' => $userId, 'password' => $password]);
         $this->audit('USER_PASSWORD_RESET', 'user', $userId, $request, null, ['force_password_change' => true]);
         Session::flash('success', 'Password reset. Copy the temporary password now.');
@@ -195,7 +199,11 @@ final class DirectoryAdminController extends Controller
             return $this->render('errors/404', ['title' => 'User not found'], 404);
         }
 
-        $this->service()->resetMfa($userId);
+        try {
+            $this->service()->resetMfa($userId);
+        } catch (\DomainException $exception) {
+            return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
+        }
         $this->audit('USER_MFA_RESET', 'user', $userId, $request);
         Session::flash('success', 'MFA reset for user.');
         return Response::redirect('/admin/users/' . $userId . '/edit');
@@ -219,7 +227,12 @@ final class DirectoryAdminController extends Controller
         }
 
         $before = $this->service()->user($userId);
-        if ($before === null || !$this->service()->softDeleteUser($userId)) {
+        try {
+            $deleted = $before !== null && $this->service()->softDeleteUser($userId);
+        } catch (\DomainException $exception) {
+            return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
+        }
+        if (!$deleted) {
             return $this->render('errors/404', ['title' => 'User not found'], 404);
         }
 
@@ -289,7 +302,7 @@ final class DirectoryAdminController extends Controller
                 'formAction' => $before === null ? '/admin/groups' : '/admin/groups/' . (int) $before['id'],
                 'formError' => $this->safeError($exception),
                 'old' => (array) $request->input(),
-            ], 422);
+            ], $exception instanceof \DomainException ? 403 : 422);
         }
     }
 
@@ -311,6 +324,8 @@ final class DirectoryAdminController extends Controller
             }
             $this->audit('GROUP_DELETED', 'group', $groupId, $request, $before, ['deleted' => true]);
             Session::flash('success', 'Group deleted.');
+        } catch (\DomainException $exception) {
+            return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
         } catch (\InvalidArgumentException $exception) {
             Session::flash('error', $exception->getMessage());
         }
@@ -379,7 +394,7 @@ final class DirectoryAdminController extends Controller
                 'formAction' => $before === null ? '/admin/roles' : '/admin/roles/' . (int) $before['id'],
                 'formError' => $this->safeError($exception),
                 'old' => (array) $request->input(),
-            ], 422);
+            ], $exception instanceof \DomainException ? 403 : 422);
         }
     }
 
@@ -401,6 +416,8 @@ final class DirectoryAdminController extends Controller
             }
             $this->audit('ROLE_DELETED', 'role', $roleId, $request, $before, ['deleted' => true]);
             Session::flash('success', 'Role deleted.');
+        } catch (\DomainException $exception) {
+            return $this->render('errors/403', ['title' => 'Permission denied', 'message' => $exception->getMessage()], 403);
         } catch (\InvalidArgumentException $exception) {
             Session::flash('error', $exception->getMessage());
         }
@@ -423,7 +440,7 @@ final class DirectoryAdminController extends Controller
 
     private function userFormError(?array $user, Request $request, \Throwable $exception): Response
     {
-        return $this->userForm($user, (array) $request->input(), $this->safeError($exception), 422);
+        return $this->userForm($user, (array) $request->input(), $this->safeError($exception), $exception instanceof \DomainException ? 403 : 422);
     }
 
     private function authorizeMutation(Request $request, string $permission): ?Response
@@ -437,7 +454,7 @@ final class DirectoryAdminController extends Controller
 
     private function service(): DirectoryAdminService
     {
-        return new DirectoryAdminService($this->app->database());
+        return new DirectoryAdminService($this->app->database(), \OpenWiki\Admin\AdminActor::user((int) $this->app->auth()->user()['id']));
     }
 
     private function id(string $id): ?int
@@ -487,7 +504,7 @@ final class DirectoryAdminController extends Controller
     {
         error_log('[OpenWiki admin] ' . $exception->getMessage());
 
-        if ($exception instanceof \InvalidArgumentException) {
+        if ($exception instanceof \InvalidArgumentException || $exception instanceof \DomainException) {
             return $exception->getMessage();
         }
         if (str_contains(strtolower($exception->getMessage()), 'duplicate')) {

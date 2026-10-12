@@ -1,19 +1,28 @@
 export const sanitizeHtml = (html, policy) => {
     const doc = new DOMParser().parseFromString(String(html), 'text/html');
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_COMMENT);
+    const comments = [];
+    while (walker.nextNode()) comments.push(walker.currentNode);
+    comments.forEach((comment) => comment.remove());
         for (const node of Array.from(doc.body.querySelectorAll('*')).reverse()) {
             const tag = node.tagName.toLowerCase();
-            if (['script', 'style', 'iframe', 'object', 'embed', 'svg', 'math'].includes(tag)) { node.remove(); continue; }
+            if (['script', 'style', 'iframe', 'object', 'embed', 'svg', 'math', 'template', 'noscript', 'xmp', 'plaintext'].includes(tag)
+                || node.namespaceURI !== 'http://www.w3.org/1999/xhtml') { node.remove(); continue; }
             if (!policy.tags.includes(tag)) { node.replaceWith(...node.childNodes); continue; }
             for (const attr of Array.from(node.attributes)) {
                 const allowed = policy.global.concat(policy.attributes[tag] || []).includes(attr.name);
                 const url = attr.value.trim();
-                const safe = !['src', 'href'].includes(attr.name) || url === '' || /^[/#]/.test(url)
-                    || /^(https?:|mailto:)/i.test(url) || (tag === 'img' && /^data:image\/(png|jpeg|gif|webp);base64,/i.test(url));
+                const safe = !['src', 'href'].includes(attr.name) || (!/[\x00-\x20\x7f\\]/.test(url) && (url === '' || /^\/(?!\/)|^#/.test(url)
+                    || /^https?:/i.test(url) || (tag === 'a' && /^mailto:/i.test(url))
+                    || (tag === 'img' && /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/i.test(url))));
                 const controlled = !policy.values?.[attr.name] || policy.values[attr.name].includes(attr.value);
+                const pattern = !policy.patterns?.[attr.name] || new RegExp(policy.patterns[attr.name] + '(?![\\s\\S])', 'u').test(attr.value);
+                const range = !policy.ranges?.[attr.name] || (/^-?[0-9]{1,19}$/.test(attr.value)
+                    && Number(attr.value) >= policy.ranges[attr.name][0] && Number(attr.value) <= policy.ranges[attr.name][1]);
                 const widths = attr.name !== 'colwidth' || (/^(0|[1-9][0-9]{0,3})(,(0|[1-9][0-9]{0,3})){0,29}$/.test(attr.value) && attr.value.split(',').every(value => Number(value) <= 1600));
                 const spans = !['colspan', 'rowspan'].includes(attr.name) || (/^[0-9]+$/.test(attr.value) && Number(attr.value) >= 1 && Number(attr.value) <= 100);
                 const dimensions = !['width', 'height', 'data-original-width', 'data-original-height'].includes(attr.name) || (/^[0-9]+$/.test(attr.value) && Number(attr.value) >= 1 && Number(attr.value) <= 20000);
-                if (!allowed || !safe || !controlled || !widths || !spans || !dimensions) node.removeAttribute(attr.name);
+                if (!allowed || !safe || !controlled || !pattern || !range || !widths || !spans || !dimensions) node.removeAttribute(attr.name);
             }
             if (tag === 'a' && node.target === '_blank') node.rel = 'noopener noreferrer';
         }

@@ -35,9 +35,7 @@ final class PageController extends Controller
             return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
-        $templates = $this->app->database()->fetchAll(
-            'SELECT id, name, description, content_html, content_markdown FROM page_templates ORDER BY is_system DESC, name ASC'
-        );
+        $templates = (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->all();
 
         return $this->render('pages/editor', [
             'title' => 'Create page',
@@ -47,7 +45,8 @@ final class PageController extends Controller
             'pages' => $this->visibleTree($space),
             'templates' => $templates,
             'tags' => [],
-            'canPublish' => $this->app->auth()->can('page.publish'),
+            'canPublish' => $this->pageWritePolicy($space)('page.publish', $page ?? null),
+            'canArchive' => $this->pageWritePolicy($space)('page.archive', $page ?? null),
             'canUploadImage' => $this->app->auth()->can('attachment.upload'),
             'imageUploadUrl' => null,
             'formAction' => '/spaces/' . rawurlencode($space['space_key']) . '/pages',
@@ -147,17 +146,13 @@ final class PageController extends Controller
             }
         ));
 
-        $safe = (new \OpenWiki\Wiki\ContentService())->normalize($page['content_format'], $page['content_html'], $page['content_markdown'] ?? '', false);
-        $rendered = (new MacroService($this->app))->renderPage(array_replace($page, ['content_html' => $safe['html']]), $space);
+        $rendered = (new MacroService($this->app))->renderPage($page, $space);
 
         return $this->render('pages/show', [
             'title' => $page['title'],
             'space' => $space,
             'page' => $page,
-            'pages' => array_values(array_filter(
-                $repository->tree((int) $space['id']),
-                fn (array $treePage): bool => $pageAccess->canView($treePage, $space)
-            )),
+            'pages' => $this->visibleTree($space),
             'canEdit' => $pageAccess->canEdit($page, $space),
             'canManagePermissions' => $pageAccess->canEdit($page, $space),
             'canDeletePage' => $user !== null && $pageAccess->can($page, $space, 'page.delete'),
@@ -214,7 +209,8 @@ final class PageController extends Controller
             'pages' => $this->visibleTree($space),
             'templates' => [],
             'tags' => (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
-            'canPublish' => $this->app->auth()->can('page.publish'),
+            'canPublish' => $this->pageWritePolicy($space)('page.publish', $page ?? null),
+            'canArchive' => $this->pageWritePolicy($space)('page.archive', $page ?? null),
             'canUploadImage' => $this->app->auth()->can('attachment.upload'),
             'imageUploadUrl' => '/spaces/' . rawurlencode($space['space_key'])
                 . '/pages/' . rawurlencode($page['slug']) . '/images',
@@ -313,9 +309,9 @@ final class PageController extends Controller
         if (!(new PageAclService($this->app))->canView($page, $space)) return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         $revision = $repository->revision((int) $page['id'], (int) $number);
         if ($revision === null) return $this->render('errors/404', ['title' => 'Revision not found'], 404);
-        $content = (new \OpenWiki\Wiki\ContentService())->normalize($revision['content_format'], $revision['content_html'], $revision['content_markdown'] ?? '', false);
+        $safeRevision = (new \OpenWiki\Wiki\ContentService())->safeProjection($revision);
         // Historical source is immutable; read-time sanitation never writes it back.
-        return $this->render('pages/revision', ['title' => $revision['title'], 'space' => $space, 'page' => $page, 'revision' => $revision, 'html' => $content['html']]);
+        return $this->render('pages/revision', ['title' => $revision['title'], 'space' => $space, 'page' => $page, 'revision' => $safeRevision, 'html' => $safeRevision['content_html']]);
     }
 
     public function restore(Request $request, string $spaceKey, string $slug): Response
@@ -354,10 +350,6 @@ final class PageController extends Controller
             return $this->render('errors/404', ['title' => 'Revision not found'], 404);
         }
 
-        if ($revision['status'] === 'published' && !$this->app->auth()->can('page.publish')) {
-            return $this->render('errors/403', ['title' => 'Publishing permission required'], 403);
-        }
-
         try {
             $input = $revision;
             $input['slug'] = $revision['slug'] ?? $page['slug'];
@@ -388,13 +380,8 @@ final class PageController extends Controller
 
     private function visibleTree(array $space): array
     {
-        $access = new PageAclService($this->app);
-        $pages = (new PageRepository($this->app->database()))->tree((int) $space['id']);
-
-        return array_values(array_filter(
-            $pages,
-            fn (array $page): bool => $access->canView($page, $space)
-        ));
+        return (new PageAclService($this->app))->visiblePages($space,
+            fn (): array => (new PageRepository($this->app->database()))->tree((int) $space['id']));
     }
 
     private function space(string $spaceKey): array|Response
@@ -425,14 +412,20 @@ final class PageController extends Controller
         $baseVersion = (int) ($old['base_version'] ?? 0);
         $conflict = null;
         if ($exception->getMessage() === 'EDIT_CONFLICT' && $page !== null) {
+            $server = $repository->findById((int) $page['id']);
+            if ($server !== null && !$this->pageWritePolicy($space)('page.view', $server)) {
+                $exception = new \DomainException('You no longer have permission to access the current page. Your local document remains recoverable.');
+                $message = $exception->getMessage();
+            } else {
             $conflict = [
                 'base_version' => $baseVersion,
-                'base' => $repository->revision((int) $page['id'], $baseVersion),
+                'base' => (new \OpenWiki\Wiki\ContentService())->safeProjection($repository->revision((int) $page['id'], $baseVersion)),
                 'local' => $old,
-                'server' => $repository->findById((int) $page['id']),
+                'server' => (new \OpenWiki\Wiki\ContentService())->safeProjection($server),
             ];
             if ($conflict['server'] !== null) {
                 $conflict['server']['tags'] = array_column((new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']), 'name');
+            }
             }
         }
         $status = match (true) {
@@ -455,12 +448,13 @@ final class PageController extends Controller
             'serverDraft' => null,
             'pages' => $this->visibleTree($space),
             'templates' => $page === null
-                ? $this->app->database()->fetchAll('SELECT id, name, description, content_html, content_markdown FROM page_templates ORDER BY is_system DESC, name ASC')
+                ? (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->all()
                 : [],
             'tags' => $page === null
                 ? []
                 : (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
-            'canPublish' => $this->app->auth()->can('page.publish'),
+            'canPublish' => $this->pageWritePolicy($space)('page.publish', $page ?? null),
+            'canArchive' => $this->pageWritePolicy($space)('page.archive', $page ?? null),
             'canUploadImage' => $this->app->auth()->can('attachment.upload'),
             'imageUploadUrl' => $page === null
                 ? null

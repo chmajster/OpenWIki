@@ -52,10 +52,6 @@ final class PageWriteService
         if (!in_array($status, ['draft', 'published', 'archived'], true)) {
             throw new \InvalidArgumentException('Invalid page status.');
         }
-        if ($can !== null && in_array($status, ['published', 'archived'], true)
-            && !$can($status === 'published' ? 'page.publish' : 'page.archive', $current)) {
-            throw new \DomainException('You do not have permission to set this page status.');
-        }
         $parentValue = $value('parent_id', null);
         $parentId = ($parentValue === null || $parentValue === '') ? null : filter_var($parentValue, FILTER_VALIDATE_INT);
         if ($parentId === false || (is_int($parentId) && $parentId < 1)) {
@@ -82,6 +78,9 @@ final class PageWriteService
             && $can !== null && !$can('page.move', $current)) {
             throw new \DomainException('You do not have permission to move this page.');
         }
+        if ($current !== null) PageStatusPolicy::assertAllowed($status, $current, $can);
+        $candidate = array_replace($current ?? ['id' => 0, 'inherit_acl' => 1, 'space_id' => (int) $space['id']], ['parent_id' => $parentId]);
+        PageStatusPolicy::assertAllowed($status, $candidate, $can);
         $format = (string) $value('content_format', 'visual');
         $sourceField = $format === 'markdown' ? 'content_markdown' : 'content_html';
         if (array_key_exists($sourceField, $input) && !is_string($input[$sourceField])) {
@@ -175,6 +174,9 @@ final class PageWriteService
                     $base = filter_var($input['base_version'] ?? null, FILTER_VALIDATE_INT);
                     if ($base === false || $base < 1) throw new \InvalidArgumentException('Invalid base page version.');
                     $fresh = $this->database->fetchOne('SELECT * FROM pages WHERE id = :id AND deleted_at IS NULL FOR UPDATE', ['id' => (int) $current['id']]);
+                    if ($can !== null && ($fresh === null || !$can('page.edit', $fresh))) {
+                        throw new \DomainException('You do not have permission to save this page.');
+                    }
                     if ($fresh === null || (int) $fresh['version'] !== (int) ($input['base_version'] ?? 0)) {
                         throw new \RuntimeException('EDIT_CONFLICT');
                     }

@@ -40,7 +40,7 @@ final class DirectoryAdminServiceTest extends TestCase
 
     public function testLocalDirectoryAdministrationLifecycle(): void
     {
-        $service = new DirectoryAdminService($this->database);
+        $service = new DirectoryAdminService($this->database, \OpenWiki\Admin\AdminActor::localConsole());
         $suffix = bin2hex(random_bytes(4));
 
         $this->database->execute(
@@ -121,7 +121,7 @@ final class DirectoryAdminServiceTest extends TestCase
 
     public function testDisableUserKeepsAccountAndRevokesSessions(): void
     {
-        $service = new DirectoryAdminService($this->database);
+        $service = new DirectoryAdminService($this->database, \OpenWiki\Admin\AdminActor::localConsole());
         $suffix = bin2hex(random_bytes(4));
 
         $userId = $service->createUser([

@@ -400,6 +400,155 @@ final class PageSavingTest extends TestCase
         }
     }
 
+    public function testOwnerStatusAclIsEnforcedByUiApiAndBothRevisionRestores(): void
+    {
+        $writer = new PageWriteService($this->app->database());
+        $page = $writer->save($this->space, null, ['title' => 'Status history', 'content_html' => '<p>Published</p>', 'status' => 'published'], $this->userId);
+        $page = $writer->save($this->space, $page, ['base_version' => 1, 'status' => 'archived'], $this->userId);
+        $page = $writer->save($this->space, $page, ['base_version' => 2, 'status' => 'draft'], $this->userId);
+        $this->limitActor(['page.view', 'page.edit', 'page.create', 'page.publish', 'page.archive', 'page.delete']);
+        $acl = new \OpenWiki\Permissions\PageAclService($this->app);
+        foreach (['page.publish', 'page.archive'] as $permission) $acl->addRule((int) $page['id'], 'user', $this->userId, $permission, 'deny', true);
+        $ui = new PageController($this->app);
+        self::assertSame(403, $ui->update($this->request(['base_version' => 3, 'status' => 'published']), $this->space['space_key'], $page['slug'])->status());
+        $token = (new ApiTokenService($this->app->database()))->create($this->userId, 'Status', ['pages:write'], null)['token'];
+        self::assertSame(403, (new ApiV1Controller($this->app))->updatePage($this->request(['base_version' => 3, 'status' => 'archived'], $token), (string) $page['id'])->status());
+        foreach ([1, 2] as $revision) self::assertSame(403, $ui->restore($this->request(['base_version' => 3, 'revision' => $revision]), $this->space['space_key'], $page['slug'])->status());
+        self::assertSame(3, (int) (new PageRepository($this->app->database()))->findById((int) $page['id'])['version']);
+    }
+
+    public function testNewChildRequiresGlobalAndInheritedStatusPermission(): void
+    {
+        $page = (new PageWriteService($this->app->database()))->save($this->space, null, ['title' => 'Status parent'], $this->userId);
+        $this->limitActor(['page.view', 'page.edit', 'page.create', 'page.publish']);
+        $acl = new \OpenWiki\Permissions\PageAclService($this->app);
+        $acl->addRule((int) $page['id'], 'user', $this->userId, 'page.publish', 'deny', true);
+        $token = (new ApiTokenService($this->app->database()))->create($this->userId, 'Child status', ['pages:write'], null)['token'];
+        $api = new ApiV1Controller($this->app);
+        $input = ['space_id' => $this->space['id'], 'parent_id' => $page['id'], 'title' => 'Child', 'status' => 'published'];
+        self::assertSame(403, $api->createPage($this->request($input, $token))->status());
+        $input['status'] = 'draft';
+        self::assertSame(201, $api->createPage($this->request($input, $token))->status());
+    }
+
+    public function testSubtreeTrashRetainsAclAndRestoresOnlyItsOwnDeletionBatch(): void
+    {
+        $db = $this->app->database(); $writer = new PageWriteService($db);
+        $db->execute('UPDATE spaces SET visibility = "public" WHERE id = ?', [$this->space['id']]);
+        $this->space['visibility'] = 'public';
+        $parent = $writer->save($this->space, null, ['title' => 'Private published parent', 'status' => 'published'], $this->userId);
+        $child = $writer->save($this->space, null, ['title' => 'Current child', 'parent_id' => $parent['id'], 'status' => 'published'], $this->userId);
+        $old = $writer->save($this->space, null, ['title' => 'Previously deleted child', 'parent_id' => $parent['id'], 'status' => 'published'], $this->userId);
+        $acl = new \OpenWiki\Permissions\PageAclService($this->app);
+        $acl->addRule((int) $parent['id'], 'user', $this->userId, 'page.view', 'allow', true);
+        $service = new \OpenWiki\Wiki\PageLifecycleService($db, $this->app->basePath());
+        $policy = $this->lifecyclePolicy();
+        $oldBatch = $service->trash($this->space, (int) $old['id'], $this->userId, $policy, $this->request([]));
+        $before = $db->fetchAll('SELECT * FROM page_revisions WHERE page_id IN (?, ?, ?) ORDER BY id', [$parent['id'], $child['id'], $old['id']]);
+        $batch = $service->trash($this->space, (int) $parent['id'], $this->userId, $policy, $this->request([]));
+        self::assertCount(2, $batch['affected_ids']); self::assertNotSame($oldBatch['trash_batch_id'], $batch['trash_batch_id']);
+        $trashed = $db->fetchOne('SELECT * FROM pages WHERE id = ?', [$child['id']]);
+        self::assertSame((int) $parent['id'], (int) $trashed['parent_id']);
+        self::assertFalse($acl->canViewFor($trashed, $this->space, null));
+        self::assertFalse($acl->canViewFor($trashed, $this->space, $this->otherUserId, false, true));
+        try { $service->restore($this->space, (int) $child['id'], $this->userId, $policy, $this->request([])); self::fail('A child must not bypass its trashed parent.'); }
+        catch (\InvalidArgumentException $exception) { self::assertStringContainsString('parent', $exception->getMessage()); }
+        $restored = $service->restore($this->space, (int) $parent['id'], $this->userId, $policy, $this->request([]));
+        self::assertCount(2, $restored['affected_ids']);
+        self::assertNotNull($db->fetchOne('SELECT deleted_at FROM pages WHERE id = ?', [$old['id']])['deleted_at']);
+        self::assertNull($db->fetchOne('SELECT deleted_at FROM pages WHERE id = ?', [$child['id']])['deleted_at']);
+        self::assertFalse($acl->canViewFor((new PageRepository($db))->findById((int) $child['id']), $this->space, null));
+        self::assertSame($before, $db->fetchAll('SELECT * FROM page_revisions WHERE page_id IN (?, ?, ?) ORDER BY id', [$parent['id'], $child['id'], $old['id']]));
+    }
+
+    public function testUiAndApiSubtreeDeletionAreAtomicAndRestoreChecksStatusAcl(): void
+    {
+        $db = $this->app->database(); $writer = new PageWriteService($db);
+        $parent = $writer->save($this->space, null, ['title' => 'Atomic parent', 'status' => 'published'], $this->userId);
+        $child = $writer->save($this->space, null, ['title' => 'Atomic child', 'parent_id' => $parent['id'], 'status' => 'published'], $this->userId);
+        $this->limitActor(['page.view', 'page.edit', 'page.create', 'page.delete', 'page.publish', 'page.archive']);
+        $acl = new \OpenWiki\Permissions\PageAclService($this->app);
+        $rule = $acl->addRule((int) $child['id'], 'user', $this->userId, 'page.delete', 'deny', true);
+        $trash = new \OpenWiki\Http\Controllers\TrashController($this->app);
+        self::assertSame(403, $trash->delete($this->request([]), $this->space['space_key'], $parent['slug'])->status());
+        $token = (new ApiTokenService($db))->create($this->userId, 'Delete', ['pages:write'], null)['token'];
+        $api = new ApiV1Controller($this->app);
+        self::assertSame(403, $api->deletePage($this->request([], $token), (string) $parent['id'])->status());
+        self::assertSame(2, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM pages WHERE id IN (?, ?) AND deleted_at IS NULL', [$parent['id'], $child['id']])['total']);
+        self::assertSame(0, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM audit_logs WHERE object_id IN (?, ?) AND action = "PAGE_DELETED"', [$parent['id'], $child['id']])['total']);
+        $acl->deleteRule((int) $child['id'], $rule);
+        $acl->addRule((int) $parent['id'], 'user', $this->userId, 'page.publish', 'deny', true);
+        self::assertSame(204, $api->deletePage($this->request([], $token), (string) $parent['id'])->status());
+        self::assertSame(403, $trash->restore($this->request([]), (string) $parent['id'])->status());
+        self::assertSame(2, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM pages WHERE id IN (?, ?) AND deleted_at IS NOT NULL', [$parent['id'], $child['id']])['total']);
+        self::assertSame(2, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM audit_logs WHERE object_id IN (?, ?) AND action = "PAGE_DELETED"', [$parent['id'], $child['id']])['total']);
+    }
+
+    public function testInvalidHtmlFormNeverContainsHiddenPageMetadataAndRetainsSafeContent(): void
+    {
+        $db = $this->app->database(); $writer = new PageWriteService($db);
+        $visible = $writer->save($this->space, null, ['title' => 'Visible'], $this->userId);
+        $hidden = $writer->save($this->space, null, ['title' => 'SECRET-METADATA-TITLE', 'slug' => 'secret-metadata-slug'], $this->userId);
+        $this->limitActor(['page.view', 'page.edit', 'page.create']);
+        (new \OpenWiki\Permissions\PageAclService($this->app))->addRule((int) $hidden['id'], 'user', $this->userId, 'page.view', 'deny', true);
+        $request = new Request('POST', '/', [], ['_token' => Csrf::token(), 'base_version' => 1, 'title' => '',
+            'content_html' => '<article><table><tr><td><strong>Local safe</strong></td></tr></table><script>alert(66)</script></article>', 'tags' => 'retained-tag', 'change_summary' => 'Retained summary'], ['HTTP_ACCEPT' => 'text/html'], []);
+        $response = (new PageController($this->app))->update($request, $this->space['space_key'], $visible['slug']);
+        self::assertSame(422, $response->status());
+        self::assertStringNotContainsString('SECRET-METADATA-TITLE', $response->body());
+        self::assertStringNotContainsString('secret-metadata-slug', $response->body());
+        self::assertStringNotContainsString('alert(66)', $response->body());
+        self::assertStringContainsString('&lt;strong&gt;Local safe&lt;/strong&gt;', $response->body());
+        self::assertStringContainsString('retained-tag', $response->body());
+        self::assertStringContainsString('Retained summary', $response->body());
+    }
+
+    private function limitActor(array $permissions): void
+    {
+        $db = $this->app->database(); $role = (int) $db->fetchOne('SELECT role_id FROM user_roles WHERE user_id = ?', [$this->userId])['role_id'];
+        $db->execute('DELETE FROM role_permissions WHERE role_id = ?', [$role]);
+        foreach ($permissions as $name) {
+            $db->execute('INSERT IGNORE INTO permissions (name, description, created_at) VALUES (?, ?, UTC_TIMESTAMP())', [$name, $name]);
+            $permission = $db->fetchOne('SELECT id FROM permissions WHERE name = ?', [$name]);
+            $db->execute('INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)', [$role, $permission['id']]);
+        }
+    }
+
+    public function testPermanentDeletionRejectsLegacyActiveChildrenAndPurgesTheWholeTrashedSubtree(): void
+    {
+        if (!str_ends_with((string) getenv('OPENWIKI_TEST_DB_DATABASE'), '_test')) self::markTestSkipped('Committed fixtures require a dedicated test database.');
+        $db = $this->app->database(); $writer = new PageWriteService($db);
+        $parent = $writer->save($this->space, null, ['title' => 'Permanent parent'], $this->userId);
+        $child = $writer->save($this->space, null, ['title' => 'Permanent child', 'parent_id' => $parent['id']], $this->userId);
+        $roles = array_column($db->fetchAll('SELECT role_id FROM user_roles WHERE user_id = ?', [$this->userId]), 'role_id');
+        $db->pdo()->commit();
+        try {
+            $service = new \OpenWiki\Wiki\PageLifecycleService($db, $this->app->basePath());
+            $policy = $this->lifecyclePolicy();
+            $service->trash($this->space, (int) $parent['id'], $this->userId, $policy, $this->request([]));
+            $db->execute('UPDATE pages SET deleted_at = NULL WHERE id = ?', [$child['id']]);
+            try { $service->destroy($this->space, (int) $parent['id'], $this->userId, $policy, $this->request([])); self::fail('An active child must never be detached.'); }
+            catch (\DomainException $exception) { self::assertStringContainsString('descendant', $exception->getMessage()); }
+            self::assertSame((int) $parent['id'], (int) $db->fetchOne('SELECT parent_id FROM pages WHERE id = ?', [$child['id']])['parent_id']);
+            $service->trash($this->space, (int) $child['id'], $this->userId, $policy, $this->request([]));
+            $service->destroy($this->space, (int) $parent['id'], $this->userId, $policy, $this->request([]));
+            self::assertSame(0, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM pages WHERE id IN (?, ?)', [$parent['id'], $child['id']])['total']);
+            self::assertSame(0, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM page_revisions WHERE page_id IN (?, ?)', [$parent['id'], $child['id']])['total']);
+        } finally {
+            $db->execute('DELETE FROM spaces WHERE id = ?', [$this->space['id']]);
+            $db->execute('DELETE FROM webhooks WHERE created_by = ?', [$this->userId]);
+            $db->execute('DELETE FROM audit_logs WHERE user_id IN (?, ?)', [$this->userId, $this->otherUserId]);
+            $db->execute('DELETE FROM users WHERE id IN (?, ?)', [$this->userId, $this->otherUserId]);
+            foreach ($roles as $id) $db->execute('DELETE FROM roles WHERE id = ?', [$id]);
+        }
+    }
+
+    private function lifecyclePolicy(): callable
+    {
+        $acl = new \OpenWiki\Permissions\PageAclService($this->app);
+        return fn (string $permission, array $page): bool => $acl->canFor($page, $this->space, $permission, $this->userId, $this->app->auth()->can('*'), $this->app->auth()->can($permission));
+    }
+
     private function request(array $input, ?string $token = null): Request
     {
         $server = ['HTTP_ACCEPT' => 'application/json'];

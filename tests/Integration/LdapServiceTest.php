@@ -54,6 +54,11 @@ final class LdapServiceTest extends TestCase
         $suffix = bin2hex(random_bytes(4));
         $actorId = $this->createLocalUser('ldap-admin-' . $suffix);
         $roleId = $this->createRole('ldap-editor-' . $suffix);
+        $rootRole = $this->createRole('ldap-root-' . $suffix);
+        $this->database->execute('INSERT IGNORE INTO permissions (name, description, created_at) VALUES ("*", "All", UTC_TIMESTAMP())');
+        $wildcard = $this->database->fetchOne('SELECT id FROM permissions WHERE name = "*"');
+        $this->database->execute('INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)', [$rootRole, $wildcard['id']]);
+        $this->database->execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [$actorId, $rootRole]);
 
         $service = new LdapService($this->database);
         $service->saveConfig([

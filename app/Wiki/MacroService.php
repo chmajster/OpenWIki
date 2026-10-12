@@ -15,6 +15,7 @@ final class MacroService
 
     public function renderPage(array $page, array $space): array
     {
+        $page = (new ContentService())->safeProjection($page);
         [$html, $headings] = $this->anchorHeadings((string) $page['content_html']);
         $toc = $this->tocHtml($headings);
         $registry = $this->registry($page, $space, $toc);

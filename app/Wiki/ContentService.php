@@ -47,6 +47,26 @@ final class ContentService
         return $this->normalize($input['format'], $input['format'] === 'visual' ? $input['source'] : '',
             $input['format'] === 'markdown' ? $input['source'] : '');
     }
+
+    /** Safe read projection; persisted pages and revision snapshots are never rewritten. */
+    public function safeProjection(?array $row): ?array
+    {
+        $row = self::storedSource($row);
+        if ($row === null) return null;
+        // Historical Markdown HTML is a rendered snapshot. Filter it without replacing
+        // its supported structure/macros with output from a newer renderer.
+        $format = (string) ($row['content_format'] ?? (($row['content_markdown'] ?? null) !== null ? 'markdown' : 'visual'));
+        $content = $format === 'markdown' && (string) ($row['content_html'] ?? '') !== ''
+            ? ['format' => 'markdown', 'html' => $this->sanitizer->sanitize((string) $row['content_html']),
+                'markdown' => (string) ($row['content_markdown'] ?? ''),
+                'document' => ['version' => self::SCHEMA_VERSION, 'format' => 'markdown', 'source' => (string) ($row['content_markdown'] ?? '')]]
+            : $this->normalize($format, (string) ($row['content_html'] ?? ''), (string) ($row['content_markdown'] ?? ''), false);
+        $row['content_format'] = $content['format'];
+        $row['content_html'] = $content['html'];
+        $row['content_markdown'] = $content['markdown'];
+        if (array_key_exists('document_json', $row)) $row['document_json'] = json_encode($content['document'], JSON_THROW_ON_ERROR);
+        return $row;
+    }
     public function __construct(
         private readonly HtmlSanitizer $sanitizer = new HtmlSanitizer(),
         private readonly MarkdownRenderer $markdown = new MarkdownRenderer()

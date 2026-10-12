@@ -6,7 +6,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
         <div>
             <div class="eyebrow">Wiki</div>
             <h1><?= $e($t('Trash')) ?></h1>
-            <p class="muted"><?= $e($t('Deleted pages remain recoverable until permanently removed.')) ?></p>
+            <p class="muted"><?= $e($t('Deleted subtrees retain their hierarchy and access restrictions. Restore the parent first.')) ?></p>
         </div>
     </div>
 
@@ -30,7 +30,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                                         <button class="button button--secondary" type="submit"><?= $e($t('Restore')) ?></button>
                                     </form>
-                                    <form method="post" action="/trash/<?= (int) $page['id'] ?>/delete" data-confirm="<?= $e($t('Permanently delete this page and its attachments? This cannot be undone.')) ?>">
+                                    <form method="post" action="/trash/<?= (int) $page['id'] ?>/delete" data-confirm="<?= $e($t('Permanently delete this subtree and all its attachments? This cannot be undone.')) ?>">
                                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                                         <button class="button button--ghost" type="submit"><?= $e($t('Delete permanently')) ?></button>
                                     </form>

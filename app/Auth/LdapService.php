@@ -52,6 +52,12 @@ final class LdapService
 
     public function saveConfig(array $input, int $actorId): void
     {
+        (new \OpenWiki\Admin\AdministrationPolicy($this->database, \OpenWiki\Admin\AdminActor::user($actorId)))
+            ->run('*', fn () => $this->saveConfigUnchecked($input, $actorId));
+    }
+
+    private function saveConfigUnchecked(array $input, int $actorId): void
+    {
         $config = $this->validatedConfig($input);
         $currentSecret = $this->storedBindPassword();
         $submittedSecret = (string) ($input['bind_password'] ?? '');
@@ -96,7 +102,13 @@ final class LdapService
         });
     }
 
-    public function testConfig(array $input): array
+    public function testConfig(array $input, int $actorId): array
+    {
+        (new \OpenWiki\Admin\AdministrationPolicy($this->database, \OpenWiki\Admin\AdminActor::user($actorId)))->run('*', fn () => true);
+        return $this->testConfigUnchecked($input);
+    }
+
+    private function testConfigUnchecked(array $input): array
     {
         $config = $this->validatedConfig($input);
         $password = (string) ($input['bind_password'] ?? '');
@@ -193,20 +205,28 @@ final class LdapService
 
     public function provision(array $profile): int
     {
+        return \OpenWiki\Admin\AdministrationPolicy::guard($this->database, fn () => $this->provisionUnchecked($profile));
+    }
+
+    private function provisionUnchecked(array $profile): int
+    {
         $username = (string) $profile['username'];
         $email = (string) $profile['email'];
 
         $existing = $this->database->fetchOne(
-            'SELECT id, auth_source
+            'SELECT id, auth_source, status
              FROM users
              WHERE deleted_at IS NULL
                AND (LOWER(username) = LOWER(:username) OR LOWER(email) = LOWER(:email))
-             LIMIT 1',
+             LIMIT 1 FOR UPDATE',
             ['username' => $username, 'email' => $email]
         );
 
         if ($existing !== null && $existing['auth_source'] !== 'ldap') {
             throw new \RuntimeException('LDAP identity conflicts with an existing local account.');
+        }
+        if ($existing !== null && $existing['status'] !== 'active') {
+            throw new \DomainException('This LDAP account is disabled or locked.');
         }
 
         return $this->database->transaction(function (Database $db) use ($profile, $existing): int {

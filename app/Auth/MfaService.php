@@ -65,6 +65,12 @@ final class MfaService
 
     public function updatePolicy(bool $global, array $roleIds, int $actorId): void
     {
+        (new \OpenWiki\Admin\AdministrationPolicy($this->database, \OpenWiki\Admin\AdminActor::user($actorId)))
+            ->run('*', fn () => $this->updatePolicyUnchecked($global, $roleIds, $actorId));
+    }
+
+    private function updatePolicyUnchecked(bool $global, array $roleIds, int $actorId): void
+    {
         $ids = [];
         foreach ($roleIds as $roleId) {
             $id = filter_var($roleId, FILTER_VALIDATE_INT);
