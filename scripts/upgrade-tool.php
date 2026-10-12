@@ -28,7 +28,7 @@ try {
         $old = $state->read();
         if (!in_array($old['status'], ['idle', 'completed', 'rolled_back', 'restored'], true)) throw new RuntimeException('An unfinished upgrade exists. Use --resume or controlled recovery.');
         unset($old['prior_state']);
-        $state->update(['prior_state' => $old, 'id' => gmdate('YmdHis') . '-' . bin2hex(random_bytes(6)), 'status' => 'running', 'stage' => 'preflight', 'ref' => $argv[3],
+        $state->update(['operation' => 'upgrade', 'restore_database' => '', 'prior_state' => $old, 'id' => gmdate('YmdHis') . '-' . bin2hex(random_bytes(6)), 'status' => 'running', 'stage' => 'preflight', 'ref' => $argv[3],
             'completed' => [], 'sha' => null, 'previous' => null, 'backup_sha256' => null, 'error' => null]);
         exit(0);
     }
@@ -51,7 +51,9 @@ try {
             throw new RuntimeException('Verified recovery requires InnoDB tables and no views.');
         }
         $requirements = (new \OpenWiki\Install\InstallService($code))->requirements();
-        if (!$requirements['ok']) throw new RuntimeException('PHP extensions or writable storage requirements failed. Run --diagnose.');
+        if (!$requirements['php']['ok'] || in_array(false, $requirements['extensions'], true) || in_array(false, $requirements['writable'], true)) {
+            throw new RuntimeException('PHP extensions or writable storage requirements failed. Run --diagnose.');
+        }
         $size = (int) ($app->database()->fetchOne('SELECT COALESCE(SUM(data_length + index_length), 0) AS bytes FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()')['bytes'] ?? 0);
         foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($instance . '/storage', FilesystemIterator::SKIP_DOTS)) as $file) {
             if ($file->isFile() && !$file->isLink()) $size += $file->getSize();
@@ -99,7 +101,13 @@ try {
         // Never lose changes made after a successful upgrade or a partial failure.
         $beforeRestore = $directory . '/backups/' . $state->read()['id'] . '-before-restore.tar';
         if (!is_file($beforeRestore)) $snapshot->create($beforeRestore);
-        else $snapshot->verify($beforeRestore);
+        else {
+            try { $snapshot->verify($beforeRestore); }
+            catch (Throwable) {
+                rename($beforeRestore, $beforeRestore . '.incomplete-' . bin2hex(random_bytes(4)));
+                $snapshot->create($beforeRestore);
+            }
+        }
         $snapshot->restore($archive, $hash, $argv[4] ?? '');
         echo "[ OK ] Original database, configuration and storage restored.\n";
     } else throw new InvalidArgumentException('Unknown upgrade tool command.');

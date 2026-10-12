@@ -92,7 +92,7 @@ final class SystemInfoService
                 'unfinished' => $readiness['schema']['unfinished'],
                 'applied' => count(array_filter(
                     $migrations,
-                    static fn (array $migration): bool => !$migration['applied']
+                    static fn (array $migration): bool => $migration['applied']
                 )),
                 'items' => $migrations,
             ],

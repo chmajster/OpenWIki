@@ -54,7 +54,9 @@ final class MigrationRunner
     {
         $items = $this->status();
         $pending = array_column(array_filter($items, static fn (array $item): bool => !$item['applied']), 'version');
-        $unknown = array_values(array_diff(array_keys($this->appliedVersions()), array_column($items, 'version'), $compatibleExtraVersions));
+        $touched = $this->exists('schema_migration_steps') ? array_column($this->database->fetchAll('SELECT DISTINCT version FROM schema_migration_steps'), 'version') : [];
+        // Committed DDL may be present even before the version receipt is inserted.
+        $unknown = array_values(array_diff(array_unique([...array_keys($this->appliedVersions()), ...$touched]), array_column($items, 'version'), $compatibleExtraVersions));
         $unfinished = $this->unfinished();
         return ['ready' => $pending === [] && $unknown === [] && $unfinished === [],
             'pending' => $pending, 'unknown' => $unknown, 'unfinished' => $unfinished];

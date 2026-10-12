@@ -248,8 +248,10 @@ deploy_code() {
   composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
   if [[ ! -d .git && -s public/assets/wiki-editor.js && -s public/assets/diagram.js && -s public/assets/document-reader.js && -s public/assets/diagram.html ]]; then
     ok "Używam gotowych zasobów z wydania."
-  else
+  elif [[ -f scripts/build-editor.sh ]]; then
     bash scripts/build-editor.sh
+  else
+    [[ -s public/assets/app.js && -s public/assets/app.css ]] || fail "Brak zasobów edytora w starszym wydaniu."
   fi
   mkdir -p storage/{attachments,backups,cache,temp,logs}
   chown -R root:"$WEB_USER" "$INSTALL_DIR"

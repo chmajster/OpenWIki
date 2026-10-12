@@ -70,6 +70,8 @@ jobs:
           bash -n install.sh
           bash -n scripts/build-editor.sh
           bash -n scripts/local-server.sh
+          bash -n scripts/upgrade.sh
+          bash -n tests/Upgrade/driver.sh
 
       - name: Bash installer help
         run: NO_COLOR=1 bash install.sh --help
@@ -137,6 +139,55 @@ jobs:
           php -r 'require "bootstrap/autoload.php"; $c = new OpenWiki\Wiki\ContentService(); if ($c->normalize("markdown", "", "# Release")["html"] !== "<h1>Release</h1>") exit(1);'
 
 
+  upgrade-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        database: ["mysql:8.0", "mariadb:11.4"]
+    services:
+      database:
+        image: ${{ matrix.database }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot || mariadb-admin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      OPENWIKI_TEST_DB_HOST: 127.0.0.1
+      OPENWIKI_TEST_DB_PORT: 3306
+      OPENWIKI_TEST_DB_DATABASE: openwiki_test
+      OPENWIKI_TEST_DB_USERNAME: root
+      OPENWIKI_TEST_DB_PASSWORD: root
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: pdo_mysql, mbstring, openssl, dom, curl, phar, ldap, zip, gd
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Prepare actual runtime dependencies
+        run: |
+          composer install --prefer-dist --no-interaction --no-progress
+          npm ci
+          npm run build
+      - name: Migration DDL and private recovery tests
+        run: vendor/bin/phpunit --filter 'MigrationRecoveryTest|EditorDraftMigrationTest|RecoverySnapshotTest'
+      - name: Upgrade old schema with accounts, revisions, drafts and attachments
+        run: python3 tests/Upgrade/runtime.py
+
   installer-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -188,10 +239,25 @@ jobs:
           ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
           before="$(sudo sha256sum /var/www/openwiki-ci/.env | awk '{print $1}')"
           sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci OPENWIKI_GIT_REF="$ref" NO_COLOR=1 \
-            bash ./install.sh </dev/null
+            bash ./install.sh --repair </dev/null
           after="$(sudo sha256sum /var/www/openwiki-ci/.env | awk '{print $1}')"
           test "$before" = "$after"
           curl --fail --silent --show-error http://127.0.0.1/health >/dev/null
+
+      - name: Verify existing install refusal and managed upgrade
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          before="$(sudo sha256sum /var/www/openwiki-ci/.env | awk '{print $1}')"
+          if sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --install </dev/null; then exit 1; fi
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --upgrade "$ref" </dev/null
+          after="$(sudo sha256sum /var/www/openwiki-ci/.env | awk '{print $1}')"
+          test "$before" = "$after"
+          test -L /var/www/openwiki-ci/current
+          curl --fail --silent --show-error http://127.0.0.1/health >/dev/null
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --upgrade "$ref" </dev/null
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --repair </dev/null
 
       - name: Uninstall
         shell: bash

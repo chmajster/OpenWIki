@@ -111,6 +111,10 @@ upgrade_mode() {
     state=$(upgrade_get status)
     [[ "$state" == running || "$state" == failed ]] || fail "Brak aktualizacji do wznowienia (status: $state)."
     upgrade_tool preflight "$APP_DIR"
+    if [[ "$(upgrade_get operation)" == restore || "$(upgrade_get operation)" == rollback ]]; then
+      MODE=$(upgrade_get operation)
+      RESTORE_DATABASE=$(upgrade_get restore_database)
+    fi
   fi
   log="$directory/logs/$(upgrade_get id).log"
   # Only this private file receives detailed dependency/migration errors.
@@ -125,6 +129,8 @@ upgrade_mode() {
     if [[ "$MODE" == rollback ]]; then
       upgrade_tool compatible "$previous" || fail "Poprzedni kod nie jest zgodny ze schematem. Użyj --restore z potwierdzeniem nazwy bazy."
     fi
+    upgrade_tool set operation "$MODE"
+    upgrade_tool set restore_database "$RESTORE_DATABASE"
     upgrade_pause
     if [[ "$MODE" == restore ]]; then
       upgrade_tool restore "$APP_DIR" "$RESTORE_DATABASE"
@@ -133,6 +139,7 @@ upgrade_mode() {
     upgrade_switch "$previous"
     upgrade_open_and_verify
     if [[ "$MODE" == restore ]]; then upgrade_tool set status restored; else upgrade_tool set status rolled_back; fi
+    upgrade_tool set operation upgrade
     ok "Odzyskiwanie zakończone; gotowość i worker sprawdzone."
     return 0
   fi
@@ -146,7 +153,7 @@ upgrade_mode() {
     [[ "$sha" =~ ^[a-f0-9]{40}$ ]] || fail "Nieprawidłowy SHA wydania."
     upgrade_tool set sha "$sha"
   fi
-  if [[ -f "$APP_DIR/.release-sha" && "$(cat "$APP_DIR/.release-sha")" == "$sha" ]]; then
+  if [[ "$MODE" == upgrade && ! -f "$directory/maintenance" && -f "$APP_DIR/.release-sha" && "$(cat "$APP_DIR/.release-sha")" == "$sha" ]]; then
     php "$APP_DIR/bin/console" readiness
     upgrade_tool unchanged
     ok "Wskazane wydanie już działa; bez zmian."
