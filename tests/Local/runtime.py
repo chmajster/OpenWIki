@@ -230,11 +230,29 @@ def run():
             status, body, headers = http(browser, url + '/attachments/' + str(seeded['attachment']) + '/download')
             check(status == 200 and body == b'Preserved attachment bytes', 'Protected attachment survives restart')
             collision = command(['bash', str(root / 'install.sh'), '--local', '--port', str(NEXT_PORT)], elsewhere)
-            check(collision.returncode != 0 and 'zajęty' in collision.stdout, 'An occupied port has a specific error')
+            check(collision.returncode != 0 and ('zajęty' in collision.stdout or 'już działa' in collision.stdout), 'An occupied port has a specific error')
             check(server.process.poll() is None and http(browser, url + '/health')[0] == 200, 'The occupied-port process remains untouched')
             check(server.stop() == 143, 'SIGTERM stops only the owned server'); free_port(NEXT_PORT)
 
-            invalid = [['--local', '--uninstall'], ['--local', '--status'], ['--install', '--local'], ['--local', '--install-dir', '/tmp/forbidden'],
+            print('Local test: background lifecycle with remembered address', flush=True)
+            background = command(['bash', str(root / 'install.sh'), '--local', '--start', '--port', str(NEXT_PORT)], elsewhere)
+            check(background.returncode == 0 and 'w tle' in background.stdout, 'start returns after launching a real background server')
+            check(http(browser, url + '/health')[0] == 200, 'Background PHP continues serving after the launcher exits')
+            status_result = command(['bash', str(root / 'install.sh'), '--status', '--local'], elsewhere)
+            check(status_result.returncode == 0 and str(NEXT_PORT) in status_result.stdout and 'ready' in status_result.stdout, 'Flag order does not change local status or remembered port')
+            logs = command(['bash', str(root / 'install.sh'), '--local', '--logs'], elsewhere)
+            check(logs.returncode == 0 and 'Development Server' in logs.stdout, 'logs reads the owned server log')
+            restarted = command(['bash', str(root / 'install.sh'), '--restart', '--local'], elsewhere)
+            check(restarted.returncode == 0 and http(browser, url + '/attachments/' + str(seeded['attachment']) + '/download')[1] == b'Preserved attachment bytes', 'restart uses remembered configuration and preserves attachment access')
+            prepared = command(['bash', str(root / 'install.sh'), '--local', '--no-start'], elsewhere)
+            check(prepared.returncode == 0 and 'pozostaje zatrzymany' in prepared.stdout, 'no-start prepares dependencies and stops the own server')
+            free_port(NEXT_PORT)
+            check(command(['bash', str(root / 'install.sh'), '--start', '--local'], elsewhere).returncode == 0, 'start restores the prepared local instance')
+            stopped = command(['bash', str(root / 'install.sh'), '--local', '--stop'], elsewhere)
+            check(stopped.returncode == 0 and 'zatrzymany' in stopped.stdout, 'stop terminates the background server')
+            free_port(NEXT_PORT)
+
+            invalid = [['--local', '--uninstall'], ['--local', '--docker'], ['--local', '--start', '--stop'], ['--install', '--local'], ['--local', '--install-dir', '/tmp/forbidden'],
                        ['--port', '8090'], ['--local', '--port', '80'], ['--local', '--port', '65536'], ['--local', '--host', '127.0.0.1;id'], ['--local', '--host', 'http://localhost'], ['--local', '--port']]
             for args in invalid:
                 result = command(['bash', str(root / 'install.sh'), *args], elsewhere)
@@ -292,6 +310,7 @@ def run():
             check(env_file.read_bytes() == saved_env and (root / 'storage/installed.lock').read_bytes() == saved_lock, 'Failed runs preserve the configured instance')
             print('Local runtime end-to-end passed: ' + str(checks) + ' checks; non-root, real wizard/MySQL, spaces, routing, restart, signals and bind race.')
         finally:
+            command(['bash', str(root / 'install.sh'), '--local', '--stop'], elsewhere)
             for process in servers:
                 process.cleanup()
             fixture('drop', root)
