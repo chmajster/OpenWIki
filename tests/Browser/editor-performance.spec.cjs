@@ -23,6 +23,7 @@ test('100k-character document with table, syntax and protected image remains res
         document.querySelector('[data-visual-editor]').addEventListener('input', () => { const start = performance.now(); requestAnimationFrame(() => inputPaints.push(performance.now() - start)); });
     });
     await page.keyboard.type(' benchmark');
+    await expect(page.locator('[data-visual-editor] img')).toHaveCount(1);
     const before = await page.evaluate(() => ({anchor: getSelection().anchorOffset, focus: getSelection().focusOffset, scroll: scrollY}));
     const draftStart = performance.now(); await page.keyboard.press('ControlOrMeta+s'); await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server'); const draftMs = performance.now() - draftStart;
     expect(await page.evaluate(() => ({anchor: getSelection().anchorOffset, focus: getSelection().focusOffset, scroll: scrollY}))).toEqual(before);

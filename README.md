@@ -336,7 +336,7 @@ The Visual editor supports PNG, JPEG, GIF and WebP images through file selection
 
 - New and existing pages upload editor files as private draft files. The owning account can preview/download them before applying changes; other accounts cannot.
 - Applying changes materializes draft files as protected page attachments in the same database transaction. Readers then access them through the current Page ACL. Pending uploads retain their file blobs in IndexedDB, progress and retry identity, with explicit cancellation.
-- Inline base64 image data is not kept in page content after a successful save.
+- Materialized image destinations use protected attachment URLs after a successful save; literal examples inside code remain unchanged.
 - Images support alt text, captions, alignment, controlled dimensions, aspect-ratio preservation and protected previews without arbitrary inline CSS.
 - Thumbnails are generated with GD, cached under `storage/cache/images`, never upscale the source image and are protected by the same Page ACL as the original attachment.
 - Server-side image inspection enforces raster formats, file limits and a configurable pixel limit before thumbnail decoding.

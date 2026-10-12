@@ -75,6 +75,22 @@ final class RichContentCompatibilityTest extends TestCase
         foreach (['script', 'iframe', 'onclick', 'javascript:', 'style='] as $unsafe) self::assertStringNotContainsString($unsafe, $html);
     }
 
+    public function testAssetDestinationsChangeWithoutRewritingMarkdownCodeOrPlainExamples(): void
+    {
+        $source = "[Download](/editor-files/12/download)\n\n[Reference][file]\n\n[file]: /editor-files/12/download \"Title\"\n\n"
+            . "Plain /editor-files/12/download\n\n`[Inline](/editor-files/12/download)`\n\n"
+            . "    [Indented](/editor-files/12/download)\n\n~~~markdown\n[Fenced](/editor-files/12/download)\n~~~";
+        $renderer = new \OpenWiki\Wiki\MarkdownRenderer();
+        $result = $renderer->replaceAssetUrls($source, ['/editor-files/12/download' => '/attachments/34/download']);
+        self::assertStringContainsString('[Download](/attachments/34/download)', $result);
+        self::assertStringContainsString('[file]: /attachments/34/download "Title"', $result);
+        self::assertStringContainsString('Plain /editor-files/12/download', $result);
+        self::assertStringContainsString('`[Inline](/editor-files/12/download)`', $result);
+        self::assertStringContainsString('    [Indented](/editor-files/12/download)', $result);
+        self::assertStringContainsString("~~~markdown\n[Fenced](/editor-files/12/download)\n~~~", $result);
+        self::assertSame(2, substr_count($renderer->render($result), 'href="/attachments/34/download"'));
+    }
+
     public function testLossyRichConversionRetainsTheSanitizedOriginal(): void
     {
         $html = '<aside data-callout="warning"><p>Uwaga</p></aside><table><tr><td colspan="2">Komórka</td></tr></table>';

@@ -277,6 +277,7 @@ return [
     'Attachment uploaded.' => 'Przesłano załącznik.', 'Sign in to continue.' => 'Zaloguj się, aby kontynuować.',
     'Current parent (restricted)' => 'Obecna strona nadrzędna (ograniczony dostęp)',
     'Task' => 'Zadanie', 'Empty task' => 'Puste zadanie',
+    'User profile' => 'Profil użytkownika',
     'Invalid document schema or unsupported version.' => 'Nieprawidłowy schemat dokumentu lub nieobsługiwana wersja.',
     'Invalid document source.' => 'Nieprawidłowe źródło dokumentu.',
     'Document structure exceeds the supported depth or element count.' => 'Dokument przekracza obsługiwaną głębokość zagnieżdżenia lub liczbę elementów.',

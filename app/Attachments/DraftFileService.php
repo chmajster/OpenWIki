@@ -63,8 +63,9 @@ final class DraftFileService
             if (!$element->hasAttribute('data-draft-file-id') && preg_match('~^/editor-files/([1-9][0-9]*)/(?:preview|thumbnail|download)(?:\?[^#]*)?$~D', $oldUrl, $match)) $element->setAttribute('data-draft-file-id', $match[1]);
             if (!$element->hasAttribute('data-draft-file-id')) continue;
             $id = filter_var($element->getAttribute('data-draft-file-id'), FILTER_VALIDATE_INT);
-            $file = $id === false ? null : $this->database->fetchOne('SELECT * FROM editor_draft_files WHERE id = :id AND space_id = :space AND user_id = :user AND document_key = :document FOR UPDATE',
-                ['id' => $id, 'space' => $space, 'user' => $user, 'document' => $document]);
+            $file = $id === false ? null : $this->database->fetchOne('SELECT * FROM editor_draft_files WHERE id = :id AND space_id = :space AND user_id = :user
+                AND (document_key = :document OR attachment_id IN (SELECT id FROM attachments WHERE page_id = :page)) FOR UPDATE',
+                ['id' => $id, 'space' => $space, 'user' => $user, 'document' => $document, 'page' => $pageId]);
             if ($file === null) throw new \DomainException('You cannot attach a file from another draft.');
             $attachmentId = $file['attachment_id'];
             if ($attachmentId === null) {
@@ -143,8 +144,10 @@ final class DraftFileService
             if ($id !== '') $ids[] = $id;
         }
         foreach (array_unique($ids) as $id) {
-            $file = $this->database->fetchOne('SELECT id FROM editor_draft_files WHERE id = :id AND space_id = :space AND user_id = :user AND document_key = :document',
-                ['id' => $id, 'space' => $space, 'user' => $user, 'document' => $document]);
+            $pageId = str_starts_with($document, 'page:') ? (int) substr($document, 5) : 0;
+            $file = $this->database->fetchOne('SELECT id FROM editor_draft_files WHERE id = :id AND space_id = :space AND user_id = :user
+                AND (document_key = :document OR attachment_id IN (SELECT id FROM attachments WHERE page_id = :page))',
+                ['id' => $id, 'space' => $space, 'user' => $user, 'document' => $document, 'page' => $pageId]);
             if ($file === null) throw new \DomainException('You cannot use a file from another draft.');
             $this->database->execute('UPDATE editor_draft_files SET last_used_at = UTC_TIMESTAMP() WHERE id = :id', ['id' => $id]);
         }

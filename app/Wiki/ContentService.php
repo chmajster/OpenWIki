@@ -10,6 +10,21 @@ final class ContentService
 {
     public const SCHEMA_VERSION = 1;
 
+    public static function assetKinds(string $html): array
+    {
+        $kinds = ['inline_images' => false, 'draft_files' => false];
+        if (stripos($html, 'data:image/') === false && !str_contains($html, '/editor-files/') && !str_contains($html, 'data-draft-file-id')) return $kinds;
+        $dom = new \DOMDocument('1.0', 'UTF-8'); $previous = libxml_use_internal_errors(true);
+        $dom->loadHTML('<meta charset="utf-8"><div>' . $html . '</div>');
+        libxml_clear_errors(); libxml_use_internal_errors($previous);
+        foreach ((new \DOMXPath($dom))->query('//img | //a') as $node) {
+            $url = trim($node->getAttribute($node->tagName === 'img' ? 'src' : 'href'));
+            if ($node->tagName === 'img' && stripos($url, 'data:image/') === 0) $kinds['inline_images'] = true;
+            if ($node->hasAttribute('data-draft-file-id') || preg_match('~^/editor-files/[1-9][0-9]*/(?:preview|thumbnail|download)(?:\?[^#]*)?$~D', $url)) $kinds['draft_files'] = true;
+        }
+        return $kinds;
+    }
+
     public static function storedSource(?array $row): ?array
     {
         if ($row === null || ($row['document_json'] ?? null) === null) return $row;

@@ -80,13 +80,17 @@ export function setupUploads(root, editor, local, context, uuid, changed, pendin
     imageInput.onchange = () => { for (const file of imageInput.files) add(file); imageInput.value = ''; };
     editor.view.dom.addEventListener('paste', (event) => {
         const files = [...(event.clipboardData?.files || [])];
-        if (!files.length || !context().canSend) return;
-        event.preventDefault(); event.stopPropagation(); files.forEach((file) => add(file));
+        if (!files.length) return;
+        event.preventDefault(); event.stopPropagation();
+        if (!context().canSend) { failed(new Error('Dodawanie plików jest chwilowo niedostępne. Poczekaj na zapis lub konwersję i sprawdź tryb oraz uprawnienia.')); return; }
+        files.forEach((file) => add(file));
     }, true);
     root.addEventListener('dragover', (event) => { if ([...(event.dataTransfer?.types || [])].includes('Files')) event.preventDefault(); });
     root.addEventListener('drop', (event) => {
-        if (!event.dataTransfer?.files.length || !context().canSend) return;
-        event.preventDefault(); event.stopPropagation(); [...event.dataTransfer.files].forEach((file) => add(file));
+        if (!event.dataTransfer?.files.length) return;
+        event.preventDefault(); event.stopPropagation();
+        if (!context().canSend) { failed(new Error('Dodawanie plików jest chwilowo niedostępne. Poczekaj na zapis lub konwersję i sprawdź tryb oraz uprawnienia.')); return; }
+        [...event.dataTransfer.files].forEach((file) => add(file));
     }, true);
     local.uploads(prefix()).then((stored) => stored.forEach((row) => add(row.file, row)));
     window.addEventListener('online', () => { for (const row of rows.values()) send(row); });

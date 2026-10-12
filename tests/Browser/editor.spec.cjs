@@ -440,6 +440,11 @@ test('rich tools save and reopen tables, code languages, callouts, links and mac
     await page.locator('[data-macro-name]').selectOption('status');
     await page.locator('[data-macro-parameter]').fill('Ready for daily use');
     await page.getByRole('button', {name: 'Insert macro', exact: true}).click();
+    await editor(page).press('ControlOrMeta+End'); await editor(page).press('Enter');
+    await page.getByRole('button', {name: 'Macro', exact: true}).click();
+    await page.locator('[data-macro-name]').selectOption('user-profile');
+    await page.locator('[data-macro-parameter]').fill(fixture().users[0].username);
+    await page.getByRole('button', {name: 'Insert macro', exact: true}).click();
     await page.screenshot({path: 'storage/temp/daily-editor-desktop-rich.png', fullPage: true});
     await editor(page).press('ControlOrMeta+S');
     await page.locator('[data-save-button]').click();
@@ -449,6 +454,7 @@ test('rich tools save and reopen tables, code languages, callouts, links and mac
     await expect(saved.locator('code[data-language=php]')).toContainText('Daily documentation');
     await expect(saved.locator('[data-callout=warning]')).toContainText('Callout text');
     await expect(saved.locator('.macro-status')).toHaveText('Ready for daily use');
+    await expect(saved.locator('.macro-user strong')).toHaveText(fixture().users[0].username);
     await page.getByRole('link', {name: 'Edit', exact: true}).click();
     await expect(page.locator('[data-model-review]')).toBeHidden();
     await expect(editor(page).locator('code[data-language=php]')).toContainText('Daily documentation');

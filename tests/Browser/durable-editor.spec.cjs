@@ -183,17 +183,25 @@ test('two actual users resolve a second intervening version and retain the separ
     await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content]')).toHaveText('Third intervening version'); await secondContext.close();
 });
 
-test('publishing while typing replaces private file URLs before saving the next draft', async ({page}) => {
+test('publishing while typing replaces private file URLs before saving the next draft', async ({page, request}) => {
     await page.goto(createUrl()); await page.locator('[name=title]').fill(title());
+    const target = await api(request, 'post', 'pages', {space_id: fixture().spaceId, title: title(), content_html: '<p>Wiki target</p>'});
+    await editor(page).fill('[[' + target.title + ']]'); await editor(page).press('Enter');
     await page.locator('[data-attachment-file]').setInputFiles({name: 'pending.txt', mimeType: 'text/plain', buffer: Buffer.from('File bytes')}); await expect(page.locator('[data-upload-list]')).toContainText('Zapisano jako prywatny');
     const originalHref = await editor(page).locator('a').getAttribute('href');
     let release; const blocked = new Promise(resolve => release = resolve); let entered;
     const started = new Promise(resolve => entered = resolve);
     await page.route('**/spaces/*/pages', async route => { if (route.request().method() === 'POST') { const response = await route.fetch(); entered(); await blocked; await route.fulfill({response}); } else await route.continue(); });
-    await page.locator('[data-save-button]').click(); await started; await editor(page).press('ControlOrMeta+End'); await editor(page).press('Enter'); await page.keyboard.type('Later state'); release();
+    await page.locator('[data-save-button]').click(); await started; await expect(page.locator('[data-attachment-picker]')).toBeDisabled(); await editor(page).press('ControlOrMeta+End'); await editor(page).press('Enter'); await page.keyboard.type('Later state'); release();
     await expect(page).toHaveURL(/\/edit$/); await expect(editor(page).locator('a')).toHaveAttribute('href', /^\/attachments\//); await page.unroute('**/spaces/*/pages');
     await page.keyboard.press('ControlOrMeta+s'); await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server');
     expect((await page.request.get(originalHref, {maxRedirects: 0})).status()).toBe(302);
+    let undos = 0;
+    while (await editor(page).locator('a').count() && undos < 6) { await editor(page).press('ControlOrMeta+z'); undos++; }
+    await expect(editor(page).locator('a')).toHaveCount(0);
+    while (undos-- > 0) await editor(page).press('ControlOrMeta+Shift+z');
+    await expect(editor(page).locator('a')).toHaveCount(1);
+    await editor(page).press('ControlOrMeta+s'); await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server');
     await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content]')).toContainText('Later state');
 });
 
@@ -205,6 +213,27 @@ test('the user directory picker checks its own permission on the server', async 
     const other = await limited.request.get(url + fixture().users[0].username); expect(other.status()).toBe(200); expect((await other.json()).data.users).toEqual([]);
     const self = await limited.request.get(url + fixture().users[2].username); expect((await self.json()).data.users.map(user => user.username)).toEqual([fixture().users[2].username]);
     await limited.close();
+});
+
+test('a private image kept only in conversion recovery remains restorable after a late first publication', async ({page}) => {
+    await page.goto(createUrl()); await page.locator('[name=title]').fill(title());
+    await editor(page).fill('Original image');
+    await page.locator('[data-image-file]').setInputFiles({name: 'conversion.png', mimeType: 'image/png', buffer: Buffer.from(fixture().imageBase64, 'base64')});
+    await expect(page.locator('[data-upload-list]')).toContainText('Zapisano jako prywatny');
+    await page.locator('[data-editor-mode=markdown]').click(); await expect(page.locator('[data-conversion-dialog]')).toBeVisible();
+    await page.locator('[data-conversion-accept]').click(); await page.locator('[data-markdown-editor]').fill('Converted document without the image');
+    let entered; const started = new Promise(resolve => entered = resolve);
+    let release; const blocked = new Promise(resolve => release = resolve);
+    await page.route('**/spaces/*/pages', async route => { if (route.request().method() === 'POST') { const response = await route.fetch(); entered(); await blocked; await route.fulfill({response}); } else await route.continue(); });
+    await page.locator('[data-save-button]').click(); await started;
+    await page.locator('[data-markdown-editor]').press('ControlOrMeta+End'); await page.keyboard.type(' with later changes'); release();
+    await expect(page).toHaveURL(/\/edit$/); await page.unroute('**/spaces/*/pages');
+    await page.locator('[data-undo-conversion]').click();
+    await expect(editor(page).locator('img')).toHaveAttribute('src', /^\/attachments\//);
+    await expect(editor(page)).toContainText('Original image');
+    await editor(page).press('ControlOrMeta+s'); await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server');
+    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content] img')).toBeVisible();
+    expect((await page.request.get(await page.locator('[data-document-content] img').getAttribute('src'))).status()).toBe(200);
 });
 
 test('cancelling an in-flight upload removes its journal without inserting a file', async ({page}) => {

@@ -2,10 +2,22 @@ import {Editor, Extension, Node, Mark, mergeAttributes} from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import {Table, TableRow, TableCell, TableHeader} from '@tiptap/extension-table';
 import {TaskList, TaskItem} from '@tiptap/extension-list';
-import {NodeSelection} from '@tiptap/pm/state';
+import {NodeSelection, TextSelection} from '@tiptap/pm/state';
 import {documentBlocks} from './document-blocks.js';
 
 const globals = ['id', 'class', 'title', 'aria-label'];
+const DocumentNavigation = Extension.create({
+    name: 'documentNavigation', priority: 1000,
+    addKeyboardShortcuts() {
+        const move = (end) => {
+            const {state, view} = this.editor;
+            const selection = TextSelection.findFrom(state.doc.resolve(end ? state.doc.content.size : 0), end ? -1 : 1, true);
+            if (!selection) return false;
+            view.dispatch(state.tr.setSelection(selection).scrollIntoView()); return true;
+        };
+        return {'Mod-Home': () => move(false), 'Mod-End': () => move(true)};
+    }
+});
 const globalAttributes = Extension.create({
     name: 'legacyAttributes',
     addGlobalAttributes() {
@@ -68,7 +80,7 @@ const CompatibleTable = Table.extend({
 export function createRichEditor(element, html, sanitize, onUpdate, onSelection) {
     const editor = new Editor({
         element, content: html, injectCSS: false,
-        extensions: [StarterKit.configure({link: {openOnClick: false, autolink: false, defaultProtocol: 'https', HTMLAttributes: {target: null, rel: null}}, codeBlock: false}),
+        extensions: [DocumentNavigation, StarterKit.configure({link: {openOnClick: false, autolink: false, defaultProtocol: 'https', HTMLAttributes: {target: null, rel: null}}, codeBlock: false}),
             // Keep code language in the same data-language attribute used by PHP revisions.
             Node.create({name: 'codeBlock', group: 'block', content: 'text*', marks: '', code: true, defining: true,
                 addAttributes() { return {language: {default: null, parseHTML: (e) => e.querySelector('code')?.getAttribute('data-language') || e.querySelector('code')?.className.replace(/^language-/, '') || null, rendered: false},

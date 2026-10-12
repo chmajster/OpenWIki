@@ -111,6 +111,7 @@ if (editorRoot) {
     const updateSaveButton = () => {
         saveButton.disabled = saving || converting || pendingImages > 0 || accountChanged || authStopped || Boolean(conflict) || Boolean(modelPending);
         refreshTools();
+        if (saving || converting) editorRoot.querySelectorAll('[data-attachment-picker], [data-image-picker]').forEach(button => { button.disabled = true; });
     };
     const snapshot = () => ({
         userId, documentKey, editorId, sequence: generation, savedAt: new Date().toISOString(),
@@ -433,7 +434,7 @@ if (editorRoot) {
     };
 
     if (canUploadImage) setupUploads(editorRoot, richEditor, localRecovery,
-        () => ({documentKey, csrfToken, canSend: !accountChanged && !authStopped && !modelPending && sourceOverride === null && formatInput.value === 'visual'}),
+        () => ({documentKey, csrfToken, canSend: !saving && !converting && !accountChanged && !authStopped && !modelPending && sourceOverride === null && formatInput.value === 'visual'}),
         uuid, () => { markDirty(); return persistLocalRecovery(); }, (count) => { pendingImages = count; updateSaveButton(); }, (error) => {
             saveState.textContent = error.message;
             if ([401, 403, 419].includes(error.status)) { authStopped = true; editorRoot.querySelector('[data-resume-save]').hidden = false; }
@@ -606,26 +607,35 @@ if (editorRoot) {
                 editorRoot.dataset.lockUrl = data.url + '/edit-lock';
                 editorRoot.dataset.unlockUrl = data.url + '/edit-unlock';
                 history.replaceState(null, '', data.url + '/edit');
-                const sentHtml = new DOMParser().parseFromString(captured.html, 'text/html');
-                const storedHtml = new DOMParser().parseFromString(data.page.content_html, 'text/html');
-                const sentImages = Array.from(sentHtml.querySelectorAll('img'));
-                const storedImages = Array.from(storedHtml.querySelectorAll('img'));
-                const replacements = new Map(sentImages.map((image, index) => [image.getAttribute('src'), storedImages[index]]));
-                const sentLinks = [...sentHtml.querySelectorAll('a')], storedLinks = [...storedHtml.querySelectorAll('a')];
-                const fileLinks = new Map(sentLinks.map((link, index) => [link.getAttribute('href'), storedLinks[index]]));
+                // Server mappings identify each source URL; wiki-link decoration may change anchor order.
+                const urls = new Map(Object.entries(data.page.asset_replacements || {}));
+                const attachmentId = (url) => /^\/attachments\/([1-9][0-9]*)\//.exec(url)?.[1];
+                const replaceHtml = (source) => {
+                    const dom = new DOMParser().parseFromString(source, 'text/html'); let changed = false;
+                    for (const node of dom.querySelectorAll('img,a')) {
+                        const attribute = node.tagName === 'IMG' ? 'src' : 'href';
+                        const url = urls.get(node.getAttribute(attribute)); if (!url) continue;
+                        node.setAttribute(attribute, url); node.setAttribute('data-attachment-id', attachmentId(url));
+                        node.removeAttribute('data-draft-file-id'); changed = true;
+                    }
+                    return changed ? dom.body.innerHTML : source;
+                };
                 let tr = richEditor.state.tr;
                 richEditor.state.doc.descendants((node, pos) => {
-                    const stored = node.type.name === 'imageFigure' && replacements.get(node.attrs.src);
-                    if (stored && /^(data:image\/|\/editor-files\/)/i.test(node.attrs.src)) tr = tr.setNodeMarkup(pos, undefined, {...node.attrs, src: stored.getAttribute('src'), 'data-attachment-id': stored.dataset.attachmentId, 'data-draft-file-id': null});
+                    const url = node.type.name === 'imageFigure' && urls.get(node.attrs.src);
+                    if (url) tr = tr.setNodeMarkup(pos, undefined, {...node.attrs, src: url, 'data-attachment-id': attachmentId(url), 'data-draft-file-id': null});
                     if (node.isText) for (const mark of node.marks) {
-                        const link = mark.type.name === 'link' && fileLinks.get(mark.attrs.href);
-                        if (link && /^\/editor-files\//.test(mark.attrs.href)) {
-                            tr = tr.removeMark(pos, pos + node.nodeSize, mark).addMark(pos, pos + node.nodeSize, mark.type.create({...mark.attrs, href: link.getAttribute('href'), 'data-attachment-id': link.dataset.attachmentId, 'data-draft-file-id': null}));
-                        }
+                        const href = mark.type.name === 'link' && urls.get(mark.attrs.href);
+                        if (href) tr = tr.removeMark(pos, pos + node.nodeSize, mark).addMark(pos, pos + node.nodeSize,
+                            mark.type.create({...mark.attrs, href, 'data-attachment-id': attachmentId(href), 'data-draft-file-id': null}));
                     }
                 });
-                for (const [oldUrl, link] of fileLinks) if (link && /^\/editor-files\//.test(oldUrl)) markdownEditor.value = markdownEditor.value.split(oldUrl).join(link.getAttribute('href'));
-                for (const [oldUrl, image] of replacements) if (image && /^\/editor-files\//.test(oldUrl)) markdownEditor.value = markdownEditor.value.split(oldUrl).join(image.getAttribute('src'));
+                // Pending Markdown keeps exact source bytes. The next conditional write rewrites
+                // actual destinations server-side; owned adopted URLs remain valid for this page.
+                if (originalMarkdown !== null) originalMarkdown = {...originalMarkdown,
+                    html: replaceHtml(originalMarkdown.html)};
+                if (sourceOverride !== null) sourceOverride = replaceHtml(sourceOverride);
+                if (conversionBackup !== null) conversionBackup = {...conversionBackup, html: replaceHtml(conversionBackup.html)};
                 if (tr.docChanged) richEditor.view.dispatch(tr.setMeta('addToHistory', false));
                 markDirty();
                 const afterTransitionGeneration = generation;

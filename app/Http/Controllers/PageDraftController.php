@@ -127,6 +127,12 @@ final class PageDraftController extends Controller
                 $payload[$key] = $value;
             }
             $payload['conversionBackup'] = (new ContentService())->recoveryCopy($request->input('conversion_backup'));
+            if ($payload['conversionBackup'] !== null) {
+                $backup = $payload['conversionBackup'];
+                $backupHtml = (new ContentService())->normalize($backup['format'], $backup['html'], $backup['markdown'])['html'];
+                (new \OpenWiki\Attachments\DraftFileService($this->app->database(), $this->app->basePath()))->touch($backupHtml,
+                    (int) $context['space']['id'], (int) $this->app->auth()->user()['id'], $context['document_key']);
+            }
             $sequence = filter_var($request->input('draft_sequence'), FILTER_VALIDATE_INT);
             if ($sequence === false || $sequence < 1) throw new \InvalidArgumentException('Invalid draft sequence.');
             $expected = $request->input('draft_version') === null ? null : filter_var($request->input('draft_version'), FILTER_VALIDATE_INT);

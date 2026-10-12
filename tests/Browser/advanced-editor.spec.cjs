@@ -56,7 +56,7 @@ test('table operations retain merged content, widths and pasted spreadsheet cell
     await page.locator('[data-table-move="column:1"]').click();
     await expect(editor(page).locator('td').first()).toHaveText('B'); await expect(editor(page).locator('td').nth(1)).toHaveText('A');
     await editor(page).locator('td').first().click(); await page.keyboard.press('Tab'); await page.keyboard.type(' navigation');
-    await editor(page).locator('p').last().click(); await page.keyboard.press('End'); await page.keyboard.press('Enter'); await paste(page, 'Nazwa\tWynik\nTest\tOK');
+    await editor(page).press('ControlOrMeta+End'); await page.keyboard.press('Enter'); await paste(page, 'Nazwa\tWynik\nTest\tOK');
     await expect(editor(page).locator('table')).toHaveCount(2); await expect(editor(page).locator('table').nth(1)).toContainText('OK');
     await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content] table')).toHaveCount(2);
     await page.goto(path(doc) + '/edit'); await expect(page.locator('[data-model-review]')).toBeHidden();

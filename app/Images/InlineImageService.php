@@ -31,6 +31,7 @@ final class InlineImageService
                 'html' => $html,
                 'text' => $this->plainText($html),
                 'attachment_ids' => [],
+                'urls' => [],
             ];
         }
 
@@ -64,6 +65,7 @@ final class InlineImageService
         $maxTotalBytes = max($maxImageBytes, Env::int('INLINE_IMAGE_MAX_TOTAL_BYTES', 25 * 1024 * 1024));
         $totalBytes = 0;
         $attachmentIds = [];
+        $urls = [];
 
         foreach ($images as $index => $image) {
             $source = trim($image->getAttribute('src'));
@@ -133,6 +135,7 @@ final class InlineImageService
                 $image->setAttribute('data-original-height', (string) $imageInfo['height']);
                 $image->setAttribute('width', (string) min($requestedWidth, (int) $imageInfo['width']));
                 $image->setAttribute('loading', 'lazy');
+                $urls[$source] = $image->getAttribute('src');
             } finally {
                 @unlink($tempFile);
             }
@@ -147,6 +150,7 @@ final class InlineImageService
             'html' => $result,
             'text' => $this->plainText($result),
             'attachment_ids' => $attachmentIds,
+            'urls' => $urls,
         ];
     }
 
@@ -157,14 +161,19 @@ final class InlineImageService
         return trim($text);
     }
 
-    public function cleanupCreatedFiles(): void
+    public function trackingCheckpoint(): int
+    {
+        return count($this->createdStorageKeys);
+    }
+
+    public function cleanupCreatedFiles(int $since = 0): void
     {
         if ($this->createdStorageKeys === []) {
             return;
         }
 
-        $this->attachments->purgeStorageKeys($this->createdStorageKeys);
-        $this->createdStorageKeys = [];
+        $this->attachments->purgeStorageKeys(array_slice($this->createdStorageKeys, $since));
+        $this->createdStorageKeys = array_slice($this->createdStorageKeys, 0, $since);
     }
 
     public function clearTracking(): void

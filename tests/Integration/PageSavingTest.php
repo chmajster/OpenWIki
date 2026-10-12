@@ -332,6 +332,9 @@ final class PageSavingTest extends TestCase
             'base_version' => 0, 'draft_sequence' => 1, 'content_html' => $html,
         ]), $this->space['space_key']);
         self::assertSame(200, $response->status());
+        $page = (new PageWriteService($this->app->database()))->save($this->space, null, ['title' => 'Literal asset examples',
+            'content_html' => $html . '<pre><code>data:image/png;base64,example</code></pre>'], $this->userId);
+        self::assertStringContainsString('/editor-files/999999/download', $page['content_html']);
     }
 
     public function testReactivatingAnAcknowledgedContextCannotBypassTheActiveDraftQuota(): void
@@ -355,6 +358,46 @@ final class PageSavingTest extends TestCase
         $saved = $service->saveEditorDraft((int) $this->space['id'], $this->userId, $document, $tab, 2, 0, ['title' => 'Reactivated'], 1, $operation);
         self::assertSame(2, $saved['draft_version']);
         self::assertSame(100, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM page_editor_drafts WHERE user_id = ? AND sequence > acknowledged_sequence', [$this->userId])['total']);
+    }
+
+    public function testMarkdownInlineImagesAndConversionBackupsUseProtectedSourcesWithoutDuplicatingFiles(): void
+    {
+        $db = $this->app->database(); $writer = new PageWriteService($db, $this->app->basePath());
+        $image = imagecreatetruecolor(2, 1); ob_start(); imagepng($image); $bytes = ob_get_clean(); imagedestroy($image);
+        $source = 'data:image/png;base64,' . base64_encode($bytes);
+        $pageIds = [];
+        try {
+            $literalCode = "\n\n```text\n![Example](" . $source . ")\n```\n\n`![Inline](" . $source . ")`";
+            $input = ['title' => 'Markdown image', 'content_format' => 'markdown', 'content_markdown' => '![Pixel](' . $source . ')' . $literalCode,
+                'operation_id' => '77777777-7777-4777-8777-777777777777'];
+            $page = $writer->save($this->space, null, $input, $this->userId, allowInlineImages: true); $pageIds[] = $page['id'];
+            self::assertStringContainsString($literalCode, $page['content_markdown']);
+            self::assertStringStartsWith('![Pixel](/attachments/', $page['content_markdown']);
+            self::assertStringContainsString('/attachments/', $page['content_markdown']);
+            self::assertSame($page['content_markdown'], json_decode($page['document_json'], true)['source']);
+            self::assertStringContainsString('/attachments/', $page['asset_replacements'][$source]);
+            self::assertSame($page, $writer->save($this->space, null, $input, $this->userId, allowInlineImages: true));
+            $writer->save($this->space, $page, ['base_version' => 1], $this->userId, allowInlineImages: true);
+            self::assertSame(1, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM attachments WHERE page_id = ?', [$page['id']])['total']);
+            $backupInput = ['title' => 'Image only in conversion source', 'content_html' => '<p>Current content</p>',
+                'conversion_backup' => ['format' => 'markdown', 'html' => '', 'markdown' => '![Prior image](' . $source . ')']];
+            try {
+                $writer->save($this->space, null, $backupInput, $this->userId);
+                self::fail('Images in Markdown backups require attachment permission.');
+            } catch (\DomainException $error) { self::assertStringContainsString('attachment.upload', $error->getMessage()); }
+            $storageKey = $db->fetchOne('SELECT storage_key FROM attachments WHERE page_id = ?', [$page['id']])['storage_key'];
+            self::assertFileExists((new \OpenWiki\Attachments\AttachmentService($db, $this->app->basePath()))->stagedPath($storageKey));
+            $backupPage = $writer->save($this->space, null, $backupInput, $this->userId, allowInlineImages: true); $pageIds[] = $backupPage['id'];
+            $revision = (new PageRepository($db))->revision((int) $backupPage['id'], 1);
+            $backup = json_decode($revision['conversion_backup_json'], true);
+            self::assertStringNotContainsString('data:image/', $backup['markdown']);
+            self::assertStringContainsString('/attachments/', $backup['markdown']);
+            self::assertSame('', $backup['html']);
+            self::assertStringContainsString('/attachments/', $backupPage['asset_replacements'][$source]);
+        } finally {
+            $attachments = new \OpenWiki\Attachments\AttachmentService($db, $this->app->basePath());
+            foreach ($pageIds as $id) $attachments->purgeStorageKeys(array_column($db->fetchAll('SELECT storage_key FROM attachments WHERE page_id = ?', [$id]), 'storage_key'));
+        }
     }
 
     private function request(array $input, ?string $token = null): Request

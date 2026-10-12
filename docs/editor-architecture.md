@@ -32,6 +32,8 @@ Dobór rozszerzeń wykorzystuje istniejący model HTML, selekcje komórek i hist
 
 Migracja `006_durable_editor` dodaje kopertę, osobną wersję szkicu oraz tabele potwierdzeń operacji, punktów odzyskiwania i prywatnych plików. Nie zmienia wcześniejszych kolumn ani zawartości rewizji. Dla starszego wpisu oznaczonego Markdown z brakującym/pustym źródłem i niepustym HTML wybiera Visual z istniejącym HTML, zachowując wcześniejsze kolumny bez zmian. To jawny adapter chroniący jedyną istniejącą treść. Test migracji sprawdza MySQL/MariaDB, ponowne uruchomienie, właściciela i oryginalną bazę starego autosave.
 
+Migracja `007_page_operation_capacity` rozszerza pole potwierdzenia publikacji do LONGTEXT: wynik zawiera kilka projekcji tego samego, ograniczonego źródła oraz mapę adresów, więc wielobajtowy dokument może przekroczyć pojemność pojedynczego MEDIUMTEXT. Działa również dla instancji z już zastosowaną migracją 006.
+
 Odczyt stron i rewizji ponownie bezpiecznie przetwarza źródło; nie stosuje nowych limitów zapisu do historycznych danych. Nie utrwala zmian. Visual ocenia zgodność bezpiecznego HTML ze schematem przed dopuszczeniem transformacji. Alias znaczników, sekcje tabel, pojedyncze akapity komórek/list i nieistotne odstępy są równoważne; utrata struktury lub metadanych wymaga decyzji. Konwersje formatów przechowują oryginał jako `conversion_backup_json` w rewizji. Markdown podglądu, zapisu, importu i API przechodzi przez ten sam CommonMark/GFM z wyłączonym aktywnym HTML.
 
 ## Protokół szkicu i publikacji
@@ -60,6 +62,8 @@ Publikacja korzysta z osobnego UUID i PageWriteService, który współdzielą UI
 | GET `/spaces/{key}/pages/{slug}/revisions/{number}` | Bezpieczny, niezmienny odczyt konkretnej rewizji, aktualny ACL strony |
 
 Makra zachowują ACL odczytu; profil użytkownika dodatkowo wymaga `user.view` lub własnej nazwy. HTML-linki i składnia `[[...]]` zasilają backlinks. Pliki szkicu mają niejawne klucze fizycznego magazynu; sam URL lub identyfikator nie nadaje dostępu. Adopcja odnajduje rzeczywiste odnośniki/obrazy w DOM, a nie literalny tekst dokumentacji w bloku kodu. Nie można użyć pliku innego użytkownika/dokumentu.
+
+Potwierdzenie publikacji zawiera `asset_replacements`, mapę źródłowego i chronionego adresu. Klient aktualizuje rzeczywiste węzły oraz HTML kopii konwersji według adresu, bez dopasowywania pozycji odnośników (dekoracja wiki może dodać kolejne). Pending Markdown zachowuje dokładne bajty; kolejne warunkowe zastosowanie przepisuje miejsca docelowe obrazów/linków po stronie serwera, zachowując bloki i fragmenty kodu. Starszy prywatny adres z historii undo jest akceptowany tylko dla właściciela i załącznika już adoptowanego przez tę samą stronę. Upload jest chwilowo niedostępny podczas publikacji/konwersji, z widoczną odmową dla wklejenia/przeciągnięcia. Kopia konwersji również aktualizuje retencję swoich plików. Cleanup obrazów po nieudanym zapisie usuwa tylko pliki tej operacji; zewnętrzny import może osobno posprzątać cały wycofany zbiór.
 
 ## Bezpieczeństwo modelu i podglądu
 
@@ -94,6 +98,6 @@ Build tworzy trzy ignorowane bundle: `wiki-editor.js`, `document-reader.js`, `di
 
 `tests/Browser/editor-performance.spec.cjs` używa rzeczywistego dokumentu 107 056 znaków z tabelą, kodem PHP i chronionym obrazem PNG, trzech wejść do edytora, pisania, Ctrl+S, zastosowania zmian i dokładnego odczytu API. Pomiar event→requestAnimationFrame ocenia czas do kolejnej klatki, a nie laboratoryjne opóźnienie sprzętowej klawiatury.
 
-W wykonanym lokalnym pełnym przebiegu: Windows 11 (10.0.26200), Ryzen 7 7800X3D, Node.js 24.21.0, Chromium 156.0.8078.4, PHP 8.2.12 i izolowana MariaDB. Wejścia do edytora: 290/240/244 ms (mediana 244 ms); input→klatka: mediana 9 ms, maksimum 15 ms; zapis szkicu: 121 ms; zastosowanie i ponowny odczyt: 280 ms. Wyniki zależą od hosta i są pomiarami tego przebiegu, nie gwarancją dla każdej instalacji.
+W wykonanym lokalnym pełnym przebiegu: Windows 11 (10.0.26200), Ryzen 7 7800X3D, Node.js 24.21.0, Chromium 156.0.8078.4, PHP 8.2.12 i izolowana MariaDB. Wejścia do edytora: 261/234/269 ms (mediana 261 ms); input→klatka: mediana 10 ms, maksimum 14 ms; zapis szkicu: 124 ms; zastosowanie i ponowny odczyt: 270 ms. Wyniki zależą od hosta i są pomiarami tego przebiegu, nie gwarancją dla każdej instalacji.
 
 CI publikuje aktualne surowe pomiary w `editor-performance.json` oraz zrzuty w artefakcie `editor-verification` (7 dni). Zrzuty obejmują edytor/odczyt przy 360/768/1440 px, duży dokument, offline, błąd uprawnień i porównanie odzyskiwania. Pliki generowane nie trafiają do repozytorium. Testy używają realnego PHP, bazy, logowania i formularza; fault injection celowo zrywa odpowiedzi lub podstawia błędy HTTP, bez zastępowania właściwych operacji domenowych atrapą.
