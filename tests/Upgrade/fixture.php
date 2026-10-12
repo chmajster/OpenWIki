@@ -46,16 +46,16 @@ $db = Database::connect($config);
 if ($action === 'snapshot') {
     $data = [];
     foreach (['users', 'user_roles', 'attachments', 'attachment_versions'] as $table) $data[$table] = $db->fetchAll('SELECT * FROM `' . $table . '` ORDER BY 1');
-    // Migration 009 introduces this exact limited system role. Existing roles,
-    // account assignments and all their original grants remain in the snapshot.
-    $data['roles'] = $db->fetchAll('SELECT * FROM roles WHERE slug <> "space-owner" ORDER BY id');
-    $data['role_permissions'] = $db->fetchAll('SELECT rp.* FROM role_permissions rp INNER JOIN roles r ON r.id = rp.role_id WHERE r.slug <> "space-owner" ORDER BY rp.role_id, rp.permission_id');
+    // Migrations 009 and 011 add limited system roles. Existing account
+    // assignments and original grants remain in the preservation snapshot.
+    $data['roles'] = $db->fetchAll('SELECT * FROM roles WHERE slug NOT IN ("space-owner", "reviewer", "publisher") ORDER BY id');
+    $data['role_permissions'] = $db->fetchAll('SELECT rp.* FROM role_permissions rp INNER JOIN roles r ON r.id = rp.role_id WHERE r.slug NOT IN ("space-owner", "reviewer", "publisher") ORDER BY rp.role_id, rp.permission_id');
     if ($db->fetchOne('SELECT id FROM roles WHERE slug = "space-owner"') !== null) {
         $grants = array_column($db->fetchAll('SELECT p.name FROM permissions p INNER JOIN role_permissions rp ON rp.permission_id = p.id INNER JOIN roles r ON r.id = rp.role_id WHERE r.slug = "space-owner" ORDER BY p.name'), 'name');
         if ($grants !== ['space.archive', 'space.edit', 'space.manage_access', 'space.manage_owner', 'space.view']) throw new RuntimeException('Unexpected owner role grants.');
     }
     $data['pages'] = $db->fetchAll('SELECT id, title, slug, content_html, author_id, owner_id, version FROM pages ORDER BY id');
-    $data['history'] = $db->fetchAll('SELECT id, title, content_html FROM page_revisions ORDER BY id');
+    $data['history'] = $db->fetchAll('SELECT id, title, content_html FROM page_revisions WHERE change_summary IS NULL OR change_summary <> "Migration: preserved published page snapshot" ORDER BY id');
     $data['files'] = [];
     foreach ($data['attachments'] as $file) $data['files'][] = hash_file('sha256', $root . '/storage/attachments/' . $file['storage_key']);
     echo hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
@@ -64,5 +64,14 @@ if ($action === 'snapshot') {
 } elseif ($action === 'verify-draft') {
     $draft = $db->fetchOne('SELECT base_version, payload_json FROM page_editor_drafts');
     if ((int) $draft['base_version'] !== 1 || json_decode($draft['payload_json'], true)['html'] !== '<p>Local draft</p>') throw new RuntimeException('Legacy draft was changed.');
+    $page = $db->fetchOne('SELECT * FROM pages WHERE slug = "preserved"');
+    $revision = $db->fetchOne('SELECT * FROM page_revisions WHERE page_id = ? AND revision_number = ?', [$page['id'], $page['version']]);
+    if ((int) $page['published_revision'] !== 3 || $page['workflow_state'] !== 'published' || $revision['content_html'] !== $page['content_html'] || !(bool) $revision['was_published']) throw new RuntimeException('Current publication was not migrated exactly.');
+    foreach (['reviewer' => ['page.review', 'page.verify', 'page.view', 'space.view'], 'publisher' => ['page.publish', 'page.view', 'space.view']] as $role => $expected) {
+        $grants = array_column($db->fetchAll('SELECT p.name FROM permissions p INNER JOIN role_permissions rp ON rp.permission_id = p.id INNER JOIN roles r ON r.id = rp.role_id WHERE r.slug = ? ORDER BY p.name', [$role]), 'name');
+        if ($grants !== $expected) throw new RuntimeException('Unexpected review role grants.');
+    }
+    $file = $db->fetchOne('SELECT f.version_number, a.current_version, f.name, a.name AS current_name FROM page_revision_attachments f INNER JOIN attachments a ON a.id = f.attachment_id WHERE f.page_id = ? AND f.revision_number = 3', [$page['id']]);
+    if ($file === null || (int) $file['version_number'] !== (int) $file['current_version'] || $file['name'] !== $file['current_name']) throw new RuntimeException('Published attachment snapshot was not preserved.');
     echo 'preserved';
 } else throw new RuntimeException('Unknown upgrade fixture command.');

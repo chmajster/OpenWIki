@@ -55,6 +55,7 @@ final class PageSavingTest extends TestCase
         }
         $role = $db->insert('INSERT INTO roles (name, slug, is_system, created_at, updated_at) VALUES (?, ?, 0, UTC_TIMESTAMP(), UTC_TIMESTAMP())', ['Saving ' . $suffix, 'saving-' . $suffix]);
         $db->execute('INSERT IGNORE INTO permissions (name, description, created_at) VALUES ("*", "All", UTC_TIMESTAMP())');
+        foreach (['page.view', 'page.edit', 'page.delete', 'page.publish', 'page.archive'] as $name) $db->execute('INSERT IGNORE INTO permissions (name) VALUES (?)', [$name]);
         $permission = $db->fetchOne('SELECT id FROM permissions WHERE name = "*"');
         $db->execute('INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)', [$role, $permission['id']]);
         $db->execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [$this->userId, $role]);
@@ -107,7 +108,7 @@ final class PageSavingTest extends TestCase
             (new DocumentImportService($db))->importFromPath($this->space, $this->userId, $temp, 'Imported.md');
         } finally { @unlink($temp); }
         self::assertSame(5, (int) $db->fetchOne('SELECT COUNT(*) AS n FROM audit_logs WHERE user_id = ? AND object_type = "page"', [$this->userId])['n']);
-        self::assertSame(5, (int) $db->fetchOne('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ?', [$this->otherUserId])['n']);
+        self::assertSame(0, (int) $db->fetchOne('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ?', [$this->otherUserId])['n'], 'A watcher without access to this private space must not receive page metadata.');
         self::assertSame(5, (int) $db->fetchOne('SELECT COUNT(*) AS n FROM webhook_deliveries d INNER JOIN webhooks w ON w.id = d.webhook_id WHERE w.created_by = ?', [$this->userId])['n']);
     }
 

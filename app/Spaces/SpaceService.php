@@ -56,7 +56,10 @@ final class SpaceService
                 if ((int) ($error->errorInfo[1] ?? 0) === 1062) throw new SpaceConflict('Klucz przestrzeni jest już używany.', 0, $error);
                 throw $error;
             }
-            $this->app->database()->execute('UPDATE spaces SET icon = ? WHERE id = ?', [$this->text($input, 'icon', '', 64) ?: null, $id]);
+            $workflow = $this->flag($input['review_workflow'] ?? 0);
+            $selfReview = $this->flag($input['allow_self_review'] ?? 0);
+            if (($workflow || $selfReview) && !$actor->can('space.manage_access')) throw new \DomainException('Brak uprawnienia do konfiguracji recenzji.');
+            $this->app->database()->execute('UPDATE spaces SET icon = ?, review_workflow = ?, allow_self_review = ? WHERE id = ?', [$this->text($input, 'icon', '', 64) ?: null, $workflow, $selfReview, $id]);
             $space = $this->find($id);
             $this->record('SPACE_CREATED', 'space.created', $space, $actorId, $request);
             return $space;
@@ -90,8 +93,11 @@ final class SpaceService
                 $page = $db->fetchOne('SELECT * FROM pages WHERE id = ? AND space_id = ? AND deleted_at IS NULL', [$home, $id]);
                 if ($page === null || !(new PageAclService($this->app))->canViewFor($page, $space, $actorId, $actor->can('*'), $actor->can('page.view'))) throw new \InvalidArgumentException('Strona startowa musi być dostępną stroną tej przestrzeni.');
             }
-            $db->execute('UPDATE spaces SET name = ?, description = ?, icon = ?, owner_id = ?, visibility = ?, status = ?, home_page_id = ?, management_version = management_version + 1, updated_at = UTC_TIMESTAMP() WHERE id = ?',
-                [$name, $description ?: null, $icon ?: null, $owner, $visibility, $status, $home, $id]);
+            $workflow = $this->flag($input['review_workflow'] ?? $space['review_workflow']);
+            $selfReview = $this->flag($input['allow_self_review'] ?? $space['allow_self_review']);
+            if ($workflow !== (int) $space['review_workflow'] || $selfReview !== (int) $space['allow_self_review']) $this->assertAllowed($space, $actor, 'space.manage_access');
+            $db->execute('UPDATE spaces SET name = ?, description = ?, icon = ?, owner_id = ?, visibility = ?, status = ?, home_page_id = ?, review_workflow = ?, allow_self_review = ?, management_version = management_version + 1, updated_at = UTC_TIMESTAMP() WHERE id = ?',
+                [$name, $description ?: null, $icon ?: null, $owner, $visibility, $status, $home, $workflow, $selfReview, $id]);
             $updated = $this->find($id);
             $this->record('SPACE_UPDATED', 'space.updated', $updated, $actorId, $request, $space);
             return $updated;
@@ -122,6 +128,12 @@ final class SpaceService
         });
     }
 
+    private function flag(mixed $value): int
+    {
+        if (!in_array($value, [0, 1, '0', '1', false, true], true)) throw new \InvalidArgumentException('Opcja recenzji musi mieć wartość 0 lub 1.');
+        return (int) $value;
+    }
+
     public function entries(int $id): array
     {
         return $this->app->database()->fetchAll('SELECT a.*, COALESCE(u.username, g.name, r.name, CONCAT("Usunięty #", a.principal_id)) AS principal_name FROM space_acl a LEFT JOIN users u ON a.principal_type = "user" AND u.id = a.principal_id LEFT JOIN user_groups g ON a.principal_type = "group" AND g.id = a.principal_id LEFT JOIN roles r ON a.principal_type = "role" AND r.id = a.principal_id WHERE a.space_id = ? ORDER BY a.permission, a.id', [$id]);
@@ -150,7 +162,7 @@ final class SpaceService
             $acl = new PageAclService($this->app);
             if ($viewer === null || $page === null || !$acl->canViewFor($page, $space, $viewer->id, $viewer->can('*'), $viewer->can('page.view'))) throw new \OutOfBoundsException('Nie znaleziono strony.');
             $acl->snapshot($space, $id, $actor?->can('*') ?? false);
-            foreach (['page.view', 'page.edit', 'page.create', 'page.move', 'page.publish', 'page.archive'] as $permission) $result[$permission] = $acl->explainFor($page, $space, $permission, $id, $actor?->can('*') ?? false, $actor?->can($permission) ?? false);
+            foreach (['page.view', 'page.edit', 'page.create', 'page.move', 'page.publish', 'page.archive', 'page.review', 'page.verify'] as $permission) $result[$permission] = $acl->explainFor($page, $space, $permission, $id, $actor?->can('*') ?? false, $actor?->can($permission) ?? false);
         }
         return $result;
         });
@@ -199,7 +211,7 @@ final class SpaceService
 
     private function record(string $action, string $event, array $space, int $actor, Request $request, ?array $before = null): void
     {
-        $fields = array_flip(['name', 'space_key', 'description', 'icon', 'visibility', 'status', 'owner_id', 'home_page_id', 'management_version']);
+        $fields = array_flip(['name', 'space_key', 'description', 'icon', 'visibility', 'status', 'owner_id', 'home_page_id', 'management_version', 'review_workflow', 'allow_self_review']);
         $after = array_intersect_key($space, $fields);
         (new AuditLogger($this->app->database()))->log($action, 'space', (int) $space['id'], $actor, $request, $before === null ? null : array_intersect_key($before, $fields), $after);
         (new WebhookService($this->app->database()))->queue($event, ['id' => (int) $space['id'], 'actor_id' => $actor] + $after);

@@ -17,6 +17,8 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
         <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>"><?= $e($t('Back to page')) ?></a>
     </div>
 
+    <form method="get" class="card panel form-grid"><label>Od rewizji<select name="from" required><?php foreach (array_reverse($revisions) as $r): ?><option value="<?= (int) $r['revision_number'] ?>" <?= (int) ($diff['from'] ?? 0) === (int) $r['revision_number'] ? 'selected' : '' ?>><?= (int) $r['revision_number'] ?></option><?php endforeach; ?></select></label><label>Do rewizji<select name="to" required><?php foreach ($revisions as $r): ?><option value="<?= (int) $r['revision_number'] ?>" <?= (int) ($diff['to'] ?? 0) === (int) $r['revision_number'] ? 'selected' : '' ?>><?= (int) $r['revision_number'] ?></option><?php endforeach; ?></select></label><button class="button">Porównaj rewizje</button></form>
+    <?php if ($diff !== null): ?><section class="card panel" data-revision-diff><h2>Porównanie treści i metadanych</h2><?php if (isset($diff['error'])): ?><p role="alert"><?= $e($diff['error']) ?></p><?php else: ?><dl><?php foreach ($diff['metadata'] as $key => $change): ?><dt><?= $e($key) ?></dt><dd><del><?= $e(json_encode($change['before'], JSON_UNESCAPED_UNICODE)) ?></del> → <ins><?= $e(json_encode($change['after'], JSON_UNESCAPED_UNICODE)) ?></ins></dd><?php endforeach; ?></dl><pre class="revision-diff"><?php foreach ($diff['document'] as [$kind, $line]): ?><span class="diff-<?= $e($kind) ?>"><?= $kind === 'added' ? '+' : ($kind === 'removed' ? '−' : ' ') ?> <?= $e($line) ?><?= "\n" ?></span><?php endforeach; ?></pre><?php endif; ?></section><?php endif; ?>
     <div class="card panel">
         <div class="revision-list">
             <?php foreach ($revisions as $revision): ?>
@@ -27,7 +29,8 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                         <p><?= $e($revision['change_summary'] ?: $t('No change summary')) ?></p>
                         <small><?= $e($revision['username']) ?> · <?= $e($revision['created_at']) ?></small>
                     </div>
-                    <?php if ($canRestore && (int) $revision['revision_number'] !== (int) $page['version']): ?>
+                    <?php $restoreAllowed = $canRestore && ($revision['status'] !== 'published' || $canRestorePublished) && ($revision['status'] !== 'archived' || $canRestoreArchived); ?>
+                    <?php if ($restoreAllowed && (int) $revision['revision_number'] !== (int) $page['version']): ?>
                         <form method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/restore">
                             <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                             <input type="hidden" name="revision" value="<?= (int) $revision['revision_number'] ?>">
@@ -35,7 +38,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                             <button class="button button--secondary" type="submit"><?= $e($t('Restore')) ?></button>
                         </form>
                     <?php endif; ?>
-                    <?php if ($canRestore && !empty($revision['conversion_backup_json'])): ?>
+                    <?php if ($restoreAllowed && !empty($revision['has_conversion_backup'])): ?>
                         <form method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/restore">
                             <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                             <input type="hidden" name="revision" value="<?= (int) $revision['revision_number'] ?>">

@@ -18,18 +18,38 @@ final class PageRepository
             'SELECT p.*, u.username AS author_username
              FROM pages p
              INNER JOIN users u ON u.id = p.author_id
-             WHERE p.space_id = :space_id AND p.slug = :slug AND p.deleted_at IS NULL
+             WHERE p.space_id = :space_id AND (p.slug = :slug OR EXISTS (SELECT 1 FROM page_revisions r WHERE r.page_id = p.id AND r.revision_number = p.version AND r.slug = :working_slug)) AND p.deleted_at IS NULL
              LIMIT 1',
-            ['space_id' => $spaceId, 'slug' => $slug]
+            ['space_id' => $spaceId, 'slug' => $slug, 'working_slug' => $slug]
         ));
     }
 
     public function findById(int $pageId): ?array
     {
         return \OpenWiki\Wiki\ContentService::storedSource($this->database->fetchOne(
-            'SELECT * FROM pages WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+            'SELECT p.*, u.username AS author_username, s.space_key, s.name AS space_name,
+                    s.visibility AS space_visibility, s.owner_id AS space_owner_id, s.status AS space_status, s.deleted_at AS space_deleted_at
+             FROM pages p INNER JOIN users u ON u.id = p.author_id INNER JOIN spaces s ON s.id = p.space_id WHERE p.id = :id AND p.deleted_at IS NULL LIMIT 1',
             ['id' => $pageId]
         ));
+    }
+
+    public function working(array $page): array
+    {
+        if (empty($page['published_revision']) || (int) $page['published_revision'] === (int) $page['version']) return $page;
+        $revision = $this->revision((int) $page['id'], (int) $page['version']) ?? throw new \RuntimeException('Brak roboczej rewizji.');
+        $fields = ['title', 'slug', 'content_html', 'content_markdown', 'content_text', 'content_format', 'document_json', 'status'];
+        $head = array_replace($page, array_intersect_key($revision, array_flip($fields)));
+        $head['revision_author_id'] = (int) $revision['author_id'];
+        $head['updated_at'] = $revision['created_at'];
+        $head['tags'] = json_decode($revision['tags_json'] ?? '[]', true, 512, JSON_THROW_ON_ERROR);
+        return array_replace($head, json_decode($revision['knowledge_json'] ?? '{}', true, 512, JSON_THROW_ON_ERROR));
+    }
+
+    public function published(array $page): array
+    {
+        if ($page['published_revision'] !== null) $page['version'] = (int) $page['published_revision'];
+        return $page;
     }
 
     public function redirectTarget(int $spaceId, string $oldSlug): ?array
@@ -205,6 +225,11 @@ final class PageRepository
              ORDER BY r.revision_number DESC',
             ['page_id' => $pageId]
         );
+    }
+
+    public function revisionSummaries(int $pageId): array
+    {
+        return $this->database->fetchAll('SELECT r.id, r.page_id, r.revision_number, r.title, r.slug, r.parent_id, r.content_format, r.status, r.author_id, r.change_summary, r.created_at, r.was_published, r.tags_json, r.knowledge_json, (r.conversion_backup_json IS NOT NULL) AS has_conversion_backup, u.username FROM page_revisions r INNER JOIN users u ON u.id = r.author_id WHERE r.page_id = ? ORDER BY r.revision_number DESC', [$pageId]);
     }
 
     public function revision(int $pageId, int $revisionNumber): ?array

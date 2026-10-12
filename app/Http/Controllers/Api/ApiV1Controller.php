@@ -27,6 +27,8 @@ use OpenWiki\Webhooks\WebhookService;
 
 final class ApiV1Controller extends Controller
 {
+    private array $requestSpaces = [];
+    private ?PageAclService $requestAcl = null;
     public function spaces(Request $request): Response
     {
         [$context, $failure] = $this->apiAuth($request, 'spaces:read', 'space.view');
@@ -157,7 +159,7 @@ final class ApiV1Controller extends Controller
         }
 
         $rows = $this->app->database()->fetchAll(
-            'SELECT p.*, u.username AS author_username,
+            'SELECT p.id, p.space_id, p.parent_id, p.inherit_acl, p.owner_id, p.author_id, p.title, p.slug, p.status, p.version, p.published_revision, p.workflow_state, p.content_owner_id, p.review_due_at, p.verified_at, p.verified_revision, p.published_at, p.created_at, p.updated_at, u.username AS author_username,
                     s.space_key, s.name AS space_name, s.visibility AS space_visibility,
                     s.owner_id AS space_owner_id, s.status AS space_status, s.deleted_at AS space_deleted_at
              FROM pages p
@@ -202,6 +204,11 @@ final class ApiV1Controller extends Controller
             return $this->error('not_found', 'Page not found.', 404);
         }
 
+        if ($request->query('view') === 'working') {
+            if (!(new PageAclService($this->app))->canReadWorkingFor($row, $this->spaceFromPage($row), (int) $context['user']['id'], $this->isSuperAdmin($context), $context['permissions'])) return $this->error('not_found', 'Page not found.', 404);
+            $row = (new PageRepository($this->app->database()))->working($row);
+            $row['is_working'] = true;
+        }
         return Response::json(['data' => $this->pageResource($row, $context)]);
     }
 
@@ -1762,6 +1769,8 @@ final class ApiV1Controller extends Controller
             $pages[] = $this->pageListResource($row, $context, $parents);
         }
 
+        if ($pages === []) return $this->error('not_found', 'Tag not found.', 404);
+
         return Response::json([
             'data' => [
                 'id' => (int) $tag['id'],
@@ -1794,7 +1803,7 @@ final class ApiV1Controller extends Controller
         $placeholders = implode(',', array_fill(0, count($state['visible_ids']), '?'));
         $rows = $this->app->database()->fetchAll(
             'SELECT a.id AS attachment_id, a.page_id, a.name, a.mime_type, a.size_bytes,
-                    a.current_version, a.created_at AS attachment_created_at, a.updated_at AS attachment_updated_at,
+                    a.current_version, a.deleted_at, a.created_at AS attachment_created_at, a.updated_at AS attachment_updated_at,
                     p.space_id, p.parent_id, p.inherit_acl, p.status AS page_status,
                     p.owner_id AS page_owner_id, p.author_id AS page_author_id,
                     p.title AS page_title, p.slug AS page_slug,
@@ -1803,13 +1812,14 @@ final class ApiV1Controller extends Controller
              FROM attachments a
              INNER JOIN pages p ON p.id = a.page_id AND p.deleted_at IS NULL
              INNER JOIN spaces s ON s.id = p.space_id AND s.deleted_at IS NULL
-             WHERE a.deleted_at IS NULL
+             WHERE ' . $this->attachmentService()->readableFilesCondition() . '
                AND p.space_id IN (' . $placeholders . ')
              ORDER BY a.updated_at DESC, a.id DESC',
             $state['visible_ids']
         );
 
         $filtered = [];
+        $visibility = new \OpenWiki\Attachments\AttachmentVisibility($this->app->database());
         foreach ($rows as $row) {
             $pageRow = [
                 'id' => (int) $row['page_id'],
@@ -1831,6 +1841,10 @@ final class ApiV1Controller extends Controller
                 continue;
             }
 
+            $row['id'] = (int) $row['attachment_id'];
+            $row = $visibility->project($row, (int) $context['user']['id'], $this->isSuperAdmin($context), $context['permissions']);
+            if ($row === null) continue;
+
             $filtered[] = [
                 'id' => (int) $row['attachment_id'],
                 'page_id' => (int) $row['page_id'],
@@ -1844,7 +1858,7 @@ final class ApiV1Controller extends Controller
                     'space_key' => $row['space_key'],
                 ],
                 'created_at' => $row['attachment_created_at'],
-                'updated_at' => $row['attachment_updated_at'],
+                'updated_at' => $row['updated_at'] ?? $row['attachment_updated_at'],
             ];
         }
 
@@ -1868,11 +1882,11 @@ final class ApiV1Controller extends Controller
 
         $attachmentId = $this->positiveId($id);
         $service = $this->attachmentService();
-        $attachment = $attachmentId === null ? null : $service->find($attachmentId);
+        $attachment = $attachmentId === null ? null : $service->find($attachmentId, true);
 
         if (
             $attachment === null
-            || !$this->canViewAttachment($context, $attachment)
+            || !$this->canViewAttachment($context, $attachment, $request->query('revision') === null ? null : (int) $request->query('revision'))
         ) {
             return $this->error('not_found', 'Attachment not found.', 404);
         }
@@ -2115,11 +2129,11 @@ final class ApiV1Controller extends Controller
 
         $attachmentId = $this->positiveId($id);
         $service = $this->attachmentService();
-        $attachment = $attachmentId === null ? null : $service->find($attachmentId);
+        $attachment = $attachmentId === null ? null : $service->find($attachmentId, true);
 
         if (
             $attachment === null
-            || !$this->canViewAttachment($context, $attachment)
+            || !$this->canViewAttachment($context, $attachment, $request->query('revision') === null ? null : (int) $request->query('revision'))
         ) {
             return $this->error('not_found', 'Attachment not found.', 404);
         }
@@ -2158,11 +2172,11 @@ final class ApiV1Controller extends Controller
 
         $attachmentId = $this->positiveId($id);
         $service = $this->attachmentService();
-        $attachment = $attachmentId === null ? null : $service->find($attachmentId);
+        $attachment = $attachmentId === null ? null : $service->find($attachmentId, true);
 
         if (
             $attachment === null
-            || !$this->canViewAttachment($context, $attachment)
+            || !$this->canViewAttachment($context, $attachment, $request->query('revision') === null ? null : (int) $request->query('revision'))
         ) {
             return $this->error('not_found', 'Attachment not found.', 404);
         }
@@ -2215,10 +2229,10 @@ final class ApiV1Controller extends Controller
 
         $attachmentId = $this->positiveId($id);
         $service = $this->attachmentService();
-        $attachment = $attachmentId === null ? null : $service->find($attachmentId);
+        $attachment = $attachmentId === null ? null : $service->find($attachmentId, true);
         if (
             $attachment === null
-            || !$this->canViewAttachment($context, $attachment)
+            || !$this->canViewAttachment($context, $attachment, $request->query('revision') === null ? null : (int) $request->query('revision'))
         ) {
             return $this->error('not_found', 'Attachment not found.', 404);
         }
@@ -2253,15 +2267,17 @@ final class ApiV1Controller extends Controller
         $attachmentId = $this->positiveId($id);
         $versionNumber = $this->positiveId($version);
         $service = $this->attachmentService();
-        $attachment = $attachmentId === null ? null : $service->find($attachmentId);
+        $attachment = $attachmentId === null ? null : $service->find($attachmentId, true);
 
         if (
             $attachment === null
             || $versionNumber === null
-            || !$this->canViewAttachment($context, $attachment)
+            || !$this->canViewAttachment($context, $attachment, $request->query('revision') === null ? null : (int) $request->query('revision'))
         ) {
             return $this->error('not_found', 'Attachment version not found.', 404);
         }
+
+        if (isset($attachment['_allowed_versions']) && !in_array($versionNumber, $attachment['_allowed_versions'], true)) return $this->error('not_found', 'Attachment version not found.', 404);
 
         try {
             $file = $service->versionPath($attachmentId, $versionNumber);
@@ -2272,7 +2288,7 @@ final class ApiV1Controller extends Controller
             return Response::file(
                 (string) $file['path'],
                 (string) $file['mime_type'],
-                (string) $file['name'],
+                (string) $attachment['name'],
                 false
             );
         } catch (\Throwable $exception) {
@@ -2310,12 +2326,13 @@ final class ApiV1Controller extends Controller
         ];
     }
 
-    private function canViewAttachment(array $context, array $attachment): bool
+    private function canViewAttachment(array $context, array &$attachment, ?int $revision = null): bool
     {
-        return $this->canViewPage(
-            $context,
-            $this->attachmentPage($attachment)
-        );
+        if (!$this->canViewPage($context, $this->attachmentPage($attachment))) return false;
+        $visible = (new \OpenWiki\Attachments\AttachmentVisibility($this->app->database()))->project($attachment, (int) $context['user']['id'], $this->isSuperAdmin($context), $context['permissions'], false, $revision);
+        if ($visible === null) return false;
+        $attachment = $visible;
+        return true;
     }
 
     private function canEditAttachmentPage(array $context, array $attachment): bool
@@ -2342,6 +2359,7 @@ final class ApiV1Controller extends Controller
         array $attachment,
         array $versions = []
     ): array {
+        if (isset($attachment['_allowed_versions'])) $versions = array_values(array_filter($versions, static fn (array $v): bool => in_array((int) $v['version_number'], $attachment['_allowed_versions'], true)));
         $resource = [
             'id' => (int) $attachment['id'],
             'page_id' => (int) $attachment['page_id'],
@@ -2757,6 +2775,8 @@ final class ApiV1Controller extends Controller
 
     private function apiAuth(Request $request, string $scope, ?string $permission = null): array
     {
+        $this->requestSpaces = [];
+        $this->requestAcl = new PageAclService($this->app);
         $tokenService = new ApiTokenService($this->app->database());
         $context = $tokenService->authenticate($request->header('Authorization'));
 
@@ -2955,32 +2975,27 @@ final class ApiV1Controller extends Controller
             $space,
             (int) $context['user']['id'],
             $this->isSuperAdmin($context),
-            $this->contextHasPermission($context, 'page.view')
+            $this->contextHasPermission($context, 'page.view'),
+            $context['permissions']
         );
     }
 
     private function canViewPage(array $context, array $page): bool
     {
-        return (new PageAclService($this->app))->canViewFor(
+        return $this->requestAcl->canViewFor(
             $page,
             $this->spaceFromPage($page),
             (int) $context['user']['id'],
             $this->isSuperAdmin($context),
-            $this->contextHasPermission($context, 'page.view')
+            $this->contextHasPermission($context, 'page.view'),
+            $context['permissions']
         );
     }
 
     private function spaceFromPage(array $page): array
     {
-        return [
-            'id' => (int) $page['space_id'],
-            'space_key' => $page['space_key'],
-            'name' => $page['space_name'],
-            'visibility' => $page['space_visibility'],
-            'owner_id' => (int) $page['space_owner_id'],
-            'status' => $page['space_status'],
-            'deleted_at' => $page['space_deleted_at'],
-        ];
+        return $this->requestSpaces[(int) $page['space_id']] ??= $this->app->database()->fetchOne('SELECT * FROM spaces WHERE id = ?', [(int) $page['space_id']])
+            ?? throw new \OutOfBoundsException('Space not found.');
     }
 
     private function spaceState(array $context, string $spaceKey): array|Response
@@ -3004,6 +3019,7 @@ final class ApiV1Controller extends Controller
         $editableIds = [];
         $access = new SpaceAccessService($this->app);
         foreach ($spaces as $space) {
+            $this->requestSpaces[(int) $space['id']] = $space;
             $visibleIds[] = (int) $space['id'];
             if ($access->canEditFor($space, (int) $context['user']['id'], $this->isSuperAdmin($context))) {
                 $editableIds[] = (int) $space['id'];
@@ -3117,6 +3133,8 @@ final class ApiV1Controller extends Controller
             'owner_id' => (int) $space['owner_id'],
             'home_page_id' => isset($space['home_page_id']) ? (int) $space['home_page_id'] : null,
             'version' => (int) ($space['management_version'] ?? 1),
+            'review_workflow' => (bool) ($space['review_workflow'] ?? false),
+            'allow_self_review' => (bool) ($space['allow_self_review'] ?? false),
             'visibility' => $space['visibility'],
             'status' => $space['status'],
             'created_at' => $space['created_at'] ?? null,
@@ -3231,7 +3249,12 @@ final class ApiV1Controller extends Controller
             'title' => $page['title'],
             'slug' => $page['slug'],
             'status' => $page['status'],
-            'version' => (int) $page['version'],
+            'version' => !empty($page['is_working']) ? (int) $page['version'] : (int) ($page['published_revision'] ?? $page['version']),
+            'published_revision' => isset($page['published_revision']) ? (int) $page['published_revision'] : null,
+            'content_owner_id' => isset($page['content_owner_id']) ? (int) $page['content_owner_id'] : null,
+            'review_due_at' => $page['review_due_at'] ?? null,
+            'verified_at' => $page['verified_at'] ?? null,
+            'verified_revision' => $page['verified_revision'] ?? null,
             'author' => ['id' => (int) $page['author_id'], 'username' => $page['author_username']],
             'owner_id' => (int) $page['owner_id'],
             'space' => ['key' => $page['space_key'], 'name' => $page['space_name']],
@@ -3260,7 +3283,11 @@ final class ApiV1Controller extends Controller
     private function pageResource(array $page, array $context): array
     {
         $page = (new \OpenWiki\Wiki\ContentService())->safeProjection($page);
+        if (isset($page['tags'][0]) && is_string($page['tags'][0])) $page['tags'] = (new WikiMetadataService($this->app->database()))->tagsForNames($page['tags']);
+        $canWork = (new PageAclService($this->app))->canReadWorkingFor($page, $this->spaceFromPage($page), (int) $context['user']['id'], $this->isSuperAdmin($context), $context['permissions']);
         return $this->pageListResource($page, $context) + [
+            'workflow_state' => $canWork ? ($page['workflow_state'] ?? $page['status']) : $page['status'],
+            'working_version' => $canWork ? (int) $page['version'] : null,
             'content_format' => $page['content_format'],
             'content_html' => $page['content_html'],
             'document' => ['version' => \OpenWiki\Wiki\ContentService::SCHEMA_VERSION, 'format' => $page['content_format'],
@@ -3268,6 +3295,78 @@ final class ApiV1Controller extends Controller
             'content_markdown' => $page['content_markdown'],
             'tags' => $page['tags'] ?? (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
         ];
+    }
+
+    public function reviewPage(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'pages:write');
+        if ($failure !== null) return $failure;
+        try {
+            $row = (new \OpenWiki\Wiki\PageReviewService($this->app->database()))->transition($this->positiveId($id) ?? 0, (array) $request->input(), (int) $context['user']['id'], $request, $context['permissions']);
+            return Response::json(['data' => $this->pageResource($row, $context)]);
+        } catch (\Throwable $error) { return $this->reviewFailure($error); }
+    }
+
+    public function pageReview(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'pages:read', 'page.view');
+        if ($failure !== null) return $failure;
+        $page = $this->pageRow($this->positiveId($id) ?? 0);
+        if ($page === null || !(new PageAclService($this->app))->canReadWorkingFor($page, $this->spaceFromPage($page), (int) $context['user']['id'], $this->isSuperAdmin($context), $context['permissions'])) return $this->error('not_found', 'Page not found.', 404);
+        [$number, $perPage, $offset] = $this->pagination($request);
+        $service = new \OpenWiki\Wiki\PageReviewService($this->app->database());
+        return Response::json(['data' => $service->decisions((int) $page['id'], $perPage, $offset), 'meta' => $this->paginationMeta($number, $perPage, $service->decisionCount((int) $page['id']))]);
+    }
+
+    public function pageRevisions(Request $request, string $id): Response { return $this->revisionRead($request, $id, null, false); }
+    public function pageRevision(Request $request, string $id, string $number): Response { return $this->revisionRead($request, $id, $number, false); }
+    public function pageDiff(Request $request, string $id): Response { return $this->revisionRead($request, $id, null, true); }
+
+    private function revisionRead(Request $request, string $id, ?string $number, bool $diff): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'pages:read', 'page.view');
+        if ($failure !== null) return $failure;
+        $row = $this->pageRow($this->positiveId($id) ?? 0);
+        if ($row === null || !$this->canViewPage($context, $row)) return $this->error('not_found', 'Page not found.', 404);
+        $space = $this->spaceFromPage($row); $user = (int) $context['user']['id']; $super = $this->isSuperAdmin($context);
+        $service = new \OpenWiki\Wiki\RevisionAccessService($this->app->database());
+        $get = fn (int $n): array => $service->resource($service->visible($row, $space, $n, $user, $super, $context['permissions']), $space, $user, $super, $context['permissions']);
+        try {
+            if ($diff) return Response::json(['data' => \OpenWiki\Wiki\RevisionDiff::compare($get((int) $request->query('from')), $get((int) $request->query('to')))]);
+            if ($number !== null) return Response::json(['data' => $get($this->positiveId($number) ?? 0)]);
+            $working = (new PageAclService($this->app))->canReadWorkingFor($row, $space, $user, $super, $context['permissions']);
+            $revisions = (new PageRepository($this->app->database()))->revisionSummaries((int) $row['id']);
+            $data = array_values(array_filter($revisions, static fn (array $revision): bool => $working || (bool) $revision['was_published']));
+            return Response::json(['data' => array_map(fn (array $revision): array => $service->metadata($revision, $space, $user, $super), $data)]);
+        } catch (\Throwable $error) { return $this->reviewFailure($error); }
+    }
+
+    public function restorePage(Request $request, string $id): Response
+    {
+        [$context, $failure] = $this->apiAuth($request, 'pages:write', 'page.edit');
+        if ($failure !== null) return $failure;
+        $row = $this->pageRow($this->positiveId($id) ?? 0);
+        if ($row === null || !$this->canEditPageForContext($context, $row)) return $this->error('not_found', 'Page not found.', 404);
+        try {
+            $space = $this->spaceFromPage($row); $service = new \OpenWiki\Wiki\RevisionAccessService($this->app->database());
+            $revision = $service->visible($row, $space, (int) $request->input('revision'), (int) $context['user']['id'], $this->isSuperAdmin($context), $context['permissions']);
+            $input = $service->restoreInput($row, $revision, $request->input('base_version'), (string) $request->input('restore_conversion', '') === '1');
+            if ($request->input('operation_id') !== null) $input['operation_id'] = $request->input('operation_id');
+            $tokens = new ApiTokenService($this->app->database());
+            $saved = (new \OpenWiki\Wiki\PageWriteService($this->app->database(), $this->app->basePath()))->save($space, $row, $input, (int) $context['user']['id'], $request, $this->pageWritePolicy($space, $context), $tokens->hasScope($context, 'attachments:write') && $tokens->hasPermission($context, 'attachment.upload'), (int) $revision['revision_number']);
+            return Response::json(['data' => $this->pageResource($saved, $context)]);
+        } catch (\Throwable $error) { return $this->reviewFailure($error); }
+    }
+
+    private function reviewFailure(\Throwable $error): Response
+    {
+        return match (true) {
+            $error instanceof \DomainException => $this->error('forbidden', $error->getMessage(), 403),
+            $error instanceof \InvalidArgumentException => $this->error('validation_error', $error->getMessage(), 422),
+            $error instanceof \OutOfBoundsException => $this->error('not_found', $error->getMessage(), 404),
+            $error->getMessage() === 'EDIT_CONFLICT' => $this->error('edit_conflict', 'Rewizja zmieniła się. Decyzja nie została zastosowana.', 409),
+            default => $this->error('server_error', 'Nie wykonano operacji dokumentu.', 500),
+        };
     }
 
     private function error(string $code, string $message, int $status, array $headers = []): Response

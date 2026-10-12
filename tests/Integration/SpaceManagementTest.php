@@ -129,7 +129,7 @@ final class SpaceManagementTest extends TestCase
             $input = ['action' => 'move', 'scope' => 'subtree', 'destination_space_id' => (int) $destination['id'], 'base_version' => 1];
             $preview = $service->preview((int) $root['id'], $input, $owner);
             self::assertSame(2, $preview['count']); self::assertSame('Gość', $preview['access_changes'][0]['principal']); self::assertSame(2, $preview['access_changes'][0]['lost']);
-            $db->execute('UPDATE pages SET version = version + 1 WHERE id = ?', [$child['id']]);
+            $writer->save($source, $child, ['base_version' => 1, 'content_html' => '<p>[[Root]] Updated child</p>'], $owner);
             try { $service->execute((int) $root['id'], $input + ['preview_token' => $preview['preview_token'], 'operation_id' => '11111111-1111-4111-8111-111111111111'], $owner, $this->request()); self::fail('Stale plan must fail.'); }
             catch (\OpenWiki\Spaces\SpaceConflict) { self::assertSame((int) $source['id'], (int) $db->fetchOne('SELECT space_id FROM pages WHERE id = ?', [$root['id']])['space_id']); }
             $preview = $service->preview((int) $root['id'], $input, $owner); $input += ['preview_token' => $preview['preview_token'], 'operation_id' => '22222222-2222-4222-8222-222222222222'];

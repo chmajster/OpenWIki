@@ -121,7 +121,8 @@ final class DocumentExportService
                 $indexItems[] = '<li><a href="' . $this->escape($htmlPath) . '">'
                     . $this->escape((string) $page['title']) . '</a></li>';
 
-                foreach ($attachments->listForPage((int) $page['id']) as $attachment) {
+                $visibleFiles = (new \OpenWiki\Attachments\AttachmentVisibility($this->app->database()))->forPage($attachments->listForPage((int) $page['id'], true), $this->app->auth()->user()['id'] ?? null, $this->app->auth()->can('*'), null, true);
+                foreach ($visibleFiles as $attachment) {
                     $source = $attachments->currentPath($attachment);
                     $attachmentName = 'attachments/' . $baseName . '/'
                         . (int) $attachment['id'] . '-'

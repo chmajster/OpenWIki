@@ -45,7 +45,7 @@ final class PageController extends Controller
             'pages' => $this->visibleTree($space),
             'templates' => $templates,
             'tags' => [],
-            'canPublish' => $this->pageWritePolicy($space)('page.publish', $page ?? null),
+            'canPublish' => !(bool) $space['review_workflow'] && $this->pageWritePolicy($space)('page.publish', $page ?? null),
             'canArchive' => $this->pageWritePolicy($space)('page.archive', $page ?? null),
             'canUploadImage' => $this->app->auth()->can('attachment.upload'),
             'imageUploadUrl' => null,
@@ -81,7 +81,7 @@ final class PageController extends Controller
                 $space, null, (array) $request->input(), (int) $user['id'], $request,
                 $this->pageWritePolicy($space), $this->app->auth()->can('attachment.upload')
             );
-            $url = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($saved['slug']);
+            $url = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($saved['slug']) . ((bool) $space['review_workflow'] || ($saved['published_revision'] !== null && $saved['workflow_state'] !== 'published') ? '/review' : '');
             if ($request->expectsJson()) {
                 return Response::json(['data' => ['page' => $saved, 'url' => $url, 'user_id' => (int) $user['id']]]);
             }
@@ -148,7 +148,12 @@ final class PageController extends Controller
             }
         ));
 
+        $workingAccess = $pageAccess->canReadWorking($page, $space);
+        $headVersion = (int) $page['version'];
+        $page = $repository->published($page);
+        $contentOwnerName = $this->app->database()->fetchOne('SELECT username FROM users WHERE id = ?', [$page['content_owner_id']])['username'] ?? 'Nieaktywne konto';
         $rendered = (new MacroService($this->app))->renderPage($page, $space);
+        if ($page['published_revision'] !== null && ((bool) $space['review_workflow'] || $headVersion > (int) $page['published_revision'])) $rendered['html'] = (new \OpenWiki\Wiki\RevisionAccessService($this->app->database()))->renderedHtml($rendered['html'], (int) $page['id'], (int) $page['published_revision']);
 
         return $this->render('pages/show', [
             'structureEnabled' => true,
@@ -158,6 +163,7 @@ final class PageController extends Controller
             'pages' => [],
             'breadcrumbs' => (new \OpenWiki\Spaces\DocumentationTreeService($this->app))->breadcrumbs($space, $page, $user['id'] ?? null, $this->app->auth()->can('*'), $this->app->auth()->can('page.view')),
             'canEdit' => $pageAccess->canEdit($page, $space),
+            'canReadWorking' => $workingAccess, 'headVersion' => $headVersion, 'contentOwnerName' => $contentOwnerName,
             'canMove' => $pageAccess->can($page, $space, 'page.move'),
             'canCopy' => $user !== null && $this->app->auth()->can('page.create'),
             'visibleParentId' => $page['parent_id'] === null ? null : (($parent = $repository->findById((int) $page['parent_id'])) !== null && $pageAccess->canView($parent, $space) ? (int) $parent['id'] : null),
@@ -168,7 +174,7 @@ final class PageController extends Controller
             'comments' => (new CommentService($this->app->database()))->listForPage((int) $page['id']),
             'canComment' => $user !== null && $this->app->auth()->can('comment.create'),
             'canDeleteComment' => $user !== null && $this->app->auth()->can('comment.delete'),
-            'attachments' => (new AttachmentService($this->app->database(), $this->app->basePath()))->listForPage((int) $page['id']),
+            'attachments' => (new \OpenWiki\Attachments\AttachmentVisibility($this->app->database()))->forPage((new AttachmentService($this->app->database(), $this->app->basePath()))->listForPage((int) $page['id'], true), $user['id'] ?? null, $this->app->auth()->can('*')),
             'canUploadAttachment' => $user !== null
                 && $pageAccess->canEdit($page, $space)
                 && $this->app->auth()->can('attachment.upload'),
@@ -207,6 +213,7 @@ final class PageController extends Controller
             return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
+        $page = $repository->working($page);
         $user = $this->app->auth()->user();
         return $this->render('pages/editor', [
             'title' => 'Edit ' . $page['title'],
@@ -215,8 +222,8 @@ final class PageController extends Controller
             'serverDraft' => null,
             'pages' => $this->visibleTree($space),
             'templates' => [],
-            'tags' => (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
-            'canPublish' => $this->pageWritePolicy($space)('page.publish', $page ?? null),
+            'tags' => isset($page['tags']) ? array_map(static fn (string $name): array => ['name' => $name], $page['tags']) : (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
+            'canPublish' => !(bool) $space['review_workflow'] && $this->pageWritePolicy($space)('page.publish', $page ?? null),
             'canArchive' => $this->pageWritePolicy($space)('page.archive', $page ?? null),
             'canUploadImage' => $this->app->auth()->can('attachment.upload'),
             'imageUploadUrl' => '/spaces/' . rawurlencode($space['space_key'])
@@ -263,7 +270,7 @@ final class PageController extends Controller
                 $space, $current, (array) $request->input(), (int) $user['id'], $request,
                 $this->pageWritePolicy($space), $this->app->auth()->can('attachment.upload')
             );
-            $url = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($saved['slug']);
+            $url = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($saved['slug']) . ((bool) $space['review_workflow'] || ($saved['published_revision'] !== null && $saved['workflow_state'] !== 'published') ? '/review' : '');
             if ($request->expectsJson()) {
                 return Response::json(['data' => ['page' => $saved, 'url' => $url, 'user_id' => (int) $user['id']]]);
             }
@@ -297,12 +304,16 @@ final class PageController extends Controller
             return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
+        $canReadWorking = $pageAccess->canReadWorking($page, $space);
         return $this->render('pages/history', [
             'title' => 'History: ' . $page['title'],
             'space' => $space,
             'page' => $page,
-            'revisions' => $repository->revisions((int) $page['id']),
+            'revisions' => array_values(array_filter($repository->revisionSummaries((int) $page['id']), static fn (array $r): bool => (bool) $r['was_published'] || $canReadWorking)),
+            'diff' => $this->revisionDiff($request, $page, $space, $repository, $pageAccess),
             'canRestore' => $pageAccess->canEdit($page, $space),
+            'canRestorePublished' => $pageAccess->can($page, $space, 'page.publish'),
+            'canRestoreArchived' => $pageAccess->can($page, $space, 'page.archive'),
         ]);
     }
 
@@ -315,8 +326,9 @@ final class PageController extends Controller
         if ($page === null || !ctype_digit($number)) return $this->render('errors/404', ['title' => 'Revision not found'], 404);
         if (!(new PageAclService($this->app))->canView($page, $space)) return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         $revision = $repository->revision((int) $page['id'], (int) $number);
-        if ($revision === null) return $this->render('errors/404', ['title' => 'Revision not found'], 404);
+        if ($revision === null || (!(bool) $revision['was_published'] && !(new PageAclService($this->app))->canReadWorking($page, $space))) return $this->render('errors/404', ['title' => 'Revision not found'], 404);
         $safeRevision = (new \OpenWiki\Wiki\ContentService())->safeProjection($revision);
+        $safeRevision['content_html'] = (new \OpenWiki\Wiki\RevisionAccessService($this->app->database()))->renderedHtml($safeRevision['content_html'], (int) $page['id'], (int) $revision['revision_number']);
         // Historical source is immutable; read-time sanitation never writes it back.
         return $this->render('pages/revision', ['title' => $revision['title'], 'space' => $space, 'page' => $page, 'revision' => $safeRevision, 'html' => $safeRevision['content_html']]);
     }
@@ -358,28 +370,13 @@ final class PageController extends Controller
         }
 
         try {
-            $input = $revision;
-            $input['slug'] = $revision['slug'] ?? $page['slug'];
-            $input['parent_id'] = $revision['tags_json'] === null ? $page['parent_id'] : $revision['parent_id'];
-            $input['tags'] = $revision['tags_json'] === null
-                ? array_column((new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']), 'name')
-                : json_decode($revision['tags_json'], true, 512, JSON_THROW_ON_ERROR);
-            $input['base_version'] = $request->input('base_version');
-            $input['change_summary'] = 'Restored revision ' . (int) $revisionNumber;
-            if ((string) $request->input('restore_conversion', '') === '1') {
-                if ($revision['conversion_backup_json'] === null) throw new \InvalidArgumentException('This revision has no conversion recovery copy.');
-                $backup = json_decode($revision['conversion_backup_json'], true, 512, JSON_THROW_ON_ERROR);
-                $input['content_format'] = $backup['format'];
-                $input['content_html'] = $backup['html'];
-                $input['content_markdown'] = $backup['markdown'];
-                $input['change_summary'] = 'Restored content before conversion in revision ' . (int) $revisionNumber;
-            }
+            $input = (new \OpenWiki\Wiki\RevisionAccessService($this->app->database()))->restoreInput($page, $revision, $request->input('base_version'), (string) $request->input('restore_conversion', '') === '1');
             $saved = (new \OpenWiki\Wiki\PageWriteService($this->app->database(), $this->app->basePath()))->save(
                 $space, $page, $input, (int) $this->app->auth()->user()['id'], $request,
                 $this->pageWritePolicy($space), $this->app->auth()->can('attachment.upload'), (int) $revisionNumber
             );
             Session::flash('success', 'Revision restored as a new version.');
-            return Response::redirect('/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($saved['slug']));
+            return Response::redirect('/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($saved['slug']) . ((bool) $space['review_workflow'] || ($saved['published_revision'] !== null && $saved['workflow_state'] !== 'published') ? '/review' : ''));
         } catch (\Throwable $exception) {
             return $this->editorError($request, $space, $page, $exception, $input ?? null);
         }
@@ -389,6 +386,23 @@ final class PageController extends Controller
     {
         return (new PageAclService($this->app))->visiblePages($space,
             fn (): array => (new PageRepository($this->app->database()))->tree((int) $space['id']));
+    }
+
+    private function revisionDiff(Request $request, array $page, array $space, PageRepository $repository, PageAclService $acl): ?array
+    {
+        if ($request->query('from') === null && $request->query('to') === null) return null;
+        $from = filter_var($request->query('from'), FILTER_VALIDATE_INT);
+        $to = filter_var($request->query('to'), FILTER_VALIDATE_INT);
+        $a = $from === false ? null : $repository->revision((int) $page['id'], (int) $from);
+        $b = $to === false ? null : $repository->revision((int) $page['id'], (int) $to);
+        if ($a === null || $b === null || (!$acl->canReadWorking($page, $space) && (!(bool) $a['was_published'] || !(bool) $b['was_published']))) return ['error' => 'Wybrane rewizje nie są dostępne.'];
+        foreach (['a', 'b'] as $key) {
+            $revision = &${$key};
+            $parent = $revision['parent_id'] === null ? null : $repository->findById((int) $revision['parent_id']);
+            if ($revision['parent_id'] !== null && ($parent === null || (int) $parent['space_id'] !== (int) $space['id'] || !$acl->canView($parent, $space))) $revision['parent_id'] = 'Niedostępny poziom';
+            unset($revision);
+        }
+        return ['from' => $from, 'to' => $to] + \OpenWiki\Wiki\RevisionDiff::compare($a, $b);
     }
 
     private function space(string $spaceKey): array|Response
@@ -420,6 +434,7 @@ final class PageController extends Controller
         $conflict = null;
         if ($exception->getMessage() === 'EDIT_CONFLICT' && $page !== null) {
             $server = $repository->findById((int) $page['id']);
+            if ($server !== null) $server = $repository->working($server);
             if ($server !== null && !$this->pageWritePolicy($space)('page.view', $server)) {
                 $exception = new \DomainException('You no longer have permission to access the current page. Your local document remains recoverable.');
                 $message = $exception->getMessage();
@@ -460,7 +475,7 @@ final class PageController extends Controller
             'tags' => $page === null
                 ? []
                 : (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
-            'canPublish' => $this->pageWritePolicy($space)('page.publish', $page ?? null),
+            'canPublish' => !(bool) $space['review_workflow'] && $this->pageWritePolicy($space)('page.publish', $page ?? null),
             'canArchive' => $this->pageWritePolicy($space)('page.archive', $page ?? null),
             'canUploadImage' => $this->app->auth()->can('attachment.upload'),
             'imageUploadUrl' => $page === null

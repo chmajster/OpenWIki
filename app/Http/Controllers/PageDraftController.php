@@ -120,7 +120,7 @@ final class PageDraftController extends Controller
                 (int) $context['space']['id'], (int) $this->app->auth()->user()['id'], $context['document_key']);
             $payload = ['format' => $content['format'], 'html' => $content['html'],
                 'markdown' => $content['markdown'] ?? '', 'document' => $content['document'], 'baseVersion' => $base];
-            foreach (['title' => 255, 'slug' => 255, 'parent_id' => 20, 'status' => 20, 'tags' => 4000, 'change_summary' => 500] as $field => $limit) {
+            foreach (['title' => 255, 'slug' => 255, 'parent_id' => 20, 'status' => 20, 'tags' => 4000, 'change_summary' => 500, 'content_owner_id' => 20, 'review_due_at' => 10] as $field => $limit) {
                 $value = $request->input($field, '');
                 if (!is_string($value) || mb_strlen($value) > $limit) throw new \InvalidArgumentException('Invalid draft field: ' . $field);
                 $key = ['parent_id' => 'parentId', 'change_summary' => 'changeSummary'][$field] ?? $field;

@@ -95,7 +95,9 @@ final class PageEngagementService
         int $actorUserId,
         string $eventType,
         string $title,
-        string $targetUrl
+        string $targetUrl,
+        bool $working = false,
+        array $additionalRecipients = []
     ): void {
         $watchers = $this->database->fetchAll(
             'SELECT DISTINCT user_id
@@ -105,11 +107,20 @@ final class PageEngagementService
             ['page_id' => $pageId, 'space_id' => $spaceId]
         );
 
-        foreach ($watchers as $watcher) {
-            $userId = (int) $watcher['user_id'];
+        $page = (new \OpenWiki\Repositories\PageRepository($this->database))->findById($pageId);
+        $space = $this->database->fetchOne('SELECT * FROM spaces WHERE id = ?', [$spaceId]);
+        if ($page === null || $space === null) return;
+        $recipients = array_unique([...array_column($watchers, 'user_id'), ...$additionalRecipients]);
+        $acl = new \OpenWiki\Permissions\PageAclService($this->database);
+        foreach ($recipients as $recipient) {
+            $userId = (int) $recipient;
             if ($userId === $actorUserId) {
                 continue;
             }
+
+            try { $actor = new \OpenWiki\Spaces\SpaceActor($this->database, $userId, null, false); }
+            catch (\DomainException) { continue; }
+            if (!$acl->canViewFor($page, $space, $userId, $actor->can('*'), $actor->can('page.view')) || ($working && !$acl->canReadWorkingFor($page, $space, $userId, $actor->can('*')))) continue;
 
             $this->database->execute(
                 'INSERT INTO notifications

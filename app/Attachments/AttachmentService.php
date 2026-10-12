@@ -18,23 +18,23 @@ final class AttachmentService
         $this->storageRoot = rtrim($basePath, '/\\') . '/storage/attachments';
     }
 
-    public function listForPage(int $pageId): array
+    public function listForPage(int $pageId, bool $publishedFiles = false): array
     {
         return $this->database->fetchAll(
             'SELECT a.id, a.page_id, a.uploader_id, a.name, a.storage_key, a.mime_type, a.size_bytes,
-                    a.current_version, a.created_at, a.updated_at,
+                    a.current_version, a.created_at, a.updated_at, a.deleted_at,
                     av.sha256, u.username AS uploader_username
              FROM attachments a
              INNER JOIN attachment_versions av
                 ON av.attachment_id = a.id AND av.version_number = a.current_version
              INNER JOIN users u ON u.id = a.uploader_id
-             WHERE a.page_id = :page_id AND a.deleted_at IS NULL
+             WHERE a.page_id = :page_id AND ' . ($publishedFiles ? $this->readableFilesCondition() : 'a.deleted_at IS NULL') . '
              ORDER BY a.updated_at DESC, a.id DESC',
             ['page_id' => $pageId]
         );
     }
 
-    public function find(int $attachmentId): ?array
+    public function find(int $attachmentId, bool $publishedFiles = false): ?array
     {
         return $this->database->fetchOne(
             'SELECT a.*, p.space_id, p.title AS page_title, p.slug AS page_slug, p.status AS page_status,
@@ -48,7 +48,7 @@ final class AttachmentService
              INNER JOIN spaces s ON s.id = p.space_id
              INNER JOIN attachment_versions av
                 ON av.attachment_id = a.id AND av.version_number = a.current_version
-             WHERE a.id = :id AND a.deleted_at IS NULL
+             WHERE a.id = :id AND ' . ($publishedFiles ? $this->readableFilesCondition() : 'a.deleted_at IS NULL') . '
              LIMIT 1',
             ['id' => $attachmentId]
         );
@@ -65,6 +65,12 @@ final class AttachmentService
              ORDER BY av.version_number DESC',
             ['attachment_id' => $attachmentId]
         );
+    }
+
+    /** Deleting a working file must not remove the current publication's bytes. */
+    public function readableFilesCondition(): string
+    {
+        return '(a.deleted_at IS NULL OR EXISTS (SELECT 1 FROM page_revision_attachments f INNER JOIN pages fp ON fp.id = f.page_id INNER JOIN spaces fs ON fs.id = fp.space_id WHERE f.attachment_id = a.id AND (fs.review_workflow = 1 OR (f.revision_number = fp.published_revision AND fp.published_revision <> fp.version))))';
     }
 
     public function upload(int $pageId, int $uploaderId, array $file): int

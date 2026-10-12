@@ -147,7 +147,7 @@ final class AttachmentController extends Controller
 
     public function thumbnail(Request $request, string $id): Response
     {
-        $attachment = $this->accessibleAttachment($id);
+        $attachment = $this->accessibleAttachment($id, $request);
         if ($attachment instanceof Response) {
             return $attachment;
         }
@@ -317,7 +317,7 @@ final class AttachmentController extends Controller
 
     public function download(Request $request, string $id): Response
     {
-        $attachment = $this->accessibleAttachment($id);
+        $attachment = $this->accessibleAttachment($id, $request);
         if ($attachment instanceof Response) {
             return $attachment;
         }
@@ -337,7 +337,7 @@ final class AttachmentController extends Controller
 
     public function preview(Request $request, string $id): Response
     {
-        $attachment = $this->accessibleAttachment($id);
+        $attachment = $this->accessibleAttachment($id, $request);
         if ($attachment instanceof Response) {
             return $attachment;
         }
@@ -362,13 +362,13 @@ final class AttachmentController extends Controller
 
     public function downloadVersion(Request $request, string $id, string $version): Response
     {
-        $attachment = $this->accessibleAttachment($id);
+        $attachment = $this->accessibleAttachment($id, $request);
         if ($attachment instanceof Response) {
             return $attachment;
         }
 
         $versionNumber = $this->positiveId($version);
-        if ($versionNumber === null) {
+        if ($versionNumber === null || (isset($attachment['_allowed_versions']) && !in_array($versionNumber, $attachment['_allowed_versions'], true))) {
             return $this->render('errors/404', ['title' => 'Attachment version not found'], 404);
         }
 
@@ -381,7 +381,7 @@ final class AttachmentController extends Controller
             return Response::file(
                 (string) $file['path'],
                 (string) $file['mime_type'],
-                (string) $file['name'],
+                (string) $attachment['name'],
                 false
             );
         } catch (\Throwable $exception) {
@@ -409,14 +409,14 @@ final class AttachmentController extends Controller
         return [$space, $page, null];
     }
 
-    private function accessibleAttachment(string $id): array|Response
+    private function accessibleAttachment(string $id, Request $request): array|Response
     {
         $attachmentId = $this->positiveId($id);
         if ($attachmentId === null) {
             return $this->render('errors/404', ['title' => 'Attachment not found'], 404);
         }
 
-        $attachment = $this->service()->find($attachmentId);
+        $attachment = $this->service()->find($attachmentId, true);
         if ($attachment === null) {
             return $this->render('errors/404', ['title' => 'Attachment not found'], 404);
         }
@@ -442,7 +442,8 @@ final class AttachmentController extends Controller
             return $this->render('errors/404', ['title' => 'Attachment not found'], 404);
         }
 
-        return $attachment;
+        return (new \OpenWiki\Attachments\AttachmentVisibility($this->app->database()))->project($attachment, $this->app->auth()->user()['id'] ?? null, $this->app->auth()->can('*'), null, false, $request->query('revision') === null ? null : (int) $request->query('revision'))
+            ?? $this->render('errors/404', ['title' => 'Attachment not found'], 404);
     }
 
     private function service(): AttachmentService

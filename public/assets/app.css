@@ -1175,3 +1175,5 @@ dialog .button { margin: 8px 8px 0 0; }
  .page-actions > .button, .page-actions > .page-menu { flex: 0 0 auto; white-space: nowrap; }
  .visual-editor { min-height: 360px; padding: 16px; }
 }
+
+.revision-diff{overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}.revision-diff span{display:block}.diff-removed{background:#ffe3e3;color:#711}.diff-added{background:#dcfce7;color:#14532d}

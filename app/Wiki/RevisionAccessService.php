@@ -1,0 +1,72 @@
+<?php
+declare(strict_types=1);
+namespace OpenWiki\Wiki;
+
+use OpenWiki\Core\Database;
+use OpenWiki\Permissions\PageAclService;
+use OpenWiki\Repositories\PageRepository;
+
+final class RevisionAccessService
+{
+    public function __construct(private readonly Database $db) {}
+
+    public function visible(array $page, array $space, int $number, ?int $user, bool $super = false, ?array $ceiling = null): array
+    {
+        $row = (new PageRepository($this->db))->revision((int) $page['id'], $number);
+        $acl = new PageAclService($this->db);
+        if ($row === null || !$acl->canViewFor($page, $space, $user, $super, true, $ceiling) || (!$row['was_published'] && !$acl->canReadWorkingFor($page, $space, $user, $super, $ceiling))) throw new \OutOfBoundsException('Nie znaleziono dostępnej rewizji.');
+        return $row;
+    }
+
+    public function resource(array $revision, array $space, ?int $user, bool $super, ?array $ceiling = null): array
+    {
+        $row = (new ContentService())->safeProjection($revision);
+        $row['rendered_html'] = $this->renderedHtml($row['content_html'], (int) $row['page_id'], (int) $row['revision_number']);
+        return $this->metadata($row, $space, $user, $super);
+    }
+
+    /** Bind rendered protected URLs without modifying the stored document source. */
+    public function renderedHtml(string $html, int $page, int $number): string
+    {
+        $ids = array_map('intval', array_column($this->db->fetchAll('SELECT id FROM attachments WHERE page_id = ?', [$page]), 'id'));
+        return self::bindFiles($html, $number, $ids);
+    }
+
+    public static function bindFiles(string $html, int $number, ?array $ownedFiles = null): string
+    {
+        $owned = $ownedFiles === null ? null : array_fill_keys($ownedFiles, true);
+        return preg_replace_callback('~\b(href|src)="(/attachments/([1-9][0-9]*)/(?:preview|download|thumbnail)(?:[?#][^"]*)?)"~', static function (array $match) use ($number, $owned): string {
+            if ($owned !== null && !isset($owned[(int) $match[3]])) return $match[0];
+            $url = parse_url(html_entity_decode($match[2], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            parse_str($url['query'] ?? '', $query); $query['revision'] = $number;
+            $target = $url['path'] . '?' . http_build_query($query) . (isset($url['fragment']) ? '#' . $url['fragment'] : '');
+            return $match[1] . '="' . htmlspecialchars($target, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"';
+        }, $html) ?? $html;
+    }
+
+    public function metadata(array $row, array $space, ?int $user, bool $super): array
+    {
+        $parent = $row['parent_id'] === null ? null : (new PageRepository($this->db))->findById((int) $row['parent_id']);
+        if ($row['parent_id'] !== null && ($parent === null || (int) $parent['space_id'] !== (int) $space['id'] || !(new PageAclService($this->db))->canViewFor($parent, $space, $user, $super))) $row['parent_id'] = null;
+        unset($row['conversion_backup_json']);
+        return $row;
+    }
+
+    public function restoreInput(array $page, array $revision, mixed $base, bool $conversion = false): array
+    {
+        $input = $revision;
+        $input['slug'] = $revision['slug'] ?? $page['slug'];
+        $input['parent_id'] = $revision['tags_json'] === null ? $page['parent_id'] : $revision['parent_id'];
+        $input['tags'] = $revision['tags_json'] === null ? array_column((new WikiMetadataService($this->db))->tagsForPage((int) $page['id']), 'name') : json_decode($revision['tags_json'], true, 512, JSON_THROW_ON_ERROR);
+        $input['base_version'] = $base;
+        $input['change_summary'] = 'Restored revision ' . (int) $revision['revision_number'];
+        $input += json_decode($revision['knowledge_json'] ?? '{}', true, 512, JSON_THROW_ON_ERROR);
+        if ($conversion) {
+            if ($revision['conversion_backup_json'] === null) throw new \InvalidArgumentException('This revision has no conversion recovery copy.');
+            $backup = json_decode($revision['conversion_backup_json'], true, 512, JSON_THROW_ON_ERROR);
+            $input['content_format'] = $backup['format']; $input['content_html'] = $backup['html']; $input['content_markdown'] = $backup['markdown'];
+            $input['change_summary'] = 'Restored content before conversion in revision ' . (int) $revision['revision_number'];
+        }
+        return $input;
+    }
+}

@@ -76,6 +76,7 @@ final class WikiMetadataController extends Controller
             }
         }
 
+        if ($pages === []) return $this->render('errors/404', ['title' => 'Tag not found'], 404);
         return $this->render('tags/show', [
             'title' => 'Tag: ' . $tag['name'],
             'tag' => $tag,

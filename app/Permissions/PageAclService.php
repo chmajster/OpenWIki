@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OpenWiki\Permissions;
 
 use OpenWiki\Core\Application;
+use OpenWiki\Core\Database;
 
 final class PageAclService
 {
@@ -14,11 +15,13 @@ final class PageAclService
     private array $snapshotRules = [];
     private array $snapshotPrincipals = [];
     private array $snapshotAccess = [];
+    private array $reviewSpaces = [];
+    private array $workingActors = [];
 
     /** One consistent read operation, or a subtree mutation holding its space lock. */
     public function snapshot(array $space, ?int $userId, bool $superAdmin): void
     {
-        $db = $this->app->database();
+        $db = $this->database;
         if (!$db->pdo()->inTransaction()) throw new \LogicException('An ACL snapshot requires a transaction.');
         $lock = $this->lockingReads ? ' FOR UPDATE' : '';
         $this->snapshotSpace = (int) $space['id']; $this->snapshotUser = $userId;
@@ -31,14 +34,14 @@ final class PageAclService
         foreach (['role' => ['user_roles', 'role_id'], 'group' => ['group_users', 'group_id']] as $kind => [$table, $column]) {
             if ($userId !== null) foreach ($db->fetchAll('SELECT ' . $column . ' AS id FROM ' . $table . ' WHERE user_id = ?' . $lock, [$userId]) as $row) $this->snapshotPrincipals[$kind . ':' . $row['id']] = true;
         }
-        $access = new SpaceAccessService($this->app, $this->lockingReads);
+        $access = new SpaceAccessService($this->database, $this->lockingReads);
         $this->snapshotAccess = ['view' => $access->canViewFor($space, $userId, $superAdmin), 'edit' => $userId !== null && $access->canEditFor($space, $userId, $superAdmin)];
     }
 
     public function visiblePages(array $space, callable $fetchRows): array
     {
         try {
-            return $this->app->database()->transaction(function () use ($space, $fetchRows): array {
+            return $this->database->transaction(function () use ($space, $fetchRows): array {
                 $user = $this->app->auth()->user();
                 $this->snapshot($space, $user === null ? null : (int) $user['id'], $this->app->auth()->can('*'));
                 return array_values(array_filter($fetchRows(), fn (array $page): bool => $this->canView($page, $space)));
@@ -48,8 +51,10 @@ final class PageAclService
         }
     }
 
-    public function __construct(private readonly Application $app, private readonly bool $lockingReads = false)
+    private readonly Database $database;
+    public function __construct(private readonly Application|Database $app, private readonly bool $lockingReads = false)
     {
+        $this->database = $app instanceof Database ? $app : $app->database();
     }
 
     /** Evaluate a proposed tree without mutating persisted pages or issuing per-page queries. */
@@ -108,9 +113,10 @@ final class PageAclService
         array $space,
         ?int $userId,
         bool $superAdmin = false,
-        bool $hasPageViewPermission = true
+        bool $hasPageViewPermission = true,
+        ?array $ceiling = null
     ): bool {
-        $spaceAccess = new SpaceAccessService($this->app, $this->lockingReads);
+        $spaceAccess = new SpaceAccessService($this->database, $this->lockingReads);
         if (!($this->usesSnapshot($space, $userId) ? $this->snapshotAccess['view'] : $spaceAccess->canViewFor($space, $userId, $superAdmin))) {
             return false;
         }
@@ -131,6 +137,9 @@ final class PageAclService
             return true;
         }
 
+        $workflow = $space['review_workflow'] ?? ($this->reviewSpaces[(int) $space['id']] ??= $this->database->fetchOne('SELECT review_workflow FROM spaces WHERE id = ?', [$space['id']])['review_workflow'] ?? 0);
+        if ((bool) $workflow) return $this->canReadWorkingFor($page, $space, $userId, $superAdmin, $ceiling);
+
         if ($userId === null) {
             return false;
         }
@@ -147,6 +156,27 @@ final class PageAclService
     public function canEdit(array $page, array $space): bool
     {
         return $this->can($page, $space, 'page.edit');
+    }
+
+    public function canReadWorkingFor(array $page, array $space, ?int $user, bool $super = false, ?array $ceiling = null): bool
+    {
+        if ($user === null) return false;
+        $key = $user . ':' . hash('sha256', json_encode($ceiling));
+        try { $actor = $this->workingActors[$key] ??= new \OpenWiki\Spaces\SpaceActor($this->database, $user, $ceiling, $this->lockingReads); }
+        catch (\DomainException) { return false; }
+        // Evaluate the resource ACL without recursing through draft visibility.
+        $resource = array_replace($page, ['status' => 'published']);
+        // An archive disables mutations, not an authorized collaborator's historical reads.
+        $readSpace = array_replace($space, ['status' => 'active']);
+        foreach (['page.edit', 'page.review', 'page.publish'] as $permission) {
+            if ($this->canFor($resource, $readSpace, $permission, $user, $super && $actor->can('*'), $actor->can($permission))) return true;
+        }
+        return false;
+    }
+
+    public function canReadWorking(array $page, array $space): bool
+    {
+        return $this->canReadWorkingFor($page, $space, $this->app->auth()->user()['id'] ?? null, $this->app->auth()->can('*'));
     }
 
     public function can(array $page, array $space, string $permission): bool
@@ -187,7 +217,7 @@ final class PageAclService
             return false;
         }
 
-        $spaceAccess = new SpaceAccessService($this->app, $this->lockingReads);
+        $spaceAccess = new SpaceAccessService($this->database, $this->lockingReads);
         $baseAllowed = $this->usesSnapshot($space, $userId) ? $this->snapshotAccess[$permission === 'page.view' ? 'view' : 'edit'] : ($permission === 'page.view'
             ? $spaceAccess->canViewFor($space, $userId, $superAdmin)
             : $spaceAccess->canEditFor($space, $userId, $superAdmin));
@@ -201,7 +231,7 @@ final class PageAclService
 
     public function entries(int $pageId): array
     {
-        $rows = $this->app->database()->fetchAll(
+        $rows = $this->database->fetchAll(
             'SELECT id, page_id, principal_type, principal_id, permission, effect,
                     inherit_to_children, created_at
              FROM page_acl
@@ -228,7 +258,7 @@ final class PageAclService
 
     private function setInheritanceUnchecked(int $pageId, bool $inherit): void
     {
-        $updated = $this->app->database()->execute(
+        $updated = $this->database->execute(
             'UPDATE pages SET inherit_acl = :inherit_acl, updated_at = UTC_TIMESTAMP()
              WHERE id = :id AND deleted_at IS NULL',
             ['inherit_acl' => $inherit ? 1 : 0, 'id' => $pageId]
@@ -266,7 +296,7 @@ final class PageAclService
             throw new \InvalidArgumentException('Invalid ACL effect.');
         }
 
-        $existing = $this->app->database()->fetchOne(
+        $existing = $this->database->fetchOne(
             'SELECT id FROM page_acl
              WHERE page_id = :page_id
                AND principal_type = :principal_type
@@ -282,7 +312,7 @@ final class PageAclService
         );
 
         if ($existing !== null) {
-            $this->app->database()->execute(
+            $this->database->execute(
                 'UPDATE page_acl
                  SET effect = :effect, inherit_to_children = :inherit_to_children
                  WHERE id = :id',
@@ -295,7 +325,7 @@ final class PageAclService
             return (int) $existing['id'];
         }
 
-        return $this->app->database()->insert(
+        return $this->database->insert(
             'INSERT INTO page_acl
              (page_id, principal_type, principal_id, permission, effect, inherit_to_children, created_at)
              VALUES
@@ -318,7 +348,7 @@ final class PageAclService
 
     private function deleteRuleUnchecked(int $pageId, int $ruleId): bool
     {
-        return $this->app->database()->execute(
+        return $this->database->execute(
             'DELETE FROM page_acl WHERE id = :id AND page_id = :page_id',
             ['id' => $ruleId, 'page_id' => $pageId]
         ) === 1;
@@ -326,7 +356,7 @@ final class PageAclService
 
     public function pagePermissions(): array
     {
-        return $this->app->database()->fetchAll(
+        return $this->database->fetchAll(
             'SELECT id, name, description
              FROM permissions
              WHERE name LIKE "page.%"
@@ -336,13 +366,13 @@ final class PageAclService
 
     private function usesSnapshot(array $space, ?int $userId): bool
     {
-        return $this->app->database()->pdo()->inTransaction() && $this->snapshotSpace === (int) $space['id'] && $this->snapshotUser === $userId;
+        return $this->database->pdo()->inTransaction() && $this->snapshotSpace === (int) $space['id'] && $this->snapshotUser === $userId;
     }
 
     private function lockedMutation(int $pageId, callable $operation): mixed
     {
-        return $this->app->database()->transaction(function () use ($pageId, $operation): mixed {
-            $db = $this->app->database();
+        return $this->database->transaction(function () use ($pageId, $operation): mixed {
+            $db = $this->database;
             $page = $db->fetchOne('SELECT space_id FROM pages WHERE id = ?', [$pageId]);
             if ($page === null) throw new \InvalidArgumentException('Page not found.');
             $db->fetchOne('SELECT id FROM spaces WHERE id = ? FOR UPDATE', [$page['space_id']]);
@@ -380,7 +410,7 @@ final class PageAclService
             }
             $visited[$parentId] = true;
 
-            $parent = $snapshot ? ($this->snapshotPages[$parentId] ?? null) : $this->app->database()->fetchOne(
+            $parent = $snapshot ? ($this->snapshotPages[$parentId] ?? null) : $this->database->fetchOne(
                 'SELECT id, parent_id, inherit_acl
                  FROM pages
                  WHERE id = :id
@@ -437,7 +467,7 @@ final class PageAclService
             $where .= ' AND inherit_to_children = 1';
         }
 
-        $allow = $this->app->database()->fetchOne(
+        $allow = $this->database->fetchOne(
             'SELECT id FROM page_acl
              WHERE ' . $where . ' AND effect = "allow"
              LIMIT 1',
@@ -492,7 +522,7 @@ final class PageAclService
         $params[] = $userId;
         $params[] = $userId;
 
-        return array_column($this->app->database()->fetchAll($sql, $params), 'effect');
+        return array_column($this->database->fetchAll($sql, $params), 'effect');
     }
 
     private function principalExists(string $type, int $id): bool
@@ -510,21 +540,21 @@ final class PageAclService
         }
         $sql .= ' LIMIT 1';
 
-        return $this->app->database()->fetchOne($sql, ['id' => $id]) !== null;
+        return $this->database->fetchOne($sql, ['id' => $id]) !== null;
     }
 
     private function principalName(string $type, int $id): string
     {
         return match ($type) {
-            'user' => (string) (($this->app->database()->fetchOne(
+            'user' => (string) (($this->database->fetchOne(
                 'SELECT username AS name FROM users WHERE id = :id LIMIT 1',
                 ['id' => $id]
             )['name'] ?? 'Deleted user #' . $id)),
-            'group' => (string) (($this->app->database()->fetchOne(
+            'group' => (string) (($this->database->fetchOne(
                 'SELECT name FROM user_groups WHERE id = :id LIMIT 1',
                 ['id' => $id]
             )['name'] ?? 'Deleted group #' . $id)),
-            'role' => (string) (($this->app->database()->fetchOne(
+            'role' => (string) (($this->database->fetchOne(
                 'SELECT name FROM roles WHERE id = :id LIMIT 1',
                 ['id' => $id]
             )['name'] ?? 'Deleted role #' . $id)),
@@ -534,7 +564,7 @@ final class PageAclService
 
     private function permissionExists(string $permission): bool
     {
-        return $this->app->database()->fetchOne(
+        return $this->database->fetchOne(
             'SELECT id FROM permissions WHERE name = :name LIMIT 1',
             ['name' => $permission]
         ) !== null;
