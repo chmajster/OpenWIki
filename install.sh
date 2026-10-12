@@ -439,7 +439,11 @@ configure_nginx() {
   local socket
   socket="$(detect_fpm_socket)" || fail "Nie znaleziono socketu PHP-FPM."
 
-  local conf server_names
+  local conf server_names health_exceptions=""
+  if [[ -f "${APP_DIR:-$INSTALL_DIR}/app/Upgrade/WriteGate.php" ]]; then
+    health_exceptions='if ($uri = /health) { set $openwiki_maintenance ""; }
+    if ($uri = /health/live) { set $openwiki_maintenance ""; }'
+  fi
   server_names="$(nginx_server_names)"
   if [[ "$PKG_FAMILY" == "apt" ]]; then
     conf="/etc/nginx/sites-available/$NGINX_SITE"
@@ -455,7 +459,10 @@ server {
     root ${APP_DIR:-$INSTALL_DIR}/public;
     index index.php;
 
-    if (-f $INSTALL_DIR/.openwiki/maintenance) { return 503; }
+    set \$openwiki_maintenance "";
+    if (-f $INSTALL_DIR/.openwiki/maintenance) { set \$openwiki_maintenance "blocked"; }
+    $health_exceptions
+    if (\$openwiki_maintenance = "blocked") { return 503; }
 
     client_max_body_size 64m;
 

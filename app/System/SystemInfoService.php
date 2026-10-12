@@ -45,7 +45,7 @@ final class SystemInfoService
              LIMIT 1'
         );
         } catch (\Throwable) { /* Keep runtime and storage diagnostics available when DB/schema is unavailable. */ }
-        $requirements = (new InstallService($basePath))->requirements();
+        $requirements = (new InstallService($basePath))->requirements(false);
         $cronLastRun = $cron === null ? null : (string) $cron['setting_value'];
         $cronTimestamp = $cronLastRun === null ? false : strtotime($cronLastRun);
         $cronStale = $cronTimestamp === false || (time() - $cronTimestamp) > 600;

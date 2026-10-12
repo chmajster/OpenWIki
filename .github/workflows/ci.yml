@@ -266,3 +266,51 @@ jobs:
           printf 'DELETE\n' |
             sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --uninstall
           test ! -e /var/www/openwiki-ci
+
+      - name: Install an actual legacy release with schema 004
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          legacy=08425a0029bc60e3cab69bf0206f1276f0a24cf6
+          sudo mkdir /var/www/openwiki-legacy-ci
+          sudo git -C /var/www/openwiki-legacy-ci init
+          sudo git -C /var/www/openwiki-legacy-ci remote add origin https://github.com/chmajster/OpenWIki.git
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-legacy-ci OPENWIKI_GIT_REF="$legacy" NO_COLOR=1 \
+            bash ./install.sh <<'EOF'
+          openwiki_legacy_ci
+          openwiki_legacy_ci
+          OpenWiki-DB-CI-Password-123!
+          OpenWiki Legacy CI
+          http://127.0.0.1
+          UTC
+          ci-admin
+          ci@example.invalid
+          OpenWiki-Admin-CI-Password-123!
+          CI
+          Admin
+          EOF
+          sudo php tests/Upgrade/host-fixture.php seed /var/www/openwiki-legacy-ci > "$RUNNER_TEMP/upgrade-host.json"
+          sudo php tests/Upgrade/host-fixture.php snapshot /var/www/openwiki-legacy-ci > "$RUNNER_TEMP/upgrade-data-before"
+          sudo sha256sum /var/www/openwiki-legacy-ci/.env | awk '{print $1}' > "$RUNNER_TEMP/upgrade-key-before"
+
+      - name: Upgrade actual legacy PHP-FPM runtime and verify preserved data
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-legacy-ci NO_COLOR=1 bash ./install.sh --upgrade "$ref" </dev/null
+          sudo php tests/Upgrade/host-fixture.php snapshot /var/www/openwiki-legacy-ci > "$RUNNER_TEMP/upgrade-data-after"
+          sudo sha256sum /var/www/openwiki-legacy-ci/.env | awk '{print $1}' > "$RUNNER_TEMP/upgrade-key-after"
+          cmp "$RUNNER_TEMP/upgrade-data-before" "$RUNNER_TEMP/upgrade-data-after"
+          cmp "$RUNNER_TEMP/upgrade-key-before" "$RUNNER_TEMP/upgrade-key-after"
+          python3 - <<'PY'
+          import importlib.util, json, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('upgrade', 'tests/Upgrade/runtime.py')
+          module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+          seeded = json.loads((Path(os.environ['RUNNER_TEMP']) / 'upgrade-host.json').read_text())
+          module.verify_http(Path('/var/www/openwiki-legacy-ci/current'), seeded, remote_url='http://127.0.0.1')
+          print('Actual Nginx/PHP-FPM login, page form, API and protected attachment verified.')
+          PY
+          sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-legacy-ci NO_COLOR=1 bash ./install.sh --upgrade-status
+          printf 'DELETE\n' | sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-legacy-ci NO_COLOR=1 bash ./install.sh --uninstall

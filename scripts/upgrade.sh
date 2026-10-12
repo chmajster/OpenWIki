@@ -14,6 +14,10 @@ upgrade_failure() {
   upgrade_tool set error "Stage $UPGRADE_STAGE failed at installer line $line (exit $code). See private log; use --resume." || true
   warn "Aktualizacja nie powiodła się: $UPGRADE_STAGE. Diagnostyka: --upgrade-status; wznowienie: --resume."
   [[ ! -f "$INSTALL_DIR/.openwiki/maintenance" ]] || warn "Zapisy pozostają zablokowane. Nie cofaj kodu bez kontroli zgodności schematu."
+  if [[ ${UPGRADE_MANAGED_HOST:-1} == 1 && -n ${PHP_FPM_SERVICE:-} && -f "$INSTALL_DIR/.openwiki/maintenance" ]]; then
+    # OpenWiki remains blocked at Nginx; other users of the system pool can run.
+    systemctl start "$PHP_FPM_SERVICE" || true
+  fi
   exit "$code"
 }
 
@@ -33,8 +37,10 @@ upgrade_pause() {
     # Older releases do not implement the write gate. Stop their PHP process and
     # pause only OpenWiki's cron entry before capturing the database/storage.
     [[ ! -f "$CRON_FILE" ]] || mv "$CRON_FILE" "$INSTALL_DIR/.openwiki/cron.paused"
-    configure_nginx
-    systemctl stop "$PHP_FPM_SERVICE"
+    if systemctl is-active --quiet "$PHP_FPM_SERVICE"; then
+      configure_nginx
+      systemctl stop "$PHP_FPM_SERVICE"
+    fi
     local attempt pid command busy
     for attempt in {1..60}; do
       busy=0
@@ -65,6 +71,19 @@ upgrade_runtime() {
     configure_nginx
     configure_cron
   fi
+}
+
+upgrade_launchers() {
+  local directory="$INSTALL_DIR/.openwiki" updater="$INSTALL_DIR/.openwiki/updater"
+  if [[ "$(readlink -f "$SCRIPT_DIR")" != "$updater" ]]; then
+    mkdir -p "$updater"
+    # Preserve the recovery tooling even when restored legacy code predates it.
+    tar -C "$SCRIPT_DIR" --exclude='./.openwiki' --exclude='./storage' --exclude='./.env' --exclude='./.git' --exclude='./node_modules' --exclude='./vendor' --exclude='./current' --exclude='./test-results' --exclude='./.phpunit.cache' --exclude='./tests' --exclude='./.github' --exclude='./AGENTS.md' -cf - . | tar -C "$updater" -xf -
+  fi
+  upgrade_tool launchers "$APP_DIR"
+  printf '#!/usr/bin/env bash\nexport OPENWIKI_INSTALL_DIR=%q\nexec bash %q "$@"\n' "$INSTALL_DIR" "$updater/install.sh" > "$INSTALL_DIR/install.sh.next"
+  chmod 0755 "$INSTALL_DIR/install.sh.next"
+  mv -f "$INSTALL_DIR/install.sh.next" "$INSTALL_DIR/install.sh"
 }
 
 upgrade_open_and_verify() {
@@ -127,7 +146,13 @@ upgrade_mode() {
     [[ -n "$previous" && -d "$previous" ]] || fail "Nie ma poprzedniego wydania do odzyskania."
     UPGRADE_STAGE="$MODE"
     if [[ "$MODE" == rollback ]]; then
-      upgrade_tool compatible "$previous" || fail "Poprzedni kod nie jest zgodny ze schematem. Użyj --restore z potwierdzeniem nazwy bazy."
+      if ! upgrade_tool compatible "$previous"; then
+        trap - EXIT
+        fail "Poprzedni kod nie jest zgodny ze schematem. Użyj --restore z potwierdzeniem nazwy bazy."
+      fi
+    elif [[ "$RESTORE_DATABASE" != "$(upgrade_tool database-name "$APP_DIR")" ]]; then
+      trap - EXIT
+      fail "Nazwa bazy nie potwierdza restore. Nie zmieniono działającej instancji."
     fi
     upgrade_tool set operation "$MODE"
     upgrade_tool set restore_database "$RESTORE_DATABASE"
@@ -137,6 +162,7 @@ upgrade_mode() {
     fi
     upgrade_tool compatible "$previous"
     upgrade_switch "$previous"
+    upgrade_launchers
     upgrade_open_and_verify
     if [[ "$MODE" == restore ]]; then upgrade_tool set status restored; else upgrade_tool set status rolled_back; fi
     upgrade_tool set operation upgrade
@@ -208,8 +234,8 @@ upgrade_mode() {
       # Capture the actual deployed code, dependencies and assets, not a Git ref
       # that could differ from the installation. Secrets/storage remain shared.
       tar -C "$INSTALL_DIR" --exclude='./.openwiki' --exclude='./storage' --exclude='./.env' --exclude='./.git' --exclude='./node_modules' --exclude='./current' -cf - . | tar -C "$previous" -xf -
-      ln -s "$INSTALL_DIR/.env" "$previous/.env"
-      ln -s "$INSTALL_DIR/storage" "$previous/storage"
+      ln -sfn "$INSTALL_DIR/.env" "$previous/.env"
+      ln -sfn "$INSTALL_DIR/storage" "$previous/storage"
     fi
     upgrade_tool set previous "$previous"
   fi
@@ -223,6 +249,7 @@ upgrade_mode() {
   UPGRADE_STAGE=switch
   if [[ ! -L "$INSTALL_DIR/current" || "$(readlink -f "$INSTALL_DIR/current")" != "$stage" ]]; then upgrade_switch "$stage"; fi
   APP_DIR="$INSTALL_DIR/current"
+  upgrade_launchers
   upgrade_complete switched
   UPGRADE_STAGE=readiness
   upgrade_open_and_verify

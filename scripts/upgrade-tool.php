@@ -50,7 +50,7 @@ try {
         if ($app->database()->fetchOne("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND (TABLE_TYPE <> 'BASE TABLE' OR ENGINE <> 'InnoDB') LIMIT 1") !== null) {
             throw new RuntimeException('Verified recovery requires InnoDB tables and no views.');
         }
-        $requirements = (new \OpenWiki\Install\InstallService($code))->requirements();
+        $requirements = (new \OpenWiki\Install\InstallService($code))->requirements(false);
         if (!$requirements['php']['ok'] || in_array(false, $requirements['extensions'], true) || in_array(false, $requirements['writable'], true)) {
             throw new RuntimeException('PHP extensions or writable storage requirements failed. Run --diagnose.');
         }
@@ -73,6 +73,32 @@ try {
     if (!WriteGate::maintenance($code) || !is_readable($directory . '/owner')
         || !hash_equals(trim((string) file_get_contents($directory . '/owner')), (string) getenv('OPENWIKI_UPGRADE_OWNER'))) {
         throw new RuntimeException('Recovery requires the upgrade coordinator and paused application writes.');
+    }
+    if ($command === 'launchers') {
+        $source = <<<'PHP'
+<?php
+declare(strict_types=1);
+$instance = __INSTANCE__;
+$target = $instance . '/current';
+if (!is_file($target . '/bin/console')) { fwrite(STDERR, "No active OpenWiki release.\n"); exit(1); }
+// Legacy releases also participate when invoked through the instance entry point.
+if (!is_file($target . '/app/Upgrade/WriteGate.php')) {
+    $directory = $instance . '/.openwiki';
+    $owner = getenv('OPENWIKI_UPGRADE_OWNER');
+    $trusted = is_string($owner) && $owner !== '' && is_readable($directory . '/owner') && hash_equals(trim((string) file_get_contents($directory . '/owner')), $owner);
+    if (!$trusted) {
+        if (is_file($directory . '/maintenance')) { fwrite(STDERR, "OpenWiki is in maintenance mode.\n"); exit(1); }
+        $gate = fopen($directory . '/requests.lock', 'rb');
+        if ($gate === false || !flock($gate, (($argv[1] ?? '') === 'migrate' ? LOCK_EX : LOCK_SH) | LOCK_NB)) { fwrite(STDERR, "OpenWiki writes are paused.\n"); exit(1); }
+    }
+}
+require $target . '/bin/console';
+PHP;
+        $path = $instance . '/bin/console.next';
+        if (file_put_contents($path, str_replace('__INSTANCE__', var_export($instance, true), $source)) === false) throw new RuntimeException('Cannot prepare instance CLI launcher.');
+        chmod($path, 0755);
+        if (!rename($path, $instance . '/bin/console')) throw new RuntimeException('Cannot switch instance CLI launcher.');
+        exit(0);
     }
     $snapshot = new RecoverySnapshot($app->database(), $instance);
     $archive = $directory . '/backups/' . $state->read()['id'] . '.tar';

@@ -291,7 +291,7 @@ TEXT);
 
     private function systemCheck(): int
     {
-        $requirements = (new InstallService($this->basePath))->requirements();
+        $requirements = (new InstallService($this->basePath))->requirements(false);
         $failed = false;
 
         fwrite(STDOUT, '[INFO] PHP: ' . PHP_VERSION . PHP_EOL);

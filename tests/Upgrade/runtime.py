@@ -53,12 +53,16 @@ def upgrade(root, repo, mode, ref='', env=None):
 
 
 class Server:
-    def __init__(self, code, env=None):
+    def __init__(self, code, env=None, remote_url=None):
+        self.client = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(CookieJar()))
+        if remote_url:
+            self.url = remote_url
+            self.process = None
+            return
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
             port = sock.getsockname()[1]
         self.url = 'http://127.0.0.1:' + str(port)
-        self.client = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(CookieJar()))
         self.log = (code.parent / 'upgrade-http.log').open('w')
         runtime_env = dict(os.environ, APP_URL=self.url, SESSION_SECURE_COOKIE='false')
         if env:
@@ -85,6 +89,8 @@ class Server:
         return response.status, response.read()
 
     def close(self):
+        if self.process is None:
+            return
         self.process.terminate()
         self.process.wait(timeout=10)
         self.log.close()
@@ -96,8 +102,8 @@ def csrf(body):
     return token.group(1).decode()
 
 
-def verify_http(code, seeded, expected=b'Preserved source'):
-    server = Server(code)
+def verify_http(code, seeded, expected=b'Preserved source', remote_url=None):
+    server = Server(code, remote_url=remote_url)
     try:
         status, body = server.http('/health')
         check(status == 200 and json.loads(body)['checks']['schema'], 'HTTP readiness requires completed schema')
@@ -148,6 +154,12 @@ def main():
                 check(status == 503 and not json.loads(body)['checks']['schema'], 'Old schema is not reported as ready')
             finally:
                 server.close()
+            server = Server(root, env={'DB_PORT': '1'})
+            try:
+                status, body = server.http('/health')
+                check(server.http('/health/live')[0] == 200 and status == 503 and not json.loads(body)['checks']['database'], 'Process liveness does not imply database availability')
+            finally:
+                server.close()
             print('Upgrade E2E: fetch failure, dependency failure and resume', flush=True)
             failed = upgrade(root, repo, 'upgrade', 'delayed-release')
             check(failed.returncode != 0 and journal(root)['status'] == 'failed', 'Fetch failure cannot be success')
@@ -169,8 +181,18 @@ def main():
             backup = next((root / '.openwiki/backups').glob('*.tar'))
             backup_hash = hashlib.sha256(backup.read_bytes()).hexdigest()
             backup_time = backup.stat().st_mtime_ns
-            succeeded = upgrade(root, repo, 'resume')
-            check(succeeded.returncode == 0 and journal(root)['status'] == 'completed', 'Resume completes the pinned release')
+            with (root / '.openwiki/requests.lock').open('rb') as active_request:
+                fcntl.flock(active_request, fcntl.LOCK_SH)
+                with (directory / 'upgrade-drain.log').open('w') as output:
+                    process = subprocess.Popen(['bash', str(PROJECT / 'tests/Upgrade/driver.sh'), str(PROJECT), str(root), 'resume', '', str(repo)], stdout=output, stderr=subprocess.STDOUT)
+                    time.sleep(0.5)
+                    check(process.poll() is None, 'Upgrade waits for an active request holding the write gate')
+                    concurrent = upgrade(root, repo, 'resume')
+                    check(concurrent.returncode != 0, 'Concurrent upgrade is refused')
+                    fcntl.flock(active_request, fcntl.LOCK_UN)
+                    check(process.wait(timeout=300) == 0, 'Resume proceeds after the active request drains')
+            succeeded = journal(root)
+            check(succeeded['status'] == 'completed', 'Resume completes the pinned release')
             check(backup.stat().st_mtime_ns == backup_time and hashlib.sha256(backup.read_bytes()).hexdigest() == backup_hash, 'Resume does not replace completed backup')
             check((root / '.env').read_bytes() == original_env and (root / 'storage/installed.lock').read_bytes() == original_marker, 'APP_KEY, exact configuration and installation marker are preserved')
             check(fixture('snapshot', root) == original_data, 'Real accounts, authorization, pages, revisions and attachments are preserved')
@@ -178,6 +200,11 @@ def main():
             saved = journal(root)
             check(upgrade(root, repo, 'upgrade', 'delayed-release').returncode == 0, 'Repeating the same version succeeds without changes')
             check(journal(root)['result'] == 'unchanged' and journal(root)['id'] == saved['id'], 'No-op retains the previous verified recovery point')
+            # Reproduce the durable state of a process interrupted after the atomic switch.
+            run([PHP, PROJECT / 'scripts/upgrade-tool.php', 'set', root, 'status', 'failed'])
+            (root / '.openwiki/maintenance').touch()
+            check(upgrade(root, repo, 'resume').returncode == 0, 'Resume after code switch verifies and reopens the same release')
+            check(hashlib.sha256(backup.read_bytes()).hexdigest() == backup_hash, 'Post-switch resume retains the original backup')
             verify_http(root / 'current', seeded)
 
             print('Upgrade E2E: partial DDL, resume and controlled restore', flush=True)

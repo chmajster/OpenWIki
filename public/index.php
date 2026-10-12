@@ -11,13 +11,16 @@ use OpenWiki\Core\Session;
 use OpenWiki\Security\SecurityHeaders;
 
 $basePath = dirname(__DIR__);
+// Process liveness works even if Composer/configuration/database are unavailable.
+if (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) === '/health/live') {
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store');
+    echo '{"status":"alive","process":true}';
+    exit;
+}
 require $basePath . '/bootstrap/autoload.php';
 
 try {
-    // Liveness does not require a session, configuration or database connection.
-    if (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) === '/health/live') {
-        Response::json(['status' => 'alive', 'process' => true])->send();
-    }
     $isHealth = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) === '/health';
     $writeGate = new \OpenWiki\Upgrade\WriteGate();
     if (!$isHealth) {
