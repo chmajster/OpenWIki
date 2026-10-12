@@ -23,7 +23,7 @@ if (($argv[1] ?? '') === 'seed') {
     $permission = $database->fetchOne('SELECT id FROM permissions WHERE name = "*"');
     $database->execute('INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)', [$roleId, $permission['id']]);
     $users = [];
-    foreach ([1, 2, 3] as $index) {
+    foreach ([1, 2, 3, 4, 5] as $index) {
         $username = 'browser-' . $suffix . '-' . $index;
         $password = 'BrowserRegression!42';
         $id = $database->insert('INSERT INTO users (username, email, password_hash, status, auth_source, force_password_change, created_at, updated_at) VALUES (?, ?, ?, "active", "local", 0, UTC_TIMESTAMP(), UTC_TIMESTAMP())', [$username, $username . '@example.test', password_hash($password, PASSWORD_DEFAULT)]);
@@ -40,10 +40,38 @@ if (($argv[1] ?? '') === 'seed') {
     }
     $database->execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [$users[2]['id'], $limitedRole]);
     foreach (['space.view', 'space.edit'] as $permission) $database->execute('INSERT INTO space_acl (space_id, principal_type, principal_id, permission, effect) VALUES (?, "user", ?, ?, "allow")', [$spaceId, $users[2]['id'], $permission]);
-    $token = (new ApiTokenService($database))->create($users[0]['id'], 'Browser tests', ['pages:read', 'pages:write', 'spaces:read'], null)['token'];
+    $securityRoles = [];
+    foreach ([3 => ['page.view'], 4 => ['page.view', 'page.edit', 'page.create', 'page.delete', 'page.publish', 'page.archive', 'user.manage', 'role.manage', 'group.manage', 'settings.manage']] as $index => $names) {
+        $id = $database->insert('INSERT INTO roles (name, slug, is_system, created_at, updated_at) VALUES (?, ?, 0, UTC_TIMESTAMP(), UTC_TIMESTAMP())', ['Security browser ' . $suffix . '-' . $index, 'security-browser-' . $suffix . '-' . $index]);
+        $securityRoles[] = $id;
+        foreach ($names as $name) {
+            $database->execute('INSERT IGNORE INTO permissions (name, description, created_at) VALUES (?, ?, UTC_TIMESTAMP())', [$name, $name]);
+            $entry = $database->fetchOne('SELECT id FROM permissions WHERE name = ?', [$name]);
+            $database->execute('INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)', [$id, $entry['id']]);
+        }
+        $database->execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [$users[$index]['id'], $id]);
+        foreach ($index === 3 ? ['space.view'] : ['space.view', 'space.edit'] as $name) $database->execute('INSERT INTO space_acl (space_id, principal_type, principal_id, permission, effect) VALUES (?, "user", ?, ?, "allow")', [$spaceId, $users[$index]['id'], $name]);
+    }
+    $scopes = ['pages:read', 'pages:write', 'spaces:read', 'users:read', 'users:write', 'roles:read', 'roles:write', 'groups:read', 'groups:write'];
+    $token = (new ApiTokenService($database))->create($users[0]['id'], 'Browser tests', $scopes, null)['token'];
+    $delegateToken = (new ApiTokenService($database))->create($users[4]['id'], 'Browser security tests', $scopes, null)['token'];
+    $wildcardPermissionId = (int) $database->fetchOne('SELECT id FROM permissions WHERE name = "*"')['id'];
     $image = imagecreatetruecolor(256, 128);
     ob_start(); imagepng($image); $imageBase64 = base64_encode((string) ob_get_clean()); imagedestroy($image);
-    echo json_encode(['imageBase64' => $imageBase64, 'users'  => $users, 'roleId' => $roleId, 'limitedRoleId' => $limitedRole, 'spaceId' => $spaceId, 'spaceKey' => $spaceKey, 'token' => $token], JSON_THROW_ON_ERROR);
+    echo json_encode(['imageBase64' => $imageBase64, 'users'  => $users, 'roleId' => $roleId, 'limitedRoleId' => $limitedRole, 'securityRoleIds' => $securityRoles,
+        'wildcardPermissionId' => $wildcardPermissionId, 'delegateToken' => $delegateToken, 'spaceId' => $spaceId, 'spaceKey' => $spaceKey, 'token' => $token], JSON_THROW_ON_ERROR);
+} elseif (in_array($argv[1] ?? '', ['legacy-html', 'legacy-snapshot'], true)) {
+    $data = json_decode(file_get_contents(dirname(__DIR__, 2) . '/storage/temp/editor-browser.json'), true, 512, JSON_THROW_ON_ERROR);
+    $id = filter_var($argv[2] ?? '', FILTER_VALIDATE_INT);
+    $page = $id === false ? null : $database->fetchOne('SELECT id FROM pages WHERE id = ? AND space_id = ?', [$id, $data['spaceId']]);
+    if ($page === null) throw new RuntimeException('Browser fixture page required.');
+    if ($argv[1] === 'legacy-html') {
+        $html = '<article><p onclick="window.__xss=1">Legacy safe</p><svg><script>window.__xss=1</script></svg><script>window.__xss=1</script></article>';
+        $document = json_encode(['version' => 1, 'format' => 'visual', 'source' => $html], JSON_THROW_ON_ERROR);
+        $database->execute('UPDATE pages SET content_html = ?, document_json = ? WHERE id = ?', [$html, $document, $id]);
+        $database->execute('UPDATE page_revisions SET content_html = ?, document_json = ? WHERE page_id = ? AND revision_number = 1', [$html, $document, $id]);
+    }
+    echo json_encode($database->fetchOne('SELECT content_html, document_json FROM page_revisions WHERE page_id = ? AND revision_number = 1', [$id]), JSON_THROW_ON_ERROR);
 } elseif (($argv[1] ?? '') === 'cleanup') {
     $data = json_decode(file_get_contents(dirname(__DIR__, 2) . '/storage/temp/editor-browser.json'), true, 512, JSON_THROW_ON_ERROR);
     $database->execute('DELETE FROM spaces WHERE id = ?', [$data['spaceId']]);
@@ -53,4 +81,5 @@ if (($argv[1] ?? '') === 'seed') {
     }
     $database->execute('DELETE FROM roles WHERE id = ?', [$data['roleId']]);
     $database->execute('DELETE FROM roles WHERE id = ?', [$data['limitedRoleId']]);
+    foreach ($data['securityRoleIds'] as $id) $database->execute('DELETE FROM roles WHERE id = ?', [$id]);
 }
