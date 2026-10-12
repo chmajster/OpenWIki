@@ -20,13 +20,17 @@ final class SecurityMigrationTest extends TestCase
         $space = $db->insert('INSERT INTO spaces (name, space_key, owner_id, visibility, status, created_at, updated_at) VALUES ("Migration", ?, ?, "public", "active", UTC_TIMESTAMP(), UTC_TIMESTAMP())', ['MIG-' . $suffix, $user]);
         try {
             $page = $db->insert('INSERT INTO pages (space_id, title, slug, content_html, content_format, status, author_id, owner_id, created_at, updated_at) VALUES (?, "Legacy", "legacy", ?, "visual", "published", ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())', [$space, '<article><p onclick="alert(1)">snapshot</p></article>', $user, $user]);
+            $db->execute('INSERT INTO page_revisions (page_id, revision_number, title, content_html, content_format, status, author_id, created_at)
+                SELECT id, 1, title, content_html, content_format, status, author_id, created_at FROM pages WHERE id = ?', [$page]);
             $db->execute('INSERT INTO page_acl (page_id, principal_type, principal_id, permission, effect, inherit_to_children) VALUES (?, "user", ?, "page.view", "allow", 1)', [$page, $user]);
             $before = $db->fetchOne('SELECT * FROM pages WHERE id = ?', [$page]);
             $acl = $db->fetchAll('SELECT * FROM page_acl WHERE page_id = ?', [$page]);
+            $revision = $db->fetchOne('SELECT * FROM page_revisions WHERE page_id = ?', [$page]);
             $migration = require dirname(__DIR__, 2) . '/database/migrations/008_security_boundaries.php';
             for ($attempt = 0; $attempt < 2; $attempt++) foreach ($migration['up'] as $sql) $db->pdo()->exec($sql);
             self::assertSame($before, $db->fetchOne('SELECT * FROM pages WHERE id = ?', [$page]));
             self::assertSame($acl, $db->fetchAll('SELECT * FROM page_acl WHERE page_id = ?', [$page]));
+            self::assertSame($revision, $db->fetchOne('SELECT * FROM page_revisions WHERE page_id = ?', [$page]));
             self::assertSame([], $runner->migrate());
             self::assertNotNull($db->fetchOne('SELECT name FROM security_locks WHERE name = "administration"'));
         } finally {
