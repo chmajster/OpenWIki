@@ -1,0 +1,507 @@
+{
+  "engine": "11.4.13-MariaDB-ubu2404",
+  "pages": 10000,
+  "php": "8.2.34",
+  "runs": [
+    {
+      "query": "Firewall",
+      "iteration": 0,
+      "ms": 1557.6,
+      "queries": 606,
+      "peak_bytes": 4690936,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "Firewall",
+      "iteration": 1,
+      "ms": 628.42,
+      "queries": 606,
+      "peak_bytes": 3683176,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "Firewall",
+      "iteration": 2,
+      "ms": 666.5,
+      "queries": 606,
+      "peak_bytes": 3683176,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "Firewall",
+      "iteration": 3,
+      "ms": 615.98,
+      "queries": 606,
+      "peak_bytes": 3683176,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "Firewall",
+      "iteration": 4,
+      "ms": 671.23,
+      "queries": 606,
+      "peak_bytes": 3683176,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "needlecontext",
+      "iteration": 0,
+      "ms": 514.19,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "needlecontext",
+      "iteration": 1,
+      "ms": 515.7,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "needlecontext",
+      "iteration": 2,
+      "ms": 502.66,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "needlecontext",
+      "iteration": 3,
+      "ms": 542.12,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "needlecontext",
+      "iteration": 4,
+      "ms": 642.32,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "IP",
+      "iteration": 0,
+      "ms": 500.69,
+      "queries": 306,
+      "peak_bytes": 1864008,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "IP",
+      "iteration": 1,
+      "ms": 500.92,
+      "queries": 306,
+      "peak_bytes": 1864008,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "IP",
+      "iteration": 2,
+      "ms": 490.48,
+      "queries": 306,
+      "peak_bytes": 1864008,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "IP",
+      "iteration": 3,
+      "ms": 499.02,
+      "queries": 306,
+      "peak_bytes": 1864008,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "IP",
+      "iteration": 4,
+      "ms": 543.33,
+      "queries": 306,
+      "peak_bytes": 1864008,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "Zażółć",
+      "iteration": 0,
+      "ms": 453.41,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "Zażółć",
+      "iteration": 1,
+      "ms": 497.92,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "Zażółć",
+      "iteration": 2,
+      "ms": 450.32,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "Zażółć",
+      "iteration": 3,
+      "ms": 468.45,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "Zażółć",
+      "iteration": 4,
+      "ms": 500.84,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "C++",
+      "iteration": 0,
+      "ms": 462.47,
+      "queries": 306,
+      "peak_bytes": 1864008,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "C++",
+      "iteration": 1,
+      "ms": 467.84,
+      "queries": 306,
+      "peak_bytes": 1864008,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "C++",
+      "iteration": 2,
+      "ms": 484.08,
+      "queries": 306,
+      "peak_bytes": 1864008,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "C++",
+      "iteration": 3,
+      "ms": 656.14,
+      "queries": 306,
+      "peak_bytes": 1864008,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "C++",
+      "iteration": 4,
+      "ms": 520.94,
+      "queries": 306,
+      "peak_bytes": 1864008,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "foo_bar",
+      "iteration": 0,
+      "ms": 438.74,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "foo_bar",
+      "iteration": 1,
+      "ms": 479.4,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "foo_bar",
+      "iteration": 2,
+      "ms": 476.35,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "foo_bar",
+      "iteration": 3,
+      "ms": 507.84,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "foo_bar",
+      "iteration": 4,
+      "ms": 459.92,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "nginx.conf",
+      "iteration": 0,
+      "ms": 537.03,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "nginx.conf",
+      "iteration": 1,
+      "ms": 483.24,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "nginx.conf",
+      "iteration": 2,
+      "ms": 559.96,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "nginx.conf",
+      "iteration": 3,
+      "ms": 518.08,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "nginx.conf",
+      "iteration": 4,
+      "ms": 550.96,
+      "queries": 306,
+      "peak_bytes": 1864024,
+      "total": 98,
+      "returned": 25,
+      "status": 200
+    },
+    {
+      "query": "\"gęślą jaźń\"",
+      "iteration": 0,
+      "ms": 268.36,
+      "queries": 6,
+      "peak_bytes": 46904,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "\"gęślą jaźń\"",
+      "iteration": 1,
+      "ms": 315.82,
+      "queries": 6,
+      "peak_bytes": 46904,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "\"gęślą jaźń\"",
+      "iteration": 2,
+      "ms": 319.08,
+      "queries": 6,
+      "peak_bytes": 46904,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "\"gęślą jaźń\"",
+      "iteration": 3,
+      "ms": 293.9,
+      "queries": 6,
+      "peak_bytes": 46904,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "\"gęślą jaźń\"",
+      "iteration": 4,
+      "ms": 289.69,
+      "queries": 6,
+      "peak_bytes": 46904,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "router*",
+      "iteration": 0,
+      "ms": 362.1,
+      "queries": 6,
+      "peak_bytes": 46888,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "router*",
+      "iteration": 1,
+      "ms": 372.2,
+      "queries": 6,
+      "peak_bytes": 46888,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "router*",
+      "iteration": 2,
+      "ms": 348.85,
+      "queries": 6,
+      "peak_bytes": 46888,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "router*",
+      "iteration": 3,
+      "ms": 403.29,
+      "queries": 6,
+      "peak_bytes": 46888,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "router*",
+      "iteration": 4,
+      "ms": 361.91,
+      "queries": 6,
+      "peak_bytes": 46888,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "ordinary",
+      "iteration": 0,
+      "ms": 828.92,
+      "queries": 606,
+      "peak_bytes": 3683176,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "ordinary",
+      "iteration": 1,
+      "ms": 846.57,
+      "queries": 606,
+      "peak_bytes": 3683176,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "ordinary",
+      "iteration": 2,
+      "ms": 747.25,
+      "queries": 606,
+      "peak_bytes": 3683176,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "ordinary",
+      "iteration": 3,
+      "ms": 789.4,
+      "queries": 606,
+      "peak_bytes": 3683176,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    },
+    {
+      "query": "ordinary",
+      "iteration": 4,
+      "ms": 826.39,
+      "queries": 606,
+      "peak_bytes": 3683176,
+      "total": 0,
+      "returned": 0,
+      "status": 200
+    }
+  ]
+}

@@ -39,10 +39,12 @@ final class SearchIndexer
     public function processDue(int $batchSize = 200): array
     {
         $batchSize = max(1, min(500, $batchSize));
+        $originalState = null;
         try {
-            return $this->database->transaction(function () use ($batchSize): array {
+            return $this->database->transaction(function () use ($batchSize, &$originalState): array {
                 $row = $this->database->fetchOne('SELECT setting_value FROM settings WHERE setting_key = ? FOR UPDATE', [self::KEY]);
                 if ($row === null) return $this->status();
+                $originalState = $row['setting_value'];
                 $state = json_decode($row['setting_value'], true, 512, JSON_THROW_ON_ERROR);
                 if (!in_array($state['state'] ?? '', ['queued', 'running'], true)) return $state;
                 $metadata = $this->database->fetchAll('SELECT id,OCTET_LENGTH(content_html) + OCTET_LENGTH(content_text) AS bytes FROM pages WHERE id > ? AND id <= ? ORDER BY id LIMIT ' . $batchSize . ' FOR UPDATE', [$state['cursor'], $state['high_water']]);
@@ -65,9 +67,11 @@ final class SearchIndexer
             });
         } catch (\Throwable $error) {
             error_log('[OpenWiki search index] ' . $error->getMessage());
-            $this->database->transaction(function (): void {
+            $this->database->transaction(function () use ($originalState): void {
                 $row = $this->database->fetchOne('SELECT setting_value FROM settings WHERE setting_key = ? FOR UPDATE', [self::KEY]);
                 if ($row === null) return;
+                // Another worker may have committed progress after our rollback. Do not fail its newer state.
+                if ($originalState === null || !hash_equals($originalState, $row['setting_value'])) return;
                 $state = json_decode($row['setting_value'], true, 512, JSON_THROW_ON_ERROR);
                 if (!in_array($state['state'] ?? '', ['queued', 'running'], true)) return;
                 $state['state'] = 'failed'; $state['error'] = 'Błąd indeksowania. Sprawdź log PHP i wznów zadanie.';

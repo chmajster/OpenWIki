@@ -17,7 +17,7 @@ final class SearchRepository
 
     public function candidates(string $query, string $type, array $filters, bool $authenticated): array
     {
-        $plans = new \OpenWiki\Search\SearchQuery($this->usesFulltext($query));
+        $plans = new \OpenWiki\Search\SearchQuery(in_array($type, ['page','all'], true) && $this->usesFulltext($query));
         $rows = [];
         foreach ($type === 'all' ? array_diff(\OpenWiki\Search\SearchInput::TYPES, ['all']) : [$type] as $kind) {
             if ($kind === 'user' && (!$authenticated || ($filters['space'] ?? '') !== '' || ($filters['tag'] ?? '') !== '')) continue;
