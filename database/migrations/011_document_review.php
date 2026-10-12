@@ -50,10 +50,11 @@ return ['version' => '011_document_review', 'up' => [
         CONSTRAINT fk_review_file FOREIGN KEY (attachment_id) REFERENCES attachments(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci', ['page_id' => 'bigint', 'revision_number' => 'int', 'attachment_id' => 'bigint', 'version_number' => 'int', 'name' => 'varchar'], 'page_id,revision_number,attachment_id', ['page_id' => ['pages', 'CASCADE'], 'attachment_id' => ['attachments', 'CASCADE']]),
     'INSERT INTO page_revisions (page_id, revision_number, title, slug, parent_id, content_html, content_markdown, content_text, content_format, document_json, status, author_id, change_summary, created_at)
-        SELECT p.id, p.version, p.title, p.slug, p.parent_id, p.content_html, p.content_markdown, p.content_text, p.content_format, p.document_json, p.status, p.author_id, "Migration: preserved published page snapshot", p.updated_at
-        FROM pages p WHERE p.status = "published" AND NOT EXISTS (SELECT 1 FROM page_revisions r WHERE r.page_id = p.id AND r.revision_number = p.version)',
+        SELECT p.id, p.version, p.title, p.slug, p.parent_id, p.content_html, p.content_markdown, p.content_text, p.content_format, p.document_json, p.status, p.author_id, CASE WHEN p.status = "published" THEN "Migration: preserved published page snapshot" ELSE "Migration: preserved working page snapshot" END, p.updated_at
+        FROM pages p WHERE NOT EXISTS (SELECT 1 FROM page_revisions r WHERE r.page_id = p.id AND r.revision_number = p.version)',
     'UPDATE page_revisions SET was_published = 1 WHERE status = "published"',
     'UPDATE pages SET published_revision = version, workflow_state = "published", updated_at = updated_at WHERE status = "published"',
+    'UPDATE pages SET workflow_state = "archived", updated_at = updated_at WHERE status = "archived"',
     'UPDATE pages SET content_owner_id = owner_id, updated_at = updated_at',
     'UPDATE page_revisions r INNER JOIN pages p ON p.id = r.page_id SET r.knowledge_json = JSON_OBJECT("content_owner_id", p.content_owner_id, "review_due_at", NULL)',
     'INSERT IGNORE INTO page_revision_attachments (page_id, revision_number, attachment_id, version_number, name) SELECT a.page_id, p.published_revision, a.id, a.current_version, a.name FROM attachments a INNER JOIN pages p ON p.id = a.page_id WHERE p.published_revision IS NOT NULL AND a.deleted_at IS NULL',

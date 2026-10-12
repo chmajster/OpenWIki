@@ -87,6 +87,8 @@ final class PageReviewTest extends TestCase
     public function testReaderKeepsPublishedContentAndMetadataWhileApprovalIsBoundToHead(): void
     {
         $page = $this->write(null, ['title' => 'Public N', 'content_html' => '<p>Published N</p>', 'status' => 'published', 'tags' => ['public']], 'super'); $this->enable();
+        // Legacy published snapshots did not record tags. Editing must keep their public tags.
+        $this->app->database()->execute('UPDATE page_revisions SET tags_json = NULL WHERE page_id = ? AND revision_number = 1', [$page['id']]);
         $head = $this->write($page, ['base_version' => 1, 'title' => 'Private N+1', 'slug' => 'private-n1', 'content_html' => '<p>Private N+1</p>', 'tags' => ['private']]);
         $repo = new PageRepository($this->app->database()); $public = $repo->findById((int) $page['id']);
         self::assertSame('Public N', $public['title']); self::assertSame('<p>Published N</p>', $public['content_html']); self::assertSame(1, (int) $public['published_revision']); self::assertSame('Private N+1', $repo->working($public)['title']);

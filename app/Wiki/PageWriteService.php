@@ -182,6 +182,7 @@ final class PageWriteService
                         throw new \RuntimeException('EDIT_CONFLICT');
                     }
                     $publicBefore = $fresh;
+                    $publicBefore['tags'] = array_column((new WikiMetadataService($this->database))->tagsForPage((int) $fresh['id']), 'name');
                     $current = (new PageRepository($this->database))->working($fresh);
                 }
                 if ($can !== null && !$can($current === null ? 'page.create' : 'page.edit', $current)) {

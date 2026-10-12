@@ -101,3 +101,7 @@ brakuje snapshotu bieżącej publikacji, dodaje go z rzeczywistej treści strony
 z opisem `Migration: preserved published page snapshot`, nie zmieniając jej
 numeru wersji ani wcześniejszych rewizji. Migrator stosuje blokadę i dziennik
 etapów; ponowienie nie tworzy dodatkowych snapshotów.
+Brakująca robocza głowa szkicu lub archiwum jest zachowywana analogicznie
+z opisem `Migration: preserved working page snapshot`. Dawne rewizje bez
+metadanych tagów zachowują dotychczasowe publiczne tagi podczas redagowania;
+nie dopisujemy zgadywanych metadanych do niezmiennych snapshotów.

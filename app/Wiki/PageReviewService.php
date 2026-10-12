@@ -59,6 +59,7 @@ final class PageReviewService
         $this->db->execute('UPDATE pages SET title = ?, slug = ?, content_html = ?, content_markdown = ?, content_text = ?, content_format = ?, document_json = ?, status = ? WHERE id = ?', [$revision['title'], $revision['slug'] ?? $fallback['slug'], $revision['content_html'], $revision['content_markdown'], $revision['content_text'], $revision['content_format'], $revision['document_json'], $status, $id]);
         $metadata = new WikiMetadataService($this->db);
         if ($revision['tags_json'] !== null) $metadata->syncTags($id, json_decode($revision['tags_json'], true, 512, JSON_THROW_ON_ERROR));
+        elseif (isset($fallback['tags'])) $metadata->syncTags($id, $fallback['tags']);
         $space = $this->db->fetchOne('SELECT s.* FROM spaces s INNER JOIN pages p ON p.space_id = s.id WHERE p.id = ?', [$id]);
         $references = $metadata->decorateWikiLinks((int) $space['id'], $space['space_key'], $revision['content_html'])['references'];
         $metadata->syncLinks($id, (int) $space['id'], $references);
