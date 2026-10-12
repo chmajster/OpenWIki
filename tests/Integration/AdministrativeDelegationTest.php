@@ -20,14 +20,20 @@ final class AdministrativeDelegationTest extends TestCase
     private int $delegateId;
     private int $rootRole;
     private string $suffix;
+    private array $otherSuperIds = [];
 
     protected function setUp(): void
     {
-        if (!getenv('OPENWIKI_TEST_DB_HOST')) self::markTestSkipped('Dedicated database required.');
+        if (!getenv('OPENWIKI_TEST_DB_HOST') || !str_ends_with((string) getenv('OPENWIKI_TEST_DB_DATABASE'), '_test')) self::markTestSkipped('Dedicated database required.');
         $this->db = Database::connect(['host' => getenv('OPENWIKI_TEST_DB_HOST'), 'port' => (int) getenv('OPENWIKI_TEST_DB_PORT'),
             'database' => getenv('OPENWIKI_TEST_DB_DATABASE'), 'username' => getenv('OPENWIKI_TEST_DB_USERNAME'), 'password' => getenv('OPENWIKI_TEST_DB_PASSWORD')]);
         (new MigrationRunner($this->db, dirname(__DIR__, 2) . '/database/migrations'))->migrate();
         $this->db->pdo()->beginTransaction();
+        // The installer test leaves an administrator behind on repeated suite runs.
+        // Isolate the last-account invariant, restoring existing fixture accounts below.
+        $this->otherSuperIds = array_values(array_unique(array_column($this->db->fetchAll(
+            'SELECT u.id FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN role_permissions rp ON rp.role_id = ur.role_id JOIN permissions p ON p.id = rp.permission_id WHERE u.status = "active" AND u.deleted_at IS NULL AND p.name = "*"'), 'id')));
+        foreach ($this->otherSuperIds as $id) $this->db->execute('UPDATE users SET status = "disabled" WHERE id = ?', [$id]);
         $this->suffix = bin2hex(random_bytes(5));
         $console = new DirectoryAdminService($this->db, AdminActor::localConsole());
         $this->rootRole = $console->saveRole(null, ['name' => 'Root ' . $this->suffix, 'permission_ids' => [$this->permission('*')]]);
@@ -146,6 +152,7 @@ final class AdministrativeDelegationTest extends TestCase
         } finally {
             foreach ([$this->rootId, $second, $this->delegateId] as $id) $this->db->execute('DELETE FROM users WHERE id = ?', [$id]);
             foreach ([$this->rootRole, ...$delegateRoles] as $id) $this->db->execute('DELETE FROM roles WHERE id = ?', [$id]);
+            foreach ($this->otherSuperIds as $id) $this->db->execute('UPDATE users SET status = "active" WHERE id = ?', [$id]);
         }
     }
 
