@@ -48,14 +48,14 @@ if ($action === 'snapshot') {
     foreach (['users', 'user_roles', 'attachments', 'attachment_versions'] as $table) $data[$table] = $db->fetchAll('SELECT * FROM `' . $table . '` ORDER BY 1');
     // Migration 009 introduces this exact limited system role. Existing roles,
     // account assignments and all their original grants remain in the snapshot.
-    $data['roles'] = $db->fetchAll('SELECT * FROM roles WHERE slug <> "space-owner" ORDER BY id');
-    $data['role_permissions'] = $db->fetchAll('SELECT rp.* FROM role_permissions rp INNER JOIN roles r ON r.id = rp.role_id WHERE r.slug <> "space-owner" ORDER BY rp.role_id, rp.permission_id');
+    $data['roles'] = $db->fetchAll('SELECT * FROM roles WHERE slug NOT IN ("space-owner", "reviewer", "publisher") ORDER BY id');
+    $data['role_permissions'] = $db->fetchAll('SELECT rp.* FROM role_permissions rp INNER JOIN roles r ON r.id = rp.role_id WHERE r.slug NOT IN ("space-owner", "reviewer", "publisher") ORDER BY rp.role_id, rp.permission_id');
     if ($db->fetchOne('SELECT id FROM roles WHERE slug = "space-owner"') !== null) {
         $grants = array_column($db->fetchAll('SELECT p.name FROM permissions p INNER JOIN role_permissions rp ON rp.permission_id = p.id INNER JOIN roles r ON r.id = rp.role_id WHERE r.slug = "space-owner" ORDER BY p.name'), 'name');
         if ($grants !== ['space.archive', 'space.edit', 'space.manage_access', 'space.manage_owner', 'space.view']) throw new RuntimeException('Unexpected owner role grants.');
     }
     $data['pages'] = $db->fetchAll('SELECT id, title, slug, content_html, author_id, owner_id, version FROM pages ORDER BY id');
-    $data['history'] = $db->fetchAll('SELECT id, title, content_html FROM page_revisions ORDER BY id');
+    $data['history'] = $db->fetchAll('SELECT id, title, content_html FROM page_revisions WHERE change_summary IS NULL OR change_summary <> "Migration: preserved published page snapshot" ORDER BY id');
     $data['files'] = [];
     foreach ($data['attachments'] as $file) $data['files'][] = hash_file('sha256', $root . '/storage/attachments/' . $file['storage_key']);
     echo hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));

@@ -3,10 +3,14 @@ declare(strict_types=1);
 namespace OpenWiki\Permissions;
 
 use OpenWiki\Core\Application;
+use OpenWiki\Core\Database;
 
 final class SpaceAccessService
 {
-    public function __construct(private readonly Application $app, private readonly bool $lockingReads = false) {}
+    private readonly Database $database;
+    public function __construct(private readonly Application|Database $app, private readonly bool $lockingReads = false) {
+        $this->database = $app instanceof Database ? $app : $app->database();
+    }
 
     public function canView(array $space): bool
     {
@@ -36,13 +40,13 @@ final class SpaceAccessService
 
     public function explainFor(array $space, ?int $id, string $permission = 'space.view', bool $super = false, bool $global = true): array
     {
-        if ($this->lockingReads && $this->app->database()->pdo()->inTransaction()) {
-            $db = $this->app->database(); $principals = $id === null ? [] : ['user:' . $id => true];
+        if ($this->lockingReads && $this->database->pdo()->inTransaction()) {
+            $db = $this->database; $principals = $id === null ? [] : ['user:' . $id => true];
             if ($id !== null) foreach (['role' => ['user_roles', 'role_id'], 'group' => ['group_users', 'group_id']] as $kind => [$table, $column]) foreach ($db->fetchAll('SELECT ' . $column . ' AS id FROM ' . $table . ' WHERE user_id = ? FOR UPDATE', [$id]) as $row) $principals[$kind . ':' . $row['id']] = true;
             $rules = array_values(array_filter($db->fetchAll('SELECT id, principal_type, principal_id, permission, effect FROM space_acl WHERE space_id = ? AND permission = ? ORDER BY id FOR UPDATE', [$space['id'], $permission]), static fn (array $rule): bool => isset($principals[$rule['principal_type'] . ':' . $rule['principal_id']])));
             return self::evaluate($space, $id, $permission, $super, $global, $rules);
         }
-        $rules = $id === null ? [] : $this->app->database()->fetchAll(
+        $rules = $id === null ? [] : $this->database->fetchAll(
             'SELECT a.id, a.principal_type, a.principal_id, a.permission, a.effect FROM space_acl a WHERE a.space_id = ? AND a.permission = ? AND (
                 (a.principal_type = "user" AND a.principal_id = ?) OR
                 (a.principal_type = "group" AND EXISTS (SELECT 1 FROM group_users gu WHERE gu.group_id = a.principal_id AND gu.user_id = ?)) OR

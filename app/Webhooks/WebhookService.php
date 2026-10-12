@@ -15,6 +15,7 @@ final class WebhookService
         'page.updated',
         'page.deleted',
         'page.published',
+        'page.review',
         'space.created',
         'space.updated',
         'space.deleted',

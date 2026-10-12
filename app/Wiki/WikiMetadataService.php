@@ -85,6 +85,13 @@ final class WikiMetadataService
         );
     }
 
+    public function tagsForNames(array $input): array
+    {
+        $names = array_column($this->normalizeTags($input), 'name');
+        if ($names === []) return [];
+        return $this->database->fetchAll('SELECT id, name, slug FROM tags WHERE name IN (' . implode(',', array_fill(0, count($names), '?')) . ') ORDER BY name', $names);
+    }
+
     public function tagBySlug(string $slug): ?array
     {
         return $this->database->fetchOne(

@@ -8,9 +8,9 @@ final class SpaceActor
 {
     private array $permissions;
 
-    public function __construct(Database $db, public readonly int $id, ?array $ceiling = null)
+    public function __construct(Database $db, public readonly int $id, ?array $ceiling = null, bool $locking = true)
     {
-        $lock = $db->pdo()->inTransaction() ? ' FOR UPDATE' : '';
+        $lock = $locking && $db->pdo()->inTransaction() ? ' FOR UPDATE' : '';
         if ($db->fetchOne('SELECT id FROM users WHERE id = ? AND status = "active" AND deleted_at IS NULL' . $lock, [$id]) === null) {
             throw new \DomainException('Wymagane jest aktywne konto.');
         }

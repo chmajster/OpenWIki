@@ -95,7 +95,7 @@ final class PageWriteService
             (string) $value('content_markdown')
         );
         $metadata = new WikiMetadataService($this->database);
-        $tags = $input['tags'] ?? ($current === null ? [] : array_column($metadata->tagsForPage((int) $current['id']), 'name'));
+        $tags = $input['tags'] ?? $current['tags'] ?? ($current === null ? [] : array_column($metadata->tagsForPage((int) $current['id']), 'name'));
         if (!is_string($tags) && !is_array($tags)) {
             throw new \InvalidArgumentException('tags must be a string or array.');
         }
@@ -169,7 +169,8 @@ final class PageWriteService
                     }
                 }
                 // Serialize hierarchy changes as well as version checks within one space.
-                $this->database->fetchOne('SELECT id FROM spaces WHERE id = :id FOR UPDATE', ['id' => (int) $space['id']]);
+                $space = $this->database->fetchOne('SELECT * FROM spaces WHERE id = :id FOR UPDATE', ['id' => (int) $space['id']]);
+                $publicBefore = null;
                 if ($current !== null) {
                     $base = filter_var($input['base_version'] ?? null, FILTER_VALIDATE_INT);
                     if ($base === false || $base < 1) throw new \InvalidArgumentException('Invalid base page version.');
@@ -180,12 +181,20 @@ final class PageWriteService
                     if ($fresh === null || (int) $fresh['version'] !== (int) ($input['base_version'] ?? 0)) {
                         throw new \RuntimeException('EDIT_CONFLICT');
                     }
-                    $current = $fresh;
+                    $publicBefore = $fresh;
+                    $current = (new PageRepository($this->database))->working($fresh);
                 }
                 if ($can !== null && !$can($current === null ? 'page.create' : 'page.edit', $current)) {
                     throw new \DomainException('You do not have permission to save this page.');
                 }
+                if ((bool) $space['review_workflow']) {
+                    if (($input['status'] ?? null) === 'published' && $restoredRevision === null) throw new \DomainException('Zapisz szkic. Publikacja wymaga osobnej decyzji po recenzji tej rewizji.');
+                    if ($restoredRevision !== null && ($input['status'] ?? null) === 'published') PageStatusPolicy::assertAllowed('published', $current, $can);
+                    if (($input['status'] ?? $current['status'] ?? 'draft') === 'published') $input['status'] = 'draft';
+                }
                 $data = $this->validate($space, $current, $input, $can);
+                $review = new PageReviewService($this->database);
+                $knowledge = $review->knowledge($input, $current, $userId);
                 $assetUrls = [];
                 $backupContent = $data['conversion_backup'] === null ? null : (new ContentService())->normalize(
                     $data['conversion_backup']['format'], $data['conversion_backup']['html'], $data['conversion_backup']['markdown']);
@@ -253,7 +262,6 @@ final class PageWriteService
                 }
                 $metadata->syncTags($id, $data['tags']);
                 $metadata->syncLinks($id, (int) $space['id'], $decorated['references']);
-                if ($refreshLinks) $metadata->refreshSpaceLinks((int) $space['id']);
                 $event = $current === null ? 'page.created' : 'page.updated';
                 $action = $restoredRevision !== null ? 'PAGE_REVISION_RESTORED' : ($current === null ? 'PAGE_CREATED' : 'PAGE_UPDATED');
                 $after = ['title' => $data['title'], 'slug' => $data['slug'], 'status' => $data['status'], 'version' => $version];
@@ -262,14 +270,12 @@ final class PageWriteService
                     $request ?? new Request('CLI', '/', [], [], [], []),
                     $current === null ? null : array_intersect_key($current, $after), $after);
                 $payload = $after + ['id' => $id, 'space_id' => (int) $space['id'], 'author_id' => $userId];
+                if ($data['status'] !== 'published' || (bool) $space['review_workflow']) unset($payload['title'], $payload['slug']);
                 $webhooks = new WebhookService($this->database);
                 $webhooks->queue($event, $payload);
                 if ($data['status'] === 'published' && ($current['status'] ?? null) !== 'published') {
                     $webhooks->queue('page.published', $payload);
                 }
-                (new PageEngagementService($this->database))->notifyWatchers($id, (int) $space['id'], $userId,
-                    $event, ($current === null ? 'New page: ' : 'Page updated: ') . $data['title'],
-                    '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($data['slug']));
                 // Only the exact editor's acknowledged snapshot can be removed; other tabs survive.
                 if (isset($input['document_key'], $input['editor_id'], $input['draft_sequence'])) {
                     (new EditSessionService($this->database))->acknowledgeDraft((int) $space['id'], $userId,
@@ -289,7 +295,14 @@ final class PageWriteService
                 $saved['document_json'] = json_encode($document, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
                 $this->database->execute('UPDATE pages SET document_json = :document WHERE id = :id', ['document' => $saved['document_json'], 'id' => $id]);
                 $this->database->execute('UPDATE page_revisions SET document_json = :document WHERE page_id = :id AND revision_number = :version', ['document' => $saved['document_json'], 'id' => $id, 'version' => $version]);
-                $result = $saved + ['tags' => $metadata->tagsForPage($id), 'asset_replacements' => $assetUrls];
+                $saved = $review->completeSave($space, $publicBefore, $saved, $knowledge);
+                if ($refreshLinks) $metadata->refreshSpaceLinks((int) $space['id']);
+                $private = $saved['workflow_state'] !== 'published';
+                $publicSlug = $private && $publicBefore !== null ? $publicBefore['slug'] : $saved['slug'];
+                (new PageEngagementService($this->database))->notifyWatchers($id, (int) $space['id'], $userId,
+                    $event, $private ? 'Zapisano roboczą rewizję dokumentu' : ($current === null ? 'New page: ' : 'Page updated: ') . $saved['title'],
+                    '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($publicSlug) . ($private ? '/review' : ''), $private, [$knowledge['content_owner_id']]);
+                $result = $saved + ['tags' => $metadata->tagsForNames($data['tags']), 'asset_replacements' => $assetUrls, 'is_working' => true];
                 if ($operationId !== null) {
                     $this->database->execute('INSERT INTO editor_page_operations (user_id, operation_id, request_hash, result_json, created_at) VALUES (:user, :operation, :hash, :result, UTC_TIMESTAMP())',
                         ['user' => $userId, 'operation' => $operationId, 'hash' => $operationHash, 'result' => json_encode($result, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)]);
