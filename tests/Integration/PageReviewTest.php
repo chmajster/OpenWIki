@@ -90,6 +90,8 @@ final class PageReviewTest extends TestCase
         $head = $this->write($page, ['base_version' => 1, 'title' => 'Private N+1', 'slug' => 'private-n1', 'content_html' => '<p>Private N+1</p>', 'tags' => ['private']]);
         $repo = new PageRepository($this->app->database()); $public = $repo->findById((int) $page['id']);
         self::assertSame('Public N', $public['title']); self::assertSame('<p>Published N</p>', $public['content_html']); self::assertSame(1, (int) $public['published_revision']); self::assertSame('Private N+1', $repo->working($public)['title']);
+        try { $this->write(null, ['title' => 'Conflicting route', 'slug' => 'private-n1', 'content_html' => '<p>Other</p>']); self::fail('Working slug was not reserved.'); }
+        catch (\InvalidArgumentException) { self::assertSame(2, (int) $repo->findById((int) $page['id'])['version']); }
         $api = new ApiV1Controller($this->app); $reader = $this->token('reader');
         $resource = json_decode($api->page($this->request([], $reader), (string) $page['id'])->body(), true)['data'];
         self::assertSame(1, $resource['version']); self::assertSame('Public N', $resource['title']); self::assertSame('public', $resource['tags'][0]['name']);

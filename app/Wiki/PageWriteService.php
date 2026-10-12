@@ -193,6 +193,8 @@ final class PageWriteService
                     if (($input['status'] ?? $current['status'] ?? 'draft') === 'published') $input['status'] = 'draft';
                 }
                 $data = $this->validate($space, $current, $input, $can);
+                // Public and working routes share one reservation under the space lock.
+                if ($this->database->fetchOne('SELECT p.id FROM pages p LEFT JOIN page_revisions r ON r.page_id = p.id AND r.revision_number = p.version WHERE p.space_id = ? AND p.id <> ? AND (p.slug = ? OR r.slug = ?) LIMIT 1', [$space['id'], $current['id'] ?? 0, $data['slug'], $data['slug']]) !== null) throw new \InvalidArgumentException('Slug jest zajęty w tej przestrzeni. Wybierz inny adres dokumentu.');
                 $review = new PageReviewService($this->database);
                 $knowledge = $review->knowledge($input, $current, $userId);
                 $assetUrls = [];
@@ -265,6 +267,7 @@ final class PageWriteService
                 $event = $current === null ? 'page.created' : 'page.updated';
                 $action = $restoredRevision !== null ? 'PAGE_REVISION_RESTORED' : ($current === null ? 'PAGE_CREATED' : 'PAGE_UPDATED');
                 $after = ['title' => $data['title'], 'slug' => $data['slug'], 'status' => $data['status'], 'version' => $version];
+                $after += $knowledge + ['tags' => $data['tags'], 'parent_id' => $data['parent_id']];
                 if ($restoredRevision !== null) $after['restored_revision'] = $restoredRevision;
                 (new AuditLogger($this->database))->log($action, 'page', $id, $userId,
                     $request ?? new Request('CLI', '/', [], [], [], []),

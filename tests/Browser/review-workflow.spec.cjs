@@ -133,6 +133,9 @@ test('draft files and later file versions remain private through real API downlo
     await call(request, 'post', 'pages/' + doc.id + '/review', {revision: head.version, action: 'publish'}, 7);
     const downloaded = await request.get('/api/v1/attachments/' + file.id + '/download', {headers: headers(8)});
     expect(downloaded.ok()).toBeTruthy(); expect(await downloaded.text()).toBe('Private v1');
+    const oldVersion = await request.get('/api/v1/attachments/' + file.id + '/versions/1/download', {headers: headers(8)});
+    expect(oldVersion.status()).toBe(200); expect(oldVersion.headers()['content-disposition']).toContain('private.txt');
+    expect(oldVersion.headers()['content-disposition']).not.toContain('later-secret');
     expect((await request.get('/api/v1/attachments/' + file.id + '/versions/2/download', {headers: headers(8)})).status()).toBe(404);
     const files = await call(request, 'get', 'attachments', null, 8);
     expect(files.find(value => value.id === file.id).name).toBe('private.txt');

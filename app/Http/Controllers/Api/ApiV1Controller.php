@@ -2288,7 +2288,7 @@ final class ApiV1Controller extends Controller
             return Response::file(
                 (string) $file['path'],
                 (string) $file['mime_type'],
-                (string) $file['name'],
+                (string) $attachment['name'],
                 false
             );
         } catch (\Throwable $exception) {

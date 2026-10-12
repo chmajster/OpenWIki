@@ -142,7 +142,7 @@ final class StructureService
         $destination = (new SpaceService($this->app))->find($this->id($input['destination_space_id'] ?? $source['id']));
         $locks = [(int) $source['id'], (int) $destination['id']]; sort($locks);
         foreach (array_unique($locks) as $lock) $db->fetchOne('SELECT id FROM spaces WHERE id = ? FOR UPDATE', [$lock]);
-        $rows = array_column($db->fetchAll('SELECT id, space_id, parent_id, inherit_acl, title, slug, status, version, owner_id, author_id, order_index, deleted_at FROM pages WHERE space_id IN (?, ?) ORDER BY id FOR UPDATE', [$source['id'], $destination['id']]), null, 'id');
+        $rows = array_column($db->fetchAll('SELECT p.id, p.space_id, p.parent_id, p.inherit_acl, p.title, p.slug, p.status, p.version, p.owner_id, p.author_id, p.order_index, p.deleted_at, r.slug AS working_slug FROM pages p LEFT JOIN page_revisions r ON r.page_id = p.id AND r.revision_number = p.version WHERE p.space_id IN (?, ?) ORDER BY p.id FOR UPDATE', [$source['id'], $destination['id']]), null, 'id');
         $root = $rows[$id] ?? throw new SpaceConflict('Strona została przeniesiona. Odśwież strukturę.');
         $action = $input['action'] ?? 'move'; $scope = $input['scope'] ?? 'subtree';
         if (!in_array($action, ['move', 'copy'], true) || !in_array($scope, ['page', 'subtree'], true)) throw new \InvalidArgumentException('Nieprawidłowa operacja struktury.');
@@ -177,7 +177,7 @@ final class StructureService
         $title = $input['title'] ?? ($root['title'] . ($action === 'copy' ? ' (kopia)' : ''));
         if (!is_string($title) || trim($title) === '' || mb_strlen($title) > 255) throw new \InvalidArgumentException('Nieprawidłowy tytuł kopii.');
         $slugs = []; $reserved = [];
-        foreach ($rows as $row) if ((int) $row['space_id'] === (int) $destination['id'] && ($action === 'copy' || !in_array((int) $row['id'], $selected, true))) $reserved[$row['slug']] = true;
+        foreach ($rows as $row) if ((int) $row['space_id'] === (int) $destination['id'] && ($action === 'copy' || !in_array((int) $row['id'], $selected, true))) { $reserved[$row['slug']] = true; if ($row['working_slug'] !== null) $reserved[$row['working_slug']] = true; }
         foreach ($selected as $pageId) {
             $slug = $action === 'copy' && $pageId === $id ? (new Slugger())->slug($title) : $rows[$pageId]['slug']; $base = mb_substr($slug, 0, 230); $suffix = 2;
             if ($action === 'move' && isset($reserved[$slug])) throw new SpaceConflict('Slug strony jest zajęty w przestrzeni docelowej: ' . $slug);
