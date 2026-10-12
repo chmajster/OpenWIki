@@ -67,6 +67,7 @@ final class SpaceController extends Controller
             'canCreatePage' => $canEdit && $this->app->auth()->can('page.create'),
             'canSettings' => $this->app->auth()->check() && $this->settingsAllowed($space),
             'homePage' => $homePage,
+            'isWatchingSpace' => $this->app->auth()->check() && (new \OpenWiki\Wiki\PageEngagementService($this->app->database()))->isWatching((int) $this->app->auth()->user()['id'], 'space', (int) $space['id']),
         ]);
     }
 

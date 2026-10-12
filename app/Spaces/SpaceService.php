@@ -86,7 +86,7 @@ final class SpaceService
             $home = array_key_exists('home_page_id', $input) ? $input['home_page_id'] : $space['home_page_id'];
             $home = $home === null || $home === '' ? null : $this->id($home);
             if ($home !== ($space['home_page_id'] === null ? null : (int) $space['home_page_id'])) $this->assertAllowed($space, $actor, 'space.edit');
-            if ($home !== null) {
+            if ($home !== null && $home !== ($space['home_page_id'] === null ? null : (int) $space['home_page_id'])) {
                 $page = $db->fetchOne('SELECT * FROM pages WHERE id = ? AND space_id = ? AND deleted_at IS NULL', [$home, $id]);
                 if ($page === null || !(new PageAclService($this->app))->canViewFor($page, $space, $actorId, $actor->can('*'), $actor->can('page.view'))) throw new \InvalidArgumentException('Strona startowa musi być dostępną stroną tej przestrzeni.');
             }

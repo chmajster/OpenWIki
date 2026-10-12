@@ -25,8 +25,13 @@ final class SpaceManagementTest extends TestCase
             foreach (['DB_HOST' => $config['host'], 'DB_PORT' => $config['port'], 'DB_DATABASE' => $config['database'], 'DB_USERNAME' => $config['username'], 'DB_PASSWORD' => $config['password'], 'APP_KEY' => str_repeat('a', 64)] as $key => $value) {
                 $old[$key] = getenv($key); putenv($key . '=' . $value);
             }
+            $lock = dirname(__DIR__, 2) . '/storage/installed.lock'; $previous = is_file($lock) ? file_get_contents($lock) : null;
+            file_put_contents($lock, '{"space_test":true}');
             try { $test(Application::boot(dirname(__DIR__, 2), false), $db, $config); }
-            finally { foreach ($old as $key => $value) $value === false ? putenv($key) : putenv($key . '=' . $value); }
+            finally {
+                $previous === null ? unlink($lock) : file_put_contents($lock, $previous);
+                foreach ($old as $key => $value) $value === false ? putenv($key) : putenv($key . '=' . $value);
+            }
         });
     }
 
@@ -238,5 +243,23 @@ final class SpaceManagementTest extends TestCase
             $results[] = trim(stream_get_contents($pipes[1])); $errors = stream_get_contents($pipes[2]); fclose($pipes[1]); fclose($pipes[2]); self::assertSame(0, proc_close($process), $errors);
         }
         sort($results); return $results;
+    }
+
+    public function testArchiveAndOwnershipCapabilitiesAreIndependentOfMetadataAndAclManagement(): void
+    {
+        $this->instance(function (Application $app, Database $db): void {
+            $owner = $this->user($db, 'owner', true); $archiver = $this->user($db, 'archiver'); $recipient = $this->user($db, 'recipient');
+            $role = $db->insert('INSERT INTO roles (name, slug) VALUES ("Archive", "archive-test")');
+            $db->execute('INSERT INTO role_permissions (role_id, permission_id) SELECT ?, id FROM permissions WHERE name IN ("space.view", "space.archive", "space.manage_owner")', [$role]); $db->execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [$archiver, $role]);
+            $service = new SpaceService($app); $space = $service->create(['name' => 'Independent', 'visibility' => 'restricted'], $owner, $this->request());
+            foreach (['space.view', 'space.archive', 'space.manage_owner'] as $permission) $service->rule((int) $space['id'], ['principal_type' => 'user', 'principal_id' => $archiver, 'permission' => $permission, 'effect' => 'allow'], $owner, $this->request());
+            $space = $service->update((int) $space['id'], ['status' => 'archived'], $archiver, $this->request()); self::assertSame('archived', $space['status']);
+            try { $service->update((int) $space['id'], ['name' => 'Denied'], $archiver, $this->request()); self::fail('Archive capability must not permit metadata edits.'); }
+            catch (\DomainException) { self::assertSame('Independent', $service->find((int) $space['id'])['name']); }
+            try { $service->rule((int) $space['id'], ['principal_type' => 'user', 'principal_id' => $archiver, 'permission' => 'space.edit', 'effect' => 'allow'], $archiver, $this->request()); self::fail('Ownership capability must not permit ACL edits.'); }
+            catch (\DomainException) { self::assertFalse((new SpaceAccessService($app))->canEditFor($space, $archiver)); }
+            $space = $service->update((int) $space['id'], ['owner_id' => $recipient], $archiver, $this->request()); self::assertSame($recipient, (int) $space['owner_id']);
+            self::assertTrue($service->effective($space, $recipient)['space.manage_access']['allowed']);
+        });
     }
 }

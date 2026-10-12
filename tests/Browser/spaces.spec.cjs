@@ -28,7 +28,7 @@ const commit = async page => {
 };
 let errors;
 test.beforeEach(async ({page}) => { errors = []; page.on('pageerror', error => errors.push(error.message)); page.on('dialog', native => native.accept()); await login(page); });
-test.afterEach(() => expect(errors).toEqual([]));
+test.afterEach(async ({page}) => { expect(errors).toEqual([]); await expect(page.locator('body')).not.toContainText('Undefined variable'); });
 
 test('settings form, group picker, effective decisions and archived reads use the same domain as API', async ({page, request, browser}) => {
     const space = await createSpace(request, 'restricted'), document = await createPage(request, space, 'Start');
