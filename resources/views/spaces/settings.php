@@ -1,6 +1,6 @@
 <?php
 $base = '/spaces/' . rawurlencode($space['space_key']);
-$value = static fn (string $key): mixed => $old[$key] ?? $space[$key] ?? '';
+$value = static fn (string $key): mixed => is_scalar($old[$key] ?? null) ? $old[$key] : ($space[$key] ?? '');
 $baseVersion = (int) ($old['base_version'] ?? $space['management_version']);
 $labels = ['space.view' => 'Odczyt', 'space.edit' => 'Edycja', 'space.manage_access' => 'Zarządzanie dostępem', 'space.manage_owner' => 'Zmiana właściciela', 'space.archive' => 'Archiwizacja i przywracanie', 'space.delete' => 'Usuwanie'];
 ?>
