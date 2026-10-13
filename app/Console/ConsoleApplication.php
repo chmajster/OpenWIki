@@ -276,6 +276,8 @@ TEXT);
         fwrite(STDOUT, '[INFO] Temporary files removed: ' . $tempRemoved . PHP_EOL);
 
         $webhooks = (new WebhookService($database))->processDue(25);
+        $reminders = (new \OpenWiki\Wiki\TaskReminderService($database))->run();
+        fwrite(STDOUT, '[INFO] Task reminders: ' . $reminders . PHP_EOL);
         $search = (new SearchIndexer($database))->processDue();
         fwrite(STDOUT, '[INFO] Search index: ' . $search['state'] . ' ' . $search['scanned'] . '/' . $search['total'] . PHP_EOL);
         fwrite(

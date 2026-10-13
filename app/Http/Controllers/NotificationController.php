@@ -45,12 +45,13 @@ final class NotificationController extends Controller
         $user = $this->app->auth()->user();
         $service = new PageEngagementService($this->app->database());
 
-        if (!$service->markRead((int) $user['id'], (int) $notificationId)) {
+        $notification = $service->notificationForUser((int) $user['id'], (int) $notificationId);
+        if ($notification === null || !$service->markRead((int) $user['id'], (int) $notificationId)) {
             return $this->render('errors/404', ['title' => 'Notification not found'], 404);
         }
 
-        $target = (string) $request->input('target_url', '/notifications');
-        if (!str_starts_with($target, '/')) {
+        $target = (string) $notification['target_url'];
+        if (!preg_match('~^/(?!/)[^\x00-\x20\\\\]*$~D', $target)) {
             $target = '/notifications';
         }
 

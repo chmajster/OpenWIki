@@ -157,8 +157,7 @@ final class PageEngagementService
 
     public function markRead(int $userId, int $notificationId): bool
     {
-        $row = $this->database->fetchOne('SELECT * FROM notifications WHERE id=? AND user_id=?', [$notificationId, $userId]);
-        if ($row === null || (new NotificationAccess($this->database))->visible([$row], $userId) === []) return false;
+        if ($this->notificationForUser($userId, $notificationId) === null) return false;
         return $this->database->execute(
             'UPDATE notifications
              SET read_at = COALESCE(read_at, UTC_TIMESTAMP())
@@ -174,6 +173,12 @@ final class PageEngagementService
              WHERE user_id = :user_id AND read_at IS NULL',
             ['user_id' => $userId]
         );
+    }
+
+    public function notificationForUser(int $userId, int $id): ?array
+    {
+        $row = $this->database->fetchOne('SELECT * FROM notifications WHERE id=? AND user_id=?', [$id, $userId]);
+        return $row === null ? null : ((new NotificationAccess($this->database))->visible([$row], $userId)[0] ?? null);
     }
 
     private function scanNotifications(int $user, bool $count, int $limit = 200): array|int

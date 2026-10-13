@@ -100,13 +100,13 @@ test('real author, reviewer, publisher and reader forms preserve N until an appr
         await expect(reader.page.locator('[data-revision-diff]')).toContainText('Public N');
         const hidden = await reader.page.goto(url + '/revisions/2'); expect(hidden.status()).toBe(404);
         await reviewer.page.goto('/knowledge/overdue');
-        await expect(reviewer.page.locator('body')).toContainText('Private title N+1');
+        await expect(reviewer.page.locator('[data-work-center]')).toContainText('Private title N+1');
         await reviewer.page.goto(url + '/review');
         await reviewer.page.locator('input[name=review_due_at]').fill('2099-01-01');
         await reviewer.page.getByRole('button', {name: 'Potwierdź aktualność'}).click();
         await expect(reviewer.page.locator('body')).toContainText('Zapisano decyzję');
         await reader.page.goto('/knowledge/overdue');
-        await expect(reader.page.locator('body')).not.toContainText('Private title N+1');
+        await expect(reader.page.locator('[data-work-center]')).not.toContainText('Private title N+1');
     } finally {
         for (const session of [administrator, author, reviewer, publisher, reader]) {
             await expect(session.page.locator('body')).not.toContainText('Undefined variable');

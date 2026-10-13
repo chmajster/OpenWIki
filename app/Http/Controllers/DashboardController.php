@@ -18,6 +18,8 @@ final class DashboardController extends Controller
     public function index(Request $request): Response
     {
         $user = $this->app->auth()->user();
+        try { $workCenter = $user === null ? null : (new \OpenWiki\Wiki\WorkCenterService($this->app->database()))->items((array)$request->query(),(int)$user['id']); }
+        catch (\InvalidArgumentException $error) { return $this->render('errors/404',['title'=>$error->getMessage()],422); }
         $spaceRepository = new SpaceRepository($this->app->database());
         $pageRepository = new PageRepository($this->app->database());
         $access = new SpaceAccessService($this->app);
@@ -62,7 +64,8 @@ final class DashboardController extends Controller
         };
 
         return $this->render('dashboard/index', [
-            'title' => 'Dashboard',
+            'title' => $user === null ? 'Dashboard' : 'Work center',
+            'workCenter' => $workCenter,
             'spaces' => $spaces,
             'recentUpdated' => $recentUpdated,
             'recentViewed' => $user === null ? [] : $filterAccessible(
@@ -70,9 +73,6 @@ final class DashboardController extends Controller
             ),
             'favorites' => $user === null ? [] : $filterAccessible(
                 (new PageEngagementService($this->app->database()))->favoritesForUser((int) $user['id'], 20)
-            ),
-            'drafts' => $user === null ? [] : $filterAccessible(
-                $pageRepository->draftsForUser((int) $user['id'], 20)
             ),
             'canCreateSpace' => $this->app->auth()->can('space.create'),
         ]);
