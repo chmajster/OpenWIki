@@ -1,4 +1,4 @@
-const {publish, editMetadata, openPublication, openMore, clickTool} = require('./workspace-helpers.cjs');
+const {publish, clickTool} = require('./workspace-helpers.cjs');
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs');
 const fixture = () => JSON.parse(fs.readFileSync('storage/temp/editor-browser.json', 'utf8'));

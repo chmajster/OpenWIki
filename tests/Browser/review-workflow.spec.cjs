@@ -1,4 +1,4 @@
-const {publish, editMetadata, openPublication, openMore, clickTool} = require('./workspace-helpers.cjs');
+const {publish, editMetadata} = require('./workspace-helpers.cjs');
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs');
 test.describe.configure({timeout: 240000});

@@ -1,4 +1,4 @@
-const {publish, editMetadata, openPublication, openMore, clickTool} = require('./workspace-helpers.cjs');
+const {publish} = require('./workspace-helpers.cjs');
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), os = require('node:os');
 test('100k-character document with table, syntax and protected image remains responsive and saves exactly', async ({page, request, browser}) => {
