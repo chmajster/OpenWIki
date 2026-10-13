@@ -645,9 +645,10 @@ test('Polish interface, mobile tree, account menu and keyboard form work togethe
     await page.locator('.account-menu summary').click();
     await page.locator('#interface-language').selectOption('pl');
     await page.locator('.language-form').getByRole('button').click();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'pl');
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('lang', 'pl');
-    const document = await create(request, 'Polski dokument');
+    const document = await create(request, 'Polski dokument', {slug: unique('polski-dokument')});
     await page.setViewportSize({width: 390, height: 844});
     await page.goto(pathFor(document));
     const panel = page.locator('[data-page-panel]');

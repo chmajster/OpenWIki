@@ -116,7 +116,7 @@ test('settings validation and stale versions preserve input without overwriting 
     await page.locator('[name=name]').fill('');
     await page.locator('[data-space-settings]').evaluate(form => form.noValidate = true);
     const invalid = page.waitForResponse(response => response.url().endsWith('/settings') && response.request().method() === 'POST');
-    await page.getByRole('button', {name: 'Zapisz ustawienia'}).click(); expect((await invalid).status()).toBe(422);
+    await Promise.all([page.waitForEvent('load'), page.getByRole('button', {name: 'Zapisz ustawienia'}).click()]); expect((await invalid).status()).toBe(422);
     await expect(page.locator('[name=description]')).toHaveValue('Opis do odzyskania');
     await expect(page.locator('[name=owner_id]')).toHaveValue(String(fixture().users[1].id));
     const originalVersion = await page.locator('[data-space-settings] [name=base_version]').inputValue();
@@ -124,7 +124,7 @@ test('settings validation and stale versions preserve input without overwriting 
     await page.locator('[name=name]').fill('Lokalna nazwa');
     for (let retry = 0; retry < 2; retry++) {
         const conflict = page.waitForResponse(response => response.url().endsWith('/settings') && response.request().method() === 'POST');
-        await page.getByRole('button', {name: 'Zapisz ustawienia'}).click(); expect((await conflict).status()).toBe(409);
+        await Promise.all([page.waitForEvent('load'), page.getByRole('button', {name: 'Zapisz ustawienia'}).click()]); expect((await conflict).status()).toBe(409);
         await expect(page.locator('[name=name]')).toHaveValue('Lokalna nazwa');
         await expect(page.locator('[data-space-settings] [name=base_version]')).toHaveValue(originalVersion);
     }
@@ -137,7 +137,7 @@ test('settings validation and stale versions preserve input without overwriting 
     await acl.locator('[name=effect]').selectOption('deny');
     await acl.locator('[name=permission]').evaluate(select => { select.add(new Option('Invalid permission', 'invalid.permission')); select.value = 'invalid.permission'; });
     const rejectedRule = page.waitForResponse(response => response.url().endsWith('/access') && response.request().method() === 'POST');
-    await acl.getByRole('button', {name: 'Zapisz regułę'}).click(); expect((await rejectedRule).status()).toBe(422);
+    await Promise.all([page.waitForEvent('load'), acl.getByRole('button', {name: 'Zapisz regułę'}).click()]); expect((await rejectedRule).status()).toBe(422);
     await expect(acl.locator('[name=principal_type]')).toHaveValue('group'); await expect(acl.locator('[name=principal_id]')).toHaveValue(String(group.id)); await expect(acl.locator('[name=effect]')).toHaveValue('deny');
     await acl.locator('[name=principal_type]').selectOption('role'); await acl.locator('[data-principal-query]').fill(''); await acl.locator('[data-principal-query]').focus();
     await expect(acl.locator('[data-picker-status]')).toContainText('Wyniki:');
