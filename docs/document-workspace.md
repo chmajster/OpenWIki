@@ -61,3 +61,45 @@ lewej i okno publikacji. Po oględzinach poprawiono kontrast jasnego motywu,
 odstępy kontrolek, miniatury i przyciski szablonów, położenie uchwytów bloku,
 menu przy dolnej krawędzi oraz układ telefonu. Telefon ma ukrywane panele,
 zawijany toolbar i przewijane okno potwierdzenia bez poziomego przewijania strony.
+
+## Testy i pomiar
+
+`vendor/bin/phpunit` obejmuje autoryzację, bazową wersję, receipt, historię,
+adopcję plików i dokładne potwierdzanie szkiców. Nowe scenariusze w
+`PageSavingTest` sprawdzają publikację między przestrzeniami, podgląd makr,
+zachowanie źródeł szablonów, ukrytych rodziców i odmowę sfałszowanej lokalizacji.
+Na Windows pełny przebieg ma 153 testy zaliczone i dwa pominięte testy systemowe
+(kontrola PID na Linux oraz tworzenie symlinku); PHPUnit kończy się kodem 0.
+Końcowe trzy scenariusze podglądu/zapisu dodatkowo zaliczają 36 asercji.
+Linuxowe testy instalacji, aktualizacji MySQL/MariaDB i runtime są osobnymi
+zadaniami CI.
+
+`npx playwright test` obsługuje rzeczywiste formularze i PHP/MySQL. Nowy plik
+`document-workspace.spec.cjs` sprawdza zamknięcie/odzyskanie szkicu bez utworzenia
+artykułu, osiem szablonów i ponowne otwarcie, podgląd i powrót do zastąpionej
+treści, `/` i `+`, operacje bloków z undo, podstronę z drzewa, chroniony obraz
+oraz cel publikacji. Dotychczasowe specyfikacje nadal obejmują konflikty,
+niejednoznaczne odpowiedzi, błędy sieci i HTTP, wiele kart/kont, metadane,
+backlinks, tabele, kod, makra, pliki, recenzję, ACL i telefon. Po zmianie UI
+testy otwierają i zatwierdzają okno publikacji zamiast omijać go skryptem DOM.
+Ślady sieci i zrzuty są artefaktami CI. Wynik końcowego przebiegu jest zapisany
+w [PR #17](https://github.com/chmajster/OpenWIki/pull/17) i jego checks.
+
+Pomiar `editor-performance.spec.cjs` na Windows 11, Ryzen 7 7800X3D,
+Node 24.21.0 i Chromium 156.0.8078.4 dotyczył źródła 107 054 znaków z tabelą,
+kodem i chronionym PNG. Zestaw PHPUnit równolegle używał osobnej bazy testowej.
+
+| Pomiar | Wynik |
+| --- | --- |
+| Trzy otwarcia edytora | 1537 / 3092 / 3228 ms |
+| Mediana input → następna klatka | 11 ms |
+| Najdłuższy pomiar input → klatka | 18 ms |
+| Zapis prywatnego szkicu | 1584 ms |
+| Potwierdzenie i odczyt strony | 5654 ms |
+
+To pomiar rzeczywistego scenariusza na tym stanowisku, obejmujący lokalny PHP
+i kontener MySQL; nie jest gwarancją opóźnienia produkcyjnego. Dane JSON są
+w `storage/temp/editor-performance.json`. `npm run build`, `npm run check:js`
+i walidacja Composer uzupełniają testy formularza. Paczka runtime była
+rozpakowana i sprawdzona rendererem PHP oraz kontrolą obecności bundle/CSS,
+bez `node_modules`, `.env` ani procesu Node obsługującego żądania.
