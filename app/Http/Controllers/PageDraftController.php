@@ -224,12 +224,28 @@ final class PageDraftController extends Controller
             $this->validateContentFields($request);
             $content = (new ContentService())->normalize($request->input('document_preview') === true ? (string) $request->input('content_format', 'markdown') : 'markdown', (string) $request->input('content_html', ''), (string) $request->input('content_markdown', ''));
             if ($request->input('document_preview') === true) {
+                $previewSpace = $context['space'];
+                $destination = $request->input('publication_space_id', '');
+                if ($destination !== '') {
+                    $spaceId = filter_var($destination, FILTER_VALIDATE_INT);
+                    if ($spaceId === false || $spaceId < 1) throw new \InvalidArgumentException('Nieprawidłowa lokalizacja podglądu.');
+                    if ($spaceId !== (int) $previewSpace['id']) {
+                        // A new draft keeps its private identity while macros use the selected destination.
+                        (new \OpenWiki\Wiki\PageWorkspaceService($this->app))->context($spaceId, $context['page']);
+                        $previewSpace = $this->app->database()->fetchOne('SELECT * FROM spaces WHERE id = ? AND deleted_at IS NULL', [$spaceId]);
+                        if ($previewSpace === null) throw new \DomainException('Przestrzeń podglądu jest niedostępna.');
+                    }
+                }
+                $status = $request->input('status', $context['page']['status'] ?? 'draft');
+                if (!is_string($status) || !in_array($status, ['draft', 'published', 'archived'], true)) throw new \InvalidArgumentException('Nieprawidłowy stan podglądu.');
                 $page = array_replace($context['page'] ?? ['id' => 0, 'author_id' => $this->app->auth()->user()['id'], 'version' => 0, 'updated_at' => '', 'status' => 'draft'],
-                    ['content_format' => $content['format'], 'content_html' => $content['html'], 'content_markdown' => $content['markdown'] ?? '', 'document_json' => json_encode($content['document'], JSON_THROW_ON_ERROR)]);
+                    ['space_id' => (int) $previewSpace['id'], 'status' => $status, 'content_format' => $content['format'], 'content_html' => $content['html'], 'content_markdown' => $content['markdown'] ?? '', 'document_json' => json_encode($content['document'], JSON_THROW_ON_ERROR)]);
                 unset($page['published_revision']);
-                $content['html'] = (new \OpenWiki\Wiki\MacroService($this->app))->renderPage($page, $context['space'])['html'];
+                $content['html'] = (new \OpenWiki\Wiki\MacroService($this->app))->renderPage($page, $previewSpace)['html'];
             }
             return Response::json(['data' => ['html' => $content['html'], 'renderer' => 'commonmark-2', 'user_id' => (int) $this->app->auth()->user()['id']]]);
+        } catch (\DomainException $exception) {
+            return Response::json(['error' => ['message' => $exception->getMessage()]], 403);
         } catch (\InvalidArgumentException $exception) {
             return Response::json(['error' => ['message' => $exception->getMessage()]], 422);
         }

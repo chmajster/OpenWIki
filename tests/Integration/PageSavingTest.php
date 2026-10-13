@@ -550,6 +550,11 @@ final class PageSavingTest extends TestCase
         $id = (new SpaceRepository($db))->create(['name' => 'Destination', 'space_key' => 'DEST-' . strtoupper(bin2hex(random_bytes(4))), 'description' => null, 'owner_id' => $this->userId, 'visibility' => 'private']);
         $destination = $db->fetchOne('SELECT * FROM spaces WHERE id = ?', [$id]);
         $document = 'new:10000000-1000-4000-8000-100000000000'; $editor = '22222222-2222-4222-8222-222222222222';
+        $preview = (new PageDraftController($this->app))->preview($this->request(['document_key' => $document, 'document_preview' => true,
+            'publication_space_id' => (string) $id, 'content_format' => 'visual', 'content_html' => '<p>{{page-properties}}</p>', 'status' => 'published']), $this->space['space_key']);
+        self::assertSame(200, $preview->status(), $preview->body());
+        self::assertStringContainsString('<td>Destination</td>', json_decode($preview->body(), true)['data']['html']);
+        self::assertStringContainsString('<td>published</td>', json_decode($preview->body(), true)['data']['html']);
         $drafts = new EditSessionService($db);
         $drafts->saveEditorDraft((int) $this->space['id'], $this->userId, $document, $editor, 7, 0, ['title' => 'Destination page', 'publication_space_id' => (string) $id, 'baseVersion' => 0]);
         $drafts->saveEditorDraft((int) $this->space['id'], $this->userId, $document, '33333333-3333-4333-8333-333333333333', 8, 0, ['title' => 'Other tab']);
@@ -608,6 +613,10 @@ final class PageSavingTest extends TestCase
         catch (\DomainException $exception) { self::assertStringNotContainsString($hidden['title'], $exception->getMessage()); }
         $document = 'new:10000000-1000-4000-8000-100000000000'; $editor = '22222222-2222-4222-8222-222222222222';
         (new EditSessionService($db))->saveEditorDraft((int) $this->space['id'], $this->userId, $document, $editor, 1, 0, ['title' => 'Private recovery']);
+        $preview = (new PageDraftController($this->app))->preview($this->request(['document_key' => $document, 'document_preview' => true,
+            'publication_space_id' => (string) $destination, 'content_format' => 'visual', 'content_html' => '<p>{{recent-updates}}</p>']), $this->space['space_key']);
+        self::assertSame(403, $preview->status(), $preview->body());
+        self::assertStringNotContainsString('Secret destination metadata', $preview->body());
         $response = (new PageController($this->app))->store($this->request(['title' => 'Denied publication', 'content_html' => '<p>Recover me</p>',
             'publication_space_id' => (string) $destination, 'document_key' => $document, 'editor_id' => $editor, 'draft_sequence' => 1, 'base_version' => 0]), $this->space['space_key']);
         self::assertSame(403, $response->status(), $response->body());

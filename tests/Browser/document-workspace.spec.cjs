@@ -75,7 +75,7 @@ test('all eight starter templates open in Visual without a lossy transformation'
     const headings = await editor(page).locator('h1,h2,h3').allTextContents();
     const tables = await editor(page).locator('table').count();
     await publish(page);
-    await expect(page.locator('[data-document-content] h1,h2,h3')).toHaveText(headings);
+    await expect(page.locator('[data-document-content]').locator('h1,h2,h3')).toHaveText(headings);
     await expect(page.locator('[data-document-content] table')).toHaveCount(tables);
     await page.goto(page.url() + '/edit');
     await expect(editor(page).locator('h1,h2,h3')).toHaveText(headings);
@@ -97,6 +97,35 @@ test('slash and block plus insert, transform, duplicate and undo using keyboard 
     await clickTool(page, '[data-block-action=duplicate]'); await expect(editor(page).locator('p').filter({hasText: 'Context paragraph'})).toHaveCount(2);
     await editor(page).press('ControlOrMeta+z'); await expect(editor(page).locator('p').filter({hasText: 'Context paragraph'})).toHaveCount(1);
     await publish(page); await expect(page.locator('[data-document-content] code')).toHaveAttribute('data-language', 'php');
+});
+
+test('quick child creation uses the visible tree parent and persists the relationship', async ({page, request}) => {
+    const parent = await api(request, 'post', 'pages', {space_id: fixture().spaceId, title: unique('Zespół'), content_html: '<p>Dokumentacja zespołu</p>', status: 'published'});
+    await page.goto(createUrl());
+    await page.getByRole('link', {name: 'Utwórz podstronę: ' + parent.title, exact: true}).click();
+    const title = unique('Podstrona'); await page.locator('[data-document-title]').fill(title);
+    await editor(page).fill('Wiedza powiązana z rodzicem');
+    await openPublication(page);
+    await expect(page.locator('[data-publication-parent]')).toHaveValue(String(parent.id));
+    await expect(page.locator('[data-workspace-parent]')).toHaveText(parent.title);
+    await page.locator('[data-confirm-publication]').click();
+    await expect(page.locator('[data-document-content]')).toContainText('Wiedza powiązana z rodzicem');
+    const children = await api(request, 'get', 'pages?space=' + fixture().spaceKey + '&q=' + encodeURIComponent(title));
+    expect(children.some(child => Number(child.parent_id) === Number(parent.id) && child.title === title)).toBeTruthy();
+});
+
+test('block movement, transformation and deletion can be undone before publication', async ({page}) => {
+    await page.goto(createUrl()); await page.locator('[data-document-title]').fill(unique('Block history'));
+    await editor(page).fill('First block'); await editor(page).press('End'); await editor(page).press('Enter'); await page.keyboard.type('Second block');
+    await editor(page).press('Alt+Shift+ArrowUp');
+    await expect(editor(page).locator('p')).toHaveText(['Second block', 'First block']);
+    await editor(page).locator('p').filter({hasText: 'Second block'}).hover();
+    await clickTool(page, '[data-block-format]'); await page.locator('[data-block-format]').selectOption('h2');
+    await expect(editor(page).locator('h2')).toHaveText('Second block');
+    await editor(page).locator('h2').hover(); await clickTool(page, '[data-block-action=delete]');
+    await expect(editor(page).locator('h2')).toHaveCount(0);
+    await editor(page).press('ControlOrMeta+z'); await expect(editor(page).locator('h2')).toHaveText('Second block');
+    await publish(page); await expect(page.locator('[data-document-content] h2')).toHaveText('Second block');
 });
 
 test('publication across spaces adopts a private cover image and respects destination permissions', async ({page, request, browser}) => {
@@ -122,6 +151,7 @@ test('publication across spaces adopts a private cover image and respects destin
 
 for (const viewport of [{width:1920,height:1080},{width:1440,height:900},{width:390,height:844}]) test('workspace presentation and keyboard on ' + viewport.width + 'x' + viewport.height, async ({page}) => {
     await page.setViewportSize(viewport); await page.goto(createUrl());
+    await expect(page.locator('[data-tree-status]')).not.toContainText('Ładowanie');
     if (viewport.width < 900) { await page.locator('[data-toggle-tree]').click(); await expect(page.locator('[data-workspace-tree]')).toBeVisible(); await page.keyboard.press('Escape'); await expect(page.locator('[data-workspace-tree]')).toBeHidden(); }
     await page.screenshot({path: 'storage/temp/workspace-' + viewport.width + 'x' + viewport.height + '-light.png'});
     await page.locator('[data-document-title]').fill('Dokumentacja zespołu'); await page.locator('[data-document-title]').press('Enter'); await page.keyboard.type('Wiedza, do której łatwo wrócić.');
