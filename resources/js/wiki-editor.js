@@ -527,12 +527,13 @@ if (editorRoot) {
             draftVersion = data.draft_version;
             draftGeneration = captured.sequence;
             draftAttempt = null;
-            saveState.dataset.state = lastSaveError ? 'error' : generation === captured.sequence ? 'server' : 'unsaved';
-            if (generation === captured.sequence) saveState.textContent = data.stale
+            saveState.dataset.state = saving ? 'saving' : lastSaveError ? 'error' : generation === captured.sequence ? 'server' : 'unsaved';
+            if (saving) saveState.textContent = 'Zapisywanie dokumentu…';
+            else if (generation === captured.sequence) saveState.textContent = data.stale
                 ? t('Recovery copy saved with its original base version. The server page has changed; saving will require conflict resolution.')
                 : 'Zapisano na serwerze o ' + data.saved_at + '. Szkic nie zmienia strony widocznej czytelnikom.';
             else saveState.textContent = t('An earlier draft was saved. Newer changes are still pending.');
-            if (lastSaveError) saveState.textContent += t(' The page save failed: ') + lastSaveError + t(' Your document and its original base version are retained.');
+            if (lastSaveError && !saving) saveState.textContent += t(' The page save failed: ') + lastSaveError + t(' Your document and its original base version are retained.');
         } catch (error) {
             if (error.status && error.status < 500) draftAttempt = null;
             if (error.draftConflict) {

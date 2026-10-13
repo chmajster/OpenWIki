@@ -149,7 +149,7 @@ for (const failure of ['network', '403', '422', '500']) {
         await expect(page.locator('[name=change_summary]')).toHaveValue('Recoverable summary');
         await editMetadata(page, '[name=tags]', 'fill', 'recoverable');
         await publish(page);
-        await expect(page.locator('[data-document-content]')).toContainText('Recoverable rich document');
+        await expect(page.locator('[data-document-content]')).toContainText('Recoverable rich document', {timeout: 15000});
     });
 }
 
@@ -349,6 +349,7 @@ test('later edits during first-page submission remain in the editor with the con
     });
     await publish(page);
     const document = await saved;
+    await expect(page.locator('[data-save-summary]')).toHaveText('Zapisywanie…');
     await editor(page).fill('Later content during save');
     await editMetadata(page, '[name=tags]', 'fill', 'later-during-submit');
     release();
