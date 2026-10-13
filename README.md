@@ -273,6 +273,10 @@ Supported events:
 Webhook requests are JSON POST requests signed with `X-OpenWiki-Signature: sha256=<HMAC>`. Secrets are encrypted at rest with AES-256-GCM using the application key. Delivery retries are processed by `php bin/console cron:run`. Redirects are disabled and private, reserved and loopback destinations are rejected to reduce SSRF risk.
 
 
+## Documentation collaboration
+
+Fragment discussions, page tasks, the unified work center and access-aware notifications are described in the [collaboration guide](docs/document-collaboration.md), including RBAC, API, migration 013, cron and upgrade instructions.
+
 ## Multi-factor authentication
 
 OpenWiki supports TOTP MFA compatible with Google Authenticator, Microsoft Authenticator, Authy and 1Password.
@@ -454,6 +458,8 @@ Available scopes:
 spaces:read       spaces:write
 pages:read        pages:write
 comments:read     comments:write
+tasks:read        tasks:write
+work:read
 search:read
 users:read        users:write
 groups:read       groups:write
@@ -476,7 +482,15 @@ GET,POST                 /api/v1/pages
 GET,PUT,PATCH,DELETE     /api/v1/pages/{id}
 
 GET,POST                 /api/v1/comments
-PUT,PATCH,DELETE          /api/v1/comments/{id}
+GET,PUT,PATCH,DELETE      /api/v1/comments/{id}
+POST                     /api/v1/comments/{id}/status
+GET                      /api/v1/comments/{id}/replies
+GET                      /api/v1/pages/{id}/discussions
+GET,POST                 /api/v1/pages/{id}/tasks
+GET                      /api/v1/pages/{id}/task-assignees
+GET,PUT,PATCH            /api/v1/tasks/{id}
+GET                      /api/v1/tasks/{id}/history
+GET                      /api/v1/work
 
 GET                       /api/v1/search
 GET,POST                  /api/v1/users

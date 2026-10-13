@@ -226,7 +226,7 @@ install_packages() {
 
   local missing=()
   for ext in pdo pdo_mysql mbstring openssl dom phar curl ldap zip gd; do
-    php -m | grep -qi "^$ext$" || missing+=("$ext")
+    php -r 'exit(extension_loaded($argv[1]) ? 0 : 1);' "$ext" || missing+=("$ext")
   done
   [[ ${#missing[@]} -eq 0 ]] || fail "Brak rozszerzeń PHP: ${missing[*]}"
   ok "Zależności są dostępne."

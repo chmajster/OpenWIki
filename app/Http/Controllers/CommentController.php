@@ -13,7 +13,6 @@ use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Wiki\CommentService;
-use OpenWiki\Webhooks\WebhookService;
 
 final class CommentController extends Controller
 {
@@ -46,23 +45,11 @@ final class CommentController extends Controller
                 (int) $page['id'],
                 (int) $space['id'],
                 (int) $user['id'],
-                (string) $request->input('body', ''),
+                $this->body($request),
                 $parentId === null ? null : (int) $parentId,
                 (string) $page['title'],
-                $this->pageUrl($space, $page)
+                $this->pageUrl($space, $page), [], null, $request
             );
-
-            try {
-                (new WebhookService($this->app->database()))->queue('comment.created', [
-                    'id' => $commentId,
-                    'page_id' => (int) $page['id'],
-                    'space_id' => (int) $space['id'],
-                    'author_id' => (int) $user['id'],
-                    'parent_id' => $parentId === null ? null : (int) $parentId,
-                ]);
-            } catch (\Throwable $webhookError) {
-                error_log('[OpenWiki webhook queue] ' . $webhookError->getMessage());
-            }
 
             Session::flash('success', $parentId === null ? 'Comment added.' : 'Reply added.');
         } catch (\InvalidArgumentException $exception) {
@@ -99,7 +86,7 @@ final class CommentController extends Controller
             if (!(new CommentService($this->app->database()))->update(
                 (int) $commentId,
                 (int) $user['id'],
-                (string) $request->input('body', '')
+                $this->body($request), (int) $page['id'], null, (array) $request->input(), $request
             )) {
                 return $this->render('errors/404', ['title' => 'Comment not found'], 404);
             }
@@ -112,6 +99,8 @@ final class CommentController extends Controller
                 return $this->render('errors/403', ['title' => 'Permission denied'], 403);
             }
             throw $exception;
+        } catch (\DomainException $exception) {
+            return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
         return Response::redirect($this->pageUrl($space, $page) . '#comment-' . (int) $commentId);
@@ -141,7 +130,7 @@ final class CommentController extends Controller
             $deleted = (new CommentService($this->app->database()))->delete(
                 (int) $commentId,
                 (int) $user['id'],
-                $this->app->auth()->can('comment.delete')
+                $this->app->auth()->can('comment.delete'), (int) $page['id'], null, $request
             );
 
             if (!$deleted) {
@@ -154,6 +143,8 @@ final class CommentController extends Controller
                 return $this->render('errors/403', ['title' => 'Permission denied'], 403);
             }
             throw $exception;
+        } catch (\DomainException $exception) {
+            return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
         return Response::redirect($this->pageUrl($space, $page) . '#comments');
@@ -171,7 +162,7 @@ final class CommentController extends Controller
             return [null, null, $this->render('errors/404', ['title' => 'Page not found'], 404)];
         }
 
-        if (!(new PageAclService($this->app))->canView($page, $space)) {
+        if ($space['status'] !== 'active' || $page['status'] === 'archived' || !(new PageAclService($this->app))->canView($page, $space)) {
             return [null, null, $this->render('errors/403', ['title' => 'Permission denied'], 403)];
         }
 
@@ -182,5 +173,11 @@ final class CommentController extends Controller
     {
         return '/spaces/' . rawurlencode($space['space_key'])
             . '/pages/' . rawurlencode($page['slug']);
+    }
+    private function body(Request $request): string
+    {
+        $body = $request->input('body', '');
+        if (!is_string($body)) throw new \InvalidArgumentException('Treść komentarza musi być tekstem.');
+        return $body;
     }
 }

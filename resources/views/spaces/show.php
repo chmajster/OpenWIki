@@ -32,6 +32,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             <div class="page-actions">
                 <?php if ($canSettings): ?><a class="button button--secondary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/settings">Ustawienia przestrzeni</a><?php endif; ?>
                 <?php if ($currentUser !== null): ?>
+                    <a class="button button--ghost" href="/?attention=1&amp;space=<?= (int)$space['id'] ?>"><?= $e($t('Documents needing attention')) ?></a>
                     <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/watch">
                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                         <input type="hidden" name="enabled" value="<?= $isWatchingSpace ? '0' : '1' ?>">

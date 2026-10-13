@@ -245,6 +245,7 @@ TEXT);
         $database = $app->database();
         (new RateLimiter($database))->prune(86400);
         (new \OpenWiki\Wiki\EditSessionService($database))->prune();
+        (new \OpenWiki\Wiki\CollaborationOperation($database))->prune();
         (new \OpenWiki\Attachments\DraftFileService($database, $this->basePath))->prune();
 
         $database->execute(
@@ -276,6 +277,8 @@ TEXT);
         fwrite(STDOUT, '[INFO] Temporary files removed: ' . $tempRemoved . PHP_EOL);
 
         $webhooks = (new WebhookService($database))->processDue(25);
+        $reminders = (new \OpenWiki\Wiki\TaskReminderService($database))->run();
+        fwrite(STDOUT, '[INFO] Task reminders: ' . $reminders . PHP_EOL);
         $search = (new SearchIndexer($database))->processDue();
         fwrite(STDOUT, '[INFO] Search index: ' . $search['state'] . ' ' . $search['scanned'] . '/' . $search['total'] . PHP_EOL);
         fwrite(

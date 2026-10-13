@@ -54,7 +54,8 @@ if (($argv[1] ?? '') === 'seed') {
     }
     $scopes = ['pages:read', 'pages:write', 'spaces:read', 'spaces:write', 'attachments:read', 'attachments:write', 'users:read', 'users:write', 'roles:read', 'roles:write', 'groups:read', 'groups:write', 'search:read'];
     $workflowRoles = []; $workflowTokens = [];
-    foreach ([5 => ['page.view', 'page.create', 'page.edit', 'attachment.upload'], 6 => ['page.view', 'page.review', 'page.verify'], 7 => ['page.view', 'page.publish'], 8 => ['page.view']] as $index => $names) {
+    $scopes = [...$scopes, 'comments:read','comments:write','tasks:read','tasks:write','work:read'];
+    foreach ([5 => ['page.view', 'page.create', 'page.edit', 'attachment.upload', 'comment.create', 'comment.resolve', 'task.create', 'task.update_own'], 6 => ['page.view', 'page.review', 'page.verify', 'comment.create', 'comment.resolve', 'task.create', 'task.update_own'], 7 => ['page.view', 'page.publish', 'comment.create', 'comment.resolve', 'task.create', 'task.update_own'], 8 => ['page.view', 'comment.create', 'task.update_own']] as $index => $names) {
         $role = $database->insert('INSERT INTO roles (name, slug) VALUES (?, ?)', ['Workflow browser ' . $suffix . '-' . $index, 'workflow-browser-' . $suffix . '-' . $index]);
         $workflowRoles[] = $role;
         foreach ($names as $name) {

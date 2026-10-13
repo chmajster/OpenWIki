@@ -73,7 +73,7 @@ final class CommentServiceTest extends TestCase
             'SELECT event_type FROM notifications WHERE user_id = :user_id ORDER BY id ASC',
             ['user_id' => $other]
         );
-        self::assertSame(['reply', 'mention'], array_column($notifications, 'event_type'));
+        self::assertSame(['reply'], array_column($notifications, 'event_type'));
 
         self::assertTrue($service->update($reply, $author, 'Updated reply'));
         $updated = $this->database->fetchOne('SELECT body_html FROM comments WHERE id = :id', ['id' => $reply]);
@@ -85,7 +85,7 @@ final class CommentServiceTest extends TestCase
 
     private function createUser(string $username): int
     {
-        return $this->database->insert(
+        $id = $this->database->insert(
             'INSERT INTO users
              (username, email, password_hash, status, auth_source, created_at, updated_at)
              VALUES (:username, :email, :password_hash, "active", "local", UTC_TIMESTAMP(), UTC_TIMESTAMP())',
@@ -95,5 +95,10 @@ final class CommentServiceTest extends TestCase
                 'password_hash' => password_hash('CorrectHorseBatteryStaple!42', PASSWORD_DEFAULT),
             ]
         );
+        $role = $this->database->insert('INSERT INTO roles (name,slug) VALUES (?,?)', [$username,$username]);
+        $this->database->execute('INSERT IGNORE INTO permissions (name) VALUES ("comment.create")');
+        $this->database->execute('INSERT INTO role_permissions SELECT ?,id FROM permissions WHERE name="comment.create"', [$role]);
+        $this->database->execute('INSERT INTO user_roles VALUES (?,?)', [$id,$role]);
+        return $id;
     }
 }

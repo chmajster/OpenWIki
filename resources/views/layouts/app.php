@@ -37,8 +37,7 @@ $notificationCount = $currentUser === null
                     <?php if ($app->auth()->can('space.create')): ?>
                         <a class="button button--secondary" href="/spaces/create"><?= $e($t('Create space')) ?></a>
                     <?php endif; ?>
-                    <?php if ($app->auth()->can('page.edit') || $app->auth()->can('page.review') || $app->auth()->can('page.publish')): ?><a class="button button--ghost" href="/knowledge/review">Obieg dokumentów</a><?php endif; ?>
-                    <a class="button button--ghost" href="/knowledge/overdue">Dokumenty po terminie przeglądu</a>
+                    <a class="button button--ghost" href="/"><?= $e($t('Work center')) ?></a>
                     <a class="button button--ghost" href="/account/mfa/setup">MFA</a>
                     <a class="button button--ghost" href="/account/sessions"><?= $e($t('Sessions')) ?></a>
                     <a class="button button--ghost" href="/account/api-tokens"><?= $e($t('API tokens')) ?></a>

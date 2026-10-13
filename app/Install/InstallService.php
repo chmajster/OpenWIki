@@ -312,7 +312,7 @@ final class InstallService
             'space.view', 'space.create', 'space.edit', 'space.delete', 'space.manage_access', 'space.manage_owner', 'space.archive',
             'page.view', 'page.create', 'page.edit', 'page.delete', 'page.publish', 'page.archive', 'page.move', 'page.review', 'page.verify',
             'attachment.upload', 'attachment.delete',
-            'comment.create', 'comment.delete',
+            'comment.create', 'comment.delete', 'comment.resolve', 'task.create', 'task.manage', 'task.update_own',
             'user.manage', 'group.manage', 'role.manage',
             'audit.view', 'settings.manage', 'template.manage', 'api.manage', 'webhook.manage',
         ];
@@ -357,6 +357,9 @@ final class InstallService
         ];
 
         foreach ($rolePermissionMap as $roleSlug => $rolePermissions) {
+            if (in_array($roleSlug, ['admin','space-admin'], true)) $rolePermissions = [...$rolePermissions, 'task.create','task.manage','task.update_own','comment.resolve'];
+            elseif (in_array($roleSlug, ['editor','author','reviewer','publisher'], true)) $rolePermissions = [...$rolePermissions, 'task.create','task.update_own','comment.create','comment.resolve'];
+            elseif ($roleSlug === 'viewer') $rolePermissions[] = 'task.update_own';
             $role = $database->fetchOne('SELECT id FROM roles WHERE slug = :slug', ['slug' => $roleSlug]);
             if ($role === null) {
                 throw new \RuntimeException('Unable to seed role: ' . $roleSlug);

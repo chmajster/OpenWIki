@@ -5,7 +5,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
     <div class="page-heading">
         <div>
             <div class="eyebrow"><?= $e($t('Knowledge base')) ?></div>
-            <h1><?= $e($t('Dashboard')) ?></h1>
+            <h1><?= $e($t($currentUser === null ? 'Dashboard' : 'Work center')) ?></h1>
             <p class="muted"><?= $e($t('Spaces and documentation available to your account.')) ?></p>
         </div>
         <?php if ($canCreateSpace): ?>
@@ -13,6 +13,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
         <?php endif; ?>
     </div>
 
+    <?php if($currentUser !== null): require __DIR__.'/../partials/work-center.php'; endif; ?>
     <div class="dashboard-grid">
         <section class="card panel panel--wide">
             <div class="panel__header"><h2><?= $e($t('Spaces')) ?></h2><span class="count"><?= count($spaces) ?></span></div>
@@ -87,23 +88,6 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                 <?php endif; ?>
             </section>
 
-            <section class="card panel">
-                <div class="panel__header"><h2><?= $e($t('My drafts')) ?></h2></div>
-                <?php if ($drafts === []): ?>
-                    <div class="empty-state"><?= $e($t('No drafts.')) ?></div>
-                <?php else: ?>
-                    <ul class="item-list">
-                        <?php foreach ($drafts as $page): ?>
-                            <li>
-                                <a href="/spaces/<?= rawurlencode($page['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>">
-                                    <strong><?= $e($page['title']) ?></strong>
-                                    <span><?= $e($page['space_name']) ?> · <?= $e($page['updated_at']) ?></span>
-                                </a>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                <?php endif; ?>
-            </section>
         <?php endif; ?>
     </div>
 </section>

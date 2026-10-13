@@ -13,8 +13,10 @@ final class SearchAccess
     public array $pages = [];
     private array $visible = [];
     private array $working = [];
+    private array $workingStrict = [];
+    private array $actions = [];
 
-    public function __construct(Database $db, array $spaceIds, array $pageIds, array $workingIds, private readonly ?int $user, private readonly array $permissions)
+    public function __construct(Database $db, array $spaceIds, array $pageIds, array $workingIds, private readonly ?int $user, private readonly array $permissions, bool $strictWorking = false, bool $includeActions = false)
     {
         if ($spaceIds === []) return;
         $spaceIds = array_values(array_unique(array_map('intval', $spaceIds)));
@@ -51,14 +53,19 @@ final class SearchAccess
             $view = SpaceAccessService::evaluate($space, $user, 'space.view', $this->can('*'), true, $spaceRules[$id]['space.view'] ?? [])['allowed'];
             $edit = $user !== null && SpaceAccessService::evaluate($space, $user, 'space.edit', $this->can('*'), true, $spaceRules[$id]['space.edit'] ?? [])['allowed'];
             $space['search_visible'] = $view;
+            $space['search_editable'] = $edit;
             $acl->simulate($space, $grouped[$id] ?? [], $pageRules[$id] ?? [], $user, $principals, $view, $edit);
             foreach ($grouped[$id] ?? [] as $page) {
                 if ($page['deleted_at'] !== null) continue;
                 $this->visible[(int) $page['id']] = $acl->canViewFor($page, $space, $user, $this->can('*'), $this->can('page.view'), $permissions);
+                if ($includeActions && $user !== null && $this->visible[(int) $page['id']]) foreach (['page.edit','page.review','page.publish','page.verify'] as $permission) {
+                    $this->actions[(int) $page['id']][$permission] = $acl->canFor($page,$space,$permission,$user,$this->can('*'),$this->can($permission));
+                }
                 // Working content is a separate resource even if the public projection remains readable.
                 if ($this->visible[(int) $page['id']] && isset($workingNeeded[(int) $page['id']])) {
-                    $this->working[(int) $page['id']] = $acl->canReadWorkingFor($page, $space, $user, $this->can('*'), $permissions)
-                        || (!(bool) $space['review_workflow'] && $page['published_revision'] === null && $page['status'] !== 'published');
+                    $this->workingStrict[(int) $page['id']] = $acl->canReadWorkingFor($page, $space, $user, $this->can('*'), $permissions);
+                    $this->working[(int) $page['id']] = $this->workingStrict[(int) $page['id']]
+                        || (!$strictWorking && !(bool) $space['review_workflow'] && $page['published_revision'] === null && $page['status'] !== 'published');
                 }
             }
         }
@@ -67,6 +74,8 @@ final class SearchAccess
 
     public function can(string $permission): bool { return in_array('*', $this->permissions, true) || in_array($permission, $this->permissions, true); }
     public function visible(int $id, bool $working = false): bool { return $working ? ($this->working[$id] ?? false) : ($this->visible[$id] ?? false); }
+    public function visibleWorking(int $id): bool { return $this->workingStrict[$id] ?? false; }
+    public function action(int $id, string $permission): bool { return $this->actions[$id][$permission] ?? false; }
 
     public function path(int $id): array
     {
