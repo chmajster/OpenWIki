@@ -318,7 +318,7 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
     });
     handles.addEventListener('mousedown', event => {
         if (hovered !== null && canEdit()) editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, hovered)));
-        if (!event.target.closest('select,summary')) event.preventDefault();
+        if (!event.target.closest('select,summary,[data-block-drag]')) event.preventDefault();
     });
     q('[data-block-add]').onclick = () => {
         const block = selectedBlock(); if (!block || !canEdit()) return;

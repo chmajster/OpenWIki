@@ -156,6 +156,25 @@ test('publication across spaces adopts a private cover image and respects destin
     } finally { await context.close(); }
 });
 
+test('dragging a block handle moves the document and undo restores its original order', async ({page}) => {
+    await page.goto(createUrl()); await page.locator('[data-document-title]').fill(unique('Dragged blocks'));
+    await editor(page).fill('First paragraph'); await editor(page).press('End'); await editor(page).press('Enter');
+    await page.keyboard.type('Second paragraph'); await editor(page).press('Enter'); await page.keyboard.type('Third paragraph');
+    await editor(page).locator('p').filter({hasText: 'First paragraph'}).hover();
+    const drag = await page.getByRole('button', {name: 'Przeciągnij bieżący blok', exact: true}).boundingBox();
+    const drop = await editor(page).locator('p').filter({hasText: 'Third paragraph'}).boundingBox();
+    await page.mouse.move(drag.x + drag.width / 2, drag.y + drag.height / 2); await page.mouse.down();
+    await page.mouse.move(drag.x + drag.width / 2 + 10, drag.y + drag.height / 2, {steps: 5});
+    await page.mouse.move(drop.x + drop.width / 2, drop.y + drop.height / 2, {steps: 10}); await page.mouse.move(drop.x + drop.width / 2, drop.y + drop.height / 2); await page.mouse.up();
+    await expect(editor(page).locator('p')).toHaveText(['Second paragraph', 'Third paragraph', 'First paragraph']);
+    await editor(page).press('ControlOrMeta+z');
+    await expect(editor(page).locator('p')).toHaveText(['First paragraph', 'Second paragraph', 'Third paragraph']);
+    await editor(page).press('ControlOrMeta+Shift+z');
+    await expect(editor(page).locator('p')).toHaveText(['Second paragraph', 'Third paragraph', 'First paragraph']);
+    await publish(page);
+    await expect(page.locator('[data-document-content] p')).toHaveText(['Second paragraph', 'Third paragraph', 'First paragraph']);
+});
+
 for (const viewport of [{width:1920,height:1080},{width:1440,height:900},{width:390,height:844}]) test('workspace presentation and keyboard on ' + viewport.width + 'x' + viewport.height, async ({page}) => {
     await page.setViewportSize(viewport); await page.goto(createUrl());
     await expect(page.locator('[data-tree-status]')).not.toContainText('Ładowanie');
