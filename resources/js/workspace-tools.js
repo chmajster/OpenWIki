@@ -186,7 +186,8 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
     editor.on('update', () => { clearTimeout(statsTimer); statsTimer = setTimeout(statistics, 300); }); statistics();
     const refresh = () => {
         const bubble = q('[data-text-context]'), selection = editor.state.selection;
-        bubble.hidden = selection.empty || !canEdit();
+        // Block handles select a whole node; inline tools must not cover its action menu.
+        bubble.hidden = !(selection instanceof TextSelection) || selection.empty || !canEdit();
         if (!bubble.hidden) {
             const coordinates = editor.view.coordsAtPos(selection.from);
             bubble.style.left = Math.max(8, Math.min(window.innerWidth - 300, coordinates.left)) + 'px';

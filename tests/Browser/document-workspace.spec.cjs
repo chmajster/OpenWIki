@@ -120,7 +120,9 @@ test('block movement, transformation and deletion can be undone before publicati
     await editor(page).press('Alt+Shift+ArrowUp');
     await expect(editor(page).locator('p')).toHaveText(['Second block', 'First block']);
     await editor(page).locator('p').filter({hasText: 'Second block'}).hover();
-    await clickTool(page, '[data-block-transform]'); await page.locator('[data-block-transform]').selectOption('h2');
+    await clickTool(page, '[data-block-transform]');
+    await expect(page.locator('[data-text-context]')).toBeHidden();
+    await page.locator('[data-block-transform]').selectOption('h2');
     await expect(editor(page).locator('h2')).toHaveText('Second block');
     await editor(page).locator('h2').hover(); await clickTool(page, '[data-block-action=delete]');
     await expect(editor(page).locator('h2')).toHaveCount(0);
