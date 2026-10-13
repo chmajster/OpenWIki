@@ -57,10 +57,6 @@ export function setupDocumentWorkspace({root, editor, form, requestJson, snapsho
     const width = q('[data-document-width]'); width.value = preferences.width || 'standard';
     const setWidth = () => { root.dataset.documentWidth = width.value; preferences.width = width.value; store(); };
     width.onchange = setWidth; setWidth();
-    const theme = q('[data-workspace-theme]'), dark = matchMedia('(prefers-color-scheme: dark)');
-    theme.value = preferences.theme || 'system';
-    const setTheme = () => { document.body.dataset.workspaceTheme = theme.value === 'system' ? (dark.matches ? 'dark' : 'light') : theme.value; preferences.theme = theme.value; store(); };
-    theme.onchange = setTheme; dark.addEventListener('change', setTheme); setTheme();
     const closeMenus = () => root.querySelectorAll('[data-close-on-escape]').forEach(details => { details.open = false; });
     // Reuse the application's ACL-filtered search and keyboard behavior in the full-screen editor.
     const globalSearch = document.querySelector('.top-search');
