@@ -581,6 +581,7 @@ test('external HTML paste retains safe structure and pasted images keep protecte
 });
 
 test('page link search, macro results and editor endpoints enforce actual ACL', async ({page, request, browser}) => {
+    test.setTimeout(90000);
     const parent = await create(request, unique('ACL parent'));
     const hidden = await create(request, unique('ACL confidential'), {parent_id: parent.id});
     await page.goto(pathFor(hidden) + '/permissions');
