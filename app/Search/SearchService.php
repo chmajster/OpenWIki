@@ -69,7 +69,7 @@ final class SearchService
                     if ($privateRevision) $result['url'] .= '/revisions/' . $row['revision'];
                     $result['meta'] = $space['name'] . ' · ' . implode(' / ', array_column($result['path'], 'title'));
                     if ($type === 'page') { $result['slug'] = $slug; $result['status'] = $row['status']; }
-                    if ($type === 'comment') { $result['url'] .= '#comment-' . $id; $result['page_title'] = $row['title']; $result['author'] = $row['author']; }
+                    if ($type === 'comment') { $result['url'] .= $row['comment_revision'] === null ? '#comment-' . $id : '#discussion-' . ($row['thread_id'] ?? $id); $result['page_title'] = $row['title']; $result['author'] = $row['author']; }
                     if ($type === 'attachment') {
                         $legacy = !(bool) $space['review_workflow'] && $pageRow['status'] === 'published' && ($pageRow['published_revision'] === null || (int) $pageRow['published_revision'] === (int) $pageRow['version']);
                         $result['url'] = '/attachments/' . $id . '/download' . ((bool) $row['working'] || $legacy ? '' : '?revision=' . $row['revision']);

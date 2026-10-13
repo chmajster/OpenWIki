@@ -192,8 +192,8 @@ final class PageController extends Controller
             'isFavorite' => $user !== null && $engagement->isFavorite((int) $user['id'], (int) $page['id']),
             'isWatching' => $user !== null && $engagement->isWatching((int) $user['id'], 'page', (int) $page['id']),
             'comments' => (new CommentService($this->app->database()))->listForPage((int) $page['id'], isset($user['id']) ? (int) $user['id'] : null),
-            'canComment' => $user !== null && $this->app->auth()->can('comment.create'),
-            'canDeleteComment' => $user !== null && $this->app->auth()->can('comment.delete'),
+            'canComment' => $user !== null && $space['status'] === 'active' && $page['status'] !== 'archived' && $this->app->auth()->can('comment.create'),
+            'canDeleteComment' => $user !== null && $space['status'] === 'active' && $page['status'] !== 'archived' && $this->app->auth()->can('comment.delete'),
             'attachments' => (new \OpenWiki\Attachments\AttachmentVisibility($this->app->database()))->forPage((new AttachmentService($this->app->database(), $this->app->basePath()))->listForPage((int) $page['id'], true), $user['id'] ?? null, $this->app->auth()->can('*')),
             'canUploadAttachment' => $user !== null
                 && $pageAccess->canEdit($page, $space)

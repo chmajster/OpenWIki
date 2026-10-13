@@ -2,6 +2,7 @@
 $e = static fn (mixed $v): string => htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $url = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($page['slug']);
 $state = $page['workflow_state'];
+$collaborationSource = $head; $collaborationSelector = '[data-review-content]';
 ?>
 <section class="content-container">
 <div class="page-heading"><div><h1>Obieg dokumentu: <?= $e($head['title']) ?></h1><p>Robocza rewizja <?= (int) $page['version'] ?> · <?= $e(\OpenWiki\Wiki\PageReviewService::STATES[$state]) ?>. Opublikowana rewizja: <?= $page['published_revision'] === null ? 'brak' : (int) $page['published_revision'] ?>.</p></div><a class="button" href="<?= $e($url) ?>">Widok czytelnika</a></div>
@@ -20,4 +21,5 @@ $state = $page['workflow_state'];
 <section class="card panel"><h2>Robocza treść</h2><article class="document-content" data-review-content><?= $head['content_html'] ?></article><dl><dt>Właściciel merytoryczny (konto)</dt><dd><?= (int) $head['content_owner_id'] ?></dd><dt>Termin przeglądu</dt><dd><?= $e($head['review_due_at'] ?? 'Nie wyznaczono') ?></dd></dl></section>
 <section class="card panel"><h2>Decyzje</h2><?php if ($decisions === []): ?><p>Brak decyzji.</p><?php endif; ?><?php foreach ($decisions as $decision): ?><article><h3>Rewizja <?= (int) $decision['revision_number'] ?> · <?= $e(['submit' => 'Zgłoszenie', 'approve' => 'Akceptacja', 'reject' => 'Odrzucenie', 'publish' => 'Publikacja', 'verify' => 'Przegląd aktualności'][$decision['action']]) ?></h3><p><?= $e($decision['comment']) ?></p><small><?= $e($decision['username']) ?> · <?= $e($decision['created_at']) ?></small></article><?php endforeach; ?></section>
 <nav aria-label="Strony decyzji"><?php if ($decisionsPage > 1): ?><a class="button" href="<?= $e($url) ?>/review?decisions_page=<?= $decisionsPage - 1 ?>">Nowsze decyzje</a><?php endif; ?><?php if ($decisionsPage * 50 < $decisionsTotal): ?><a class="button" href="<?= $e($url) ?>/review?decisions_page=<?= $decisionsPage + 1 ?>">Starsze decyzje</a><?php endif; ?></nav>
+<?php require __DIR__ . '/../partials/document-collaboration.php'; ?>
 </section>

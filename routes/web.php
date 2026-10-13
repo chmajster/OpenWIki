@@ -126,11 +126,13 @@ $router->put('/api/v1/pages/{id}', [ApiV1Controller::class, 'updatePage']);
 $router->patch('/api/v1/pages/{id}', [ApiV1Controller::class, 'updatePage']);
 $router->delete('/api/v1/pages/{id}', [ApiV1Controller::class, 'deletePage']);
 $router->get('/api/v1/comments', [ApiV1Controller::class, 'comments']);
+$router->get('/api/v1/work', [ApiV1Controller::class, 'workCenter']);
 // Collaboration panels use the existing authenticated session and CSRF boundary.
 $router->get('/collaboration/pages/{id}/{action}', [\OpenWiki\Http\Controllers\CollaborationController::class, 'read']);
 $router->post('/collaboration/pages/{id}/{action}', [\OpenWiki\Http\Controllers\CollaborationController::class, 'write']);
 $router->post('/api/v1/comments', [ApiV1Controller::class, 'createComment']);
 $router->get('/api/v1/comments/{id}', [ApiV1Controller::class, 'getComment']);
+$router->get('/api/v1/comments/{id}/replies', [ApiV1Controller::class, 'discussionReplies']);
 $router->post('/api/v1/comments/{id}/status', [ApiV1Controller::class, 'discussionStatus']);
 $router->get('/api/v1/pages/{id}/discussions', [ApiV1Controller::class, 'discussions']);
 $router->get('/api/v1/pages/{id}/tasks', [ApiV1Controller::class, 'pageTasks']);

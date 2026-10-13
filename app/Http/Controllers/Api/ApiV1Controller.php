@@ -370,7 +370,15 @@ final class ApiV1Controller extends Controller
     }
 
     public function createComment(Request $request): Response { return $this->collaborationApi($request,'comment-create','comments:write',(string)$request->input('page_id','')); }
+    public function workCenter(Request $request): Response
+    {
+        [$context,$failure]=$this->apiAuth($request,'work:read');
+        if($failure!==null)return $failure;
+        try{return Response::json((new \OpenWiki\Wiki\WorkCenterService($this->app->database()))->items((array)$request->query(),(int)$context['user']['id'],$context['permissions']));}
+        catch(\Throwable $error){return \OpenWiki\Http\CollaborationResponse::failure($error);}
+    }
     public function getComment(Request $request,string $id): Response { return $this->collaborationApi($request,'comment','comments:read',null,$id,'comment'); }
+    public function discussionReplies(Request $request,string $id): Response { return $this->collaborationApi($request,'discussion-replies','comments:read',null,$id,'comment'); }
     public function updateComment(Request $request,string $id): Response { return $this->collaborationApi($request,'comment-update','comments:write',null,$id,'comment'); }
     public function deleteComment(Request $request,string $id): Response
     {
@@ -2468,19 +2476,6 @@ final class ApiV1Controller extends Controller
         ) ?? $this->error('validation_error', 'Unknown space_id.', 422);
     }
 
-    private function commentRow(int $commentId): ?array
-    {
-        return $this->app->database()->fetchOne(
-            'SELECT c.id, c.page_id, c.parent_id, c.author_id, c.body_html,
-                    c.created_at, c.updated_at,
-                    u.username, u.first_name, u.last_name
-             FROM comments c
-             INNER JOIN users u ON u.id = c.author_id
-             WHERE c.id = :id AND c.deleted_at IS NULL
-             LIMIT 1',
-            ['id' => $commentId]
-        );
-    }
 
     private function pageRow(int $pageId): ?array
     {

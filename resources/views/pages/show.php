@@ -96,6 +96,8 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             <?php endif; ?>
         </div>
 
+        <?php if ($currentUser !== null): $collaborationSource = $page; $collaborationSelector = '[data-document-content]'; require __DIR__ . '/../partials/document-collaboration.php'; endif; ?>
+
         <?php if ($backlinks !== []): ?>
             <section class="backlinks-section" id="backlinks">
                 <div class="panel__header">
@@ -231,7 +233,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                                     </details>
                                 <?php endif; ?>
 
-                                <?php if ($isOwnComment): ?>
+                                <?php if ($isOwnComment && $canComment): ?>
                                     <details>
                                         <summary class="button button--ghost"><?= $e($t('Edit')) ?></summary>
                                         <form method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/comments/<?= (int) $comment['id'] ?>/edit" class="form-stack compact-form">
@@ -242,7 +244,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                                     </details>
                                 <?php endif; ?>
 
-                                <?php if ($isOwnComment || $canDeleteComment): ?>
+                                <?php if (($isOwnComment && $canComment) || $canDeleteComment): ?>
                                     <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/comments/<?= (int) $comment['id'] ?>/delete" data-confirm="<?= $e($t('Delete this comment?')) ?>">
                                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                                         <button class="button button--ghost" type="submit"><?= $e($t('Delete')) ?></button>

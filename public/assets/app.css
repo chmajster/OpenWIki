@@ -17,6 +17,32 @@
 }
 
 * { box-sizing: border-box; }
+.collaboration { margin-block: 20px; }
+.work-center { margin-block: 20px; }
+.work-filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-block: 20px; }
+.work-filters label { display: grid; gap: 6px; flex: 1 1 150px; min-width: 0; }
+.work-filters select { width: 100%; min-width: 0; }
+.work-document { display: block; margin-top: 5px; color: var(--muted); }
+.work-center table td { vertical-align: top; }
+.collaboration-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
+.collaboration-panel, .collaboration-task-dialog { color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); }
+.collaboration-panel { position: fixed; inset: 76px 12px 12px auto; width: 380px; max-width: calc(100vw - 24px); max-height: calc(100dvh - 88px); margin: 0; z-index: 50; overflow: auto; }
+.collaboration-task-dialog { width: 560px; max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); overflow: auto; }
+.collaboration-panel::backdrop, .collaboration-task-dialog::backdrop { background: rgba(0,0,0,.45); }
+.collaboration-panel label, .collaboration-task-dialog label { display: grid; gap: 6px; margin-block: 12px; }
+.collaboration-panel textarea, .collaboration-task-dialog textarea, .collaboration-task-dialog input, .collaboration-task-dialog select, .collaboration-panel select { width: 100%; min-width: 0; }
+.collaboration-thread { padding-block: 16px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.collaboration-message { margin-top: 16px; padding-left: 12px; border-left: 2px solid var(--border); }
+.collaboration-message-body { white-space: pre-wrap; }
+.collaboration-quote { display: block; width: 100%; border: 0; border-left: 3px solid var(--accent); background: var(--surface-2); color: var(--text); text-align: start; padding: 12px; margin-block: 12px; cursor: pointer; overflow-wrap: anywhere; }
+.collaboration-task { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-block: 10px; border-bottom: 1px solid var(--border); }
+.collaboration-task-title { flex: 1 1 180px; border: 0; background: transparent; color: var(--accent); text-align: start; cursor: pointer; overflow-wrap: anywhere; }
+.collaboration nav { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-block: 12px; }
+.collaboration-task-dialog dl { overflow-wrap: anywhere; }
+::highlight(openwiki-discussion) { background: #ffda73; color: #20242c; }
+::highlight(openwiki-threads) { background: #b9d5ff; color: #20242c; }
+@media (min-width: 1200px) { .wiki-content:has(.collaboration-panel[open]) .document-layout { margin-right: 390px; } }
+@media (max-width: 767px) { .collaboration-panel { inset: 0; width: 100%; max-width: none; max-height: 100dvh; height: 100dvh; border-radius: 0; } .collaboration-task-dialog { padding: 16px; } }
 [hidden] { display: none !important; }
 html { min-height: 100%; background: var(--bg); }
 body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); }

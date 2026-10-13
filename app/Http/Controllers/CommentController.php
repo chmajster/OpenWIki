@@ -158,7 +158,7 @@ final class CommentController extends Controller
             return [null, null, $this->render('errors/404', ['title' => 'Page not found'], 404)];
         }
 
-        if (!(new PageAclService($this->app))->canView($page, $space)) {
+        if ($space['status'] !== 'active' || $page['status'] === 'archived' || !(new PageAclService($this->app))->canView($page, $space)) {
             return [null, null, $this->render('errors/403', ['title' => 'Permission denied'], 403)];
         }
 
