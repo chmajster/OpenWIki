@@ -47,10 +47,10 @@ test('settings form, group picker, effective decisions and archived reads use th
     await expect(effective.locator('[data-effective-result]')).toContainText(`group #${group.id}`);
     await page.screenshot({path: 'storage/temp/space-settings-desktop.png', fullPage: true});
     const context = await browser.newContext(), reader = await context.newPage(); await login(reader, 3); await reader.goto(pathFor(space, document)); await expect(reader.locator('[data-document-content]')).toContainText('Dokumentacja');
-    await editMetadata(page, '[name=status]', 'selectOption', 'archived'); await page.getByRole('button', {name: 'Zapisz ustawienia'}).click();
+    await page.locator('[name=status]').selectOption('archived'); await page.getByRole('button', {name: 'Zapisz ustawienia'}).click();
     await reader.reload(); await expect(reader.locator('[data-document-content]')).toContainText('Dokumentacja');
     const denied = await request.put(`/api/v1/pages/${document.id}`, {headers: {Authorization: 'Bearer ' + fixture().token}, data: {base_version: 1, title: 'Forbidden'}}); expect(denied.status()).toBe(403);
-    await editMetadata(page, '[name=status]', 'selectOption', 'active'); await page.getByRole('button', {name: 'Zapisz ustawienia'}).click(); expect((await api(request, 'get', `spaces/${space.id}`)).status).toBe('active');
+    await page.locator('[name=status]').selectOption('active'); await page.getByRole('button', {name: 'Zapisz ustawienia'}).click(); expect((await api(request, 'get', `spaces/${space.id}`)).status).toBe('active');
     await context.close();
 });
 
