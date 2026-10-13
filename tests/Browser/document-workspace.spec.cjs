@@ -131,6 +131,11 @@ test('block movement, transformation and deletion can be undone before publicati
 test('publication across spaces adopts a private cover image and respects destination permissions', async ({page, request, browser}) => {
     const target = await api(request, 'post', 'spaces', {name: unique('Workspace destination'), visibility: 'private'});
     await page.goto(createUrl()); await page.locator('[data-document-title]').fill(unique('Cross-space cover'));
+    await page.getByRole('tab', {name: 'Markdown', exact: true}).click();
+    await expect(page.locator('[data-content-format]')).toHaveValue('markdown');
+    await expect(page.locator('[data-add-cover]')).toBeDisabled();
+    await page.locator('[data-editor-mode=visual]').click();
+    await expect(page.locator('[data-add-cover]')).toBeEnabled();
     const chooser = page.waitForEvent('filechooser'); await page.locator('[data-add-cover]').click();
     await (await chooser).setFiles({name: 'cover.png', mimeType: 'image/png', buffer: Buffer.from(fixture().imageBase64, 'base64')});
     await expect(editor(page).locator('figure.page-cover img[data-draft-file-id]')).toHaveCount(1);

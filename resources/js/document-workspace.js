@@ -205,6 +205,8 @@ export function setupDocumentWorkspace({root, editor, form, requestJson, snapsho
     q('[data-template-preview-apply]').onclick = () => { if (previewTemplate) useTemplate(previewTemplate); }; renderTemplates();
     const refresh = () => {
         space.disabled = root.dataset.isEdit === '1';
+        const cover = q('[data-add-cover]');
+        if (cover) cover.disabled = q('[data-image-picker]').disabled || q('[data-save-button]').disabled;
         const current = snapshot().documentKey + ':' + root.dataset.spaceId;
         if (documentContext !== current) { documentContext = current; ++contextSequence; ready = false; space.value = root.dataset.spaceId; if (publication.open) loadContext(); }
         confirm.disabled = !ready || q('[data-save-button]').disabled || !title.value.trim(); growTitle();
