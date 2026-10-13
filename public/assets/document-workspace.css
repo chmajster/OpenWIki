@@ -30,7 +30,7 @@
 .workspace-tree .tree-actions { display:none; }
 .workspace-tree .page-tree { background:transparent; border:0; padding:0; }
 .workspace-tree .tree-row { min-height:34px; font-size:13px; }
-.workspace-tree .page-tree__link { color:var(--text); font-size:12px; }
+.workspace-tree .page-tree__link { display:block; color:var(--text); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .workspace-space-name { display:flex; align-items:center; gap:6px; font-size:14px; margin:24px 4px; }
 .workspace-space-name svg { width:20px; height:20px; }
 .workspace-tree-heading { display:flex; justify-content:space-between; color:var(--muted); font-size:12px; padding:6px; }

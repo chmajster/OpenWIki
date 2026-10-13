@@ -20,7 +20,7 @@ document.querySelectorAll('[data-documentation-tree]').forEach(tree => {
                 const item = document.createElement('li'); item.role = 'treeitem'; item.tabIndex = -1; item.dataset.pageId = page.id; item.dataset.page = JSON.stringify(page);
                 const row = document.createElement('div'); row.className = 'tree-row';
                 const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'tree-toggle'; toggle.textContent = page.has_children ? '▸' : '·'; toggle.disabled = !page.has_children || Boolean(search.value.trim()); toggle.setAttribute('aria-label', `Rozwiń: ${page.title}`);
-                const link = document.createElement('a'); link.className = 'page-tree__link'; link.href = page.url; link.textContent = page.title; link.tabIndex = -1;
+                const link = document.createElement('a'); link.className = 'page-tree__link'; link.href = page.url; link.textContent = page.title; link.title = page.title; link.tabIndex = -1;
                 if (String(page.id) === tree.dataset.activePage) { link.classList.add('is-active'); link.setAttribute('aria-current', 'page'); }
                 row.append(toggle, link); item.append(row); group.append(item);
                 if (page.can_create && tree.closest('[data-wiki-editor]')) {
