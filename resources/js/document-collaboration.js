@@ -56,19 +56,33 @@ document.querySelectorAll("[data-collaboration]").forEach((root) => {
   let selection, commentContext, currentTask, taskSource = {}, discussionPage = 1, taskPage = 1, panelFocus, taskFocus;
   let commentBusy = false, taskBusy = false, assigneeLoading = false, assigneeSequence = 0, assigneeTimer, threadSequence = 0, taskSequence = 0;
   let fragmentLinks = [];
+  let needsSessionRefresh = false;
   let threadTarget = location.hash.match(/^#discussion-(\d+)$/)?.[1] || null;
   const date = (value) => value ? new Intl.DateTimeFormat(config.locale, { dateStyle: "medium", timeStyle: "short", timeZone: config.timezone }).format(/* @__PURE__ */ new Date(value.replace(" ", "T") + "Z")) : "";
   const request = async (action, input = {}, write = false) => {
-    const response = await fetch("/collaboration/pages/" + config.page + "/" + action + (write ? "" : "?" + new URLSearchParams(input)), {
+    if (write && needsSessionRefresh) {
+      await request('tasks', {per_page: 1});
+      needsSessionRefresh = false;
+    }
+    let response;
+    try { response = await fetch("/collaboration/pages/" + config.page + "/" + action + (write ? "" : "?" + new URLSearchParams(input)), {
       method: write ? "POST" : "GET",
       headers: { Accept: "application/json", ...write ? { "Content-Type": "application/json", "X-CSRF-Token": config.token } : {} },
-      ...write ? { body: JSON.stringify(input) } : {}
-    });
-    const body = await response.json();
+      ...write ? { body: JSON.stringify({...input, collaboration_user_id: config.user}) } : {}
+    }); } catch { throw new Error(t('Connection failed. Your input has been kept.')); }
+    let body;
+    try { body = await response.json(); }
+    catch { throw new Error(t('Server returned an unreadable response. Your input has been kept.')); }
     if (!response.ok) {
-      const error = new Error(body.error?.message || t("Unable to save. Try again."));
+      const expired = response.status === 401 || response.status === 419;
+      if (expired) needsSessionRefresh = true;
+      const error = new Error(expired ? t('Session expired. Sign in in another tab and retry.') : body.error?.message || t("Unable to save. Try again."));
       error.status = response.status;
       throw error;
+    }
+    if (body.session) {
+      if (Number(body.session.user_id) !== config.user) throw new Error(t('Account changed. Your input has been kept; open the document with the original account.'));
+      config.token = body.session.csrf_token;
     }
     return body;
   };

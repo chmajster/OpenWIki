@@ -5,6 +5,7 @@ namespace OpenWiki\Http\Controllers;
 
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
+use OpenWiki\Security\Csrf;
 use OpenWiki\Http\Controller;
 use OpenWiki\Http\CollaborationResponse;
 use OpenWiki\Wiki\CollaborationActions;
@@ -34,7 +35,15 @@ final class CollaborationController extends Controller
             return $failure;
         }
         try {
-            return Response::json((new CollaborationActions($this->app->database()))->run($action, CollaborationAccess::positive($id), (int) $this->app->auth()->user()['id'], (array) ($write ? $request->input() : $request->query()), null, $request));
+            $user = (int) $this->app->auth()->user()['id'];
+            if ($write && CollaborationAccess::positive($request->input('collaboration_user_id')) !== $user) {
+                throw new \DomainException('Konto zostało zmienione. Wpisany tekst jest zachowany; otwórz dokument na właściwym koncie.');
+            }
+            $input = (array) ($write ? $request->input() : $request->query());
+            unset($input['collaboration_user_id']);
+            $result = (new CollaborationActions($this->app->database()))->run($action, CollaborationAccess::positive($id), $user, $input, null, $request);
+            if (!$write) $result['session'] = ['user_id' => $user, 'csrf_token' => Csrf::token()];
+            return Response::json($result);
         } catch (\Throwable $error) {
             return CollaborationResponse::failure($error);
         }

@@ -3,13 +3,33 @@ const fs=require('node:fs');
 test.describe.configure({timeout:120000});
 test.use({actionTimeout:15000});
 
+test('offline and expired real sessions preserve discussion input and permit an authenticated retry',async({page,request})=>{
+    await login(page);const document=await api(request,'post','pages',{space_id:fixture().spaceId,title:'Retry '+Date.now(),content_html:'<p>Retry procedure fragment.</p>',status:'published'});
+    await page.goto('/spaces/'+fixture().spaceKey+'/pages/'+document.slug);await select(page,'procedure fragment');
+    const form=page.locator('[data-comment-form]');await form.locator('[name=body]').fill('Keep offline input');
+    await page.context().setOffline(true);await form.locator('[type=submit]').click();
+    await expect(form.locator('[data-comment-feedback]')).toContainText('Connection failed');await expect(form.locator('[name=body]')).toHaveValue('Keep offline input');
+    await page.context().setOffline(false);await form.locator('[type=submit]').click();await expect(page.locator('.collaboration-thread')).toContainText('Keep offline input');
+    await page.locator('.collaboration-thread').getByRole('button',{name:'Reply',exact:true}).click();await form.locator('[name=body]').fill('Keep expired session input');
+    const other=await page.context().newPage();try{
+        await other.goto('/');await other.locator('.account-menu summary').click();await other.getByRole('button',{name:'Sign out',exact:true}).click();
+        await form.locator('[type=submit]').click();await expect(form.locator('[data-comment-feedback]')).toContainText('Session expired');
+        await expect(form.locator('[name=body]')).toHaveValue('Keep expired session input');
+        await login(other);await form.locator('[type=submit]').click();await expect(page.locator('.collaboration-thread')).toContainText('Keep expired session input');
+    }finally{await other.close();}
+    expect(await api(request,'get','pages/'+document.id+'/discussions?revision_number=1')).toHaveLength(1);
+});
+
 test('private editor draft is resumed through the work center without creating a page',async({page,request,browser})=>{
     await login(page);await page.goto('/spaces/'+fixture().spaceKey+'/pages/create');
     const title='Private work center draft '+Date.now();await page.locator('[data-document-title]').fill(title);
     await page.locator('[data-visual-editor]').fill('Private unsaved publication source');await page.locator('[data-visual-editor]').press('ControlOrMeta+s');
+    await expect(page.locator('[data-save-summary]')).toHaveText('Zapisano');
+    const originalDocument=new URL(page.url()).searchParams.get('document');
     await expect.poll(async()=> (await api(request,'get','work?type=draft')).some(item=>item.title===title)).toBeTruthy();
     await page.locator('[data-editor-cancel]').click();await expect(page).toHaveURL('/spaces/'+fixture().spaceKey);await page.goto('/?type=draft');
     const row=page.locator('[data-work-item]').filter({hasText:title});await expect(row).toBeVisible();
+    expect(new URL(await row.getByRole('link',{name:'Resume draft',exact:true}).getAttribute('href'),page.url()).searchParams.get('document')).toBe(originalDocument);
     await row.getByRole('link',{name:'Resume draft',exact:true}).click();await expect(page.locator('[data-recovery-banner]')).toBeVisible();
     await page.locator('[data-restore-recovery]').click();await expect(page.locator('[data-document-title]')).toHaveValue(title);
     await expect(page.locator('[data-visual-editor]')).toContainText('Private unsaved publication source');

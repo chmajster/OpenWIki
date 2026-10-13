@@ -2,6 +2,10 @@
 
 // Only interface messages are translated; document titles, content and metadata stay intact.
 return [
+    'Connection failed. Your input has been kept.' => 'Połączenie nie powiodło się. Wpisane dane są zachowane.',
+    'Server returned an unreadable response. Your input has been kept.' => 'Serwer zwrócił nieprawidłową odpowiedź. Wpisane dane są zachowane.',
+    'Session expired. Sign in in another tab and retry.' => 'Sesja wygasła. Zaloguj się w drugiej karcie i ponów zapis.',
+    'Account changed. Your input has been kept; open the document with the original account.' => 'Konto zostało zmienione. Dane są zachowane; otwórz dokument na pierwotnym koncie.',
     'Discussion is unavailable.' => 'Dyskusja jest niedostępna.',
     'Selected space' => 'Wybrana przestrzeń',
     'Action' => 'Akcja',

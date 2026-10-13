@@ -4,7 +4,7 @@
 
 Na opublikowanej stronie, w podglądzie recenzji i w dostępnej rewizji historycznej zaznacz tekst i wybierz **Dodaj komentarz do zaznaczenia**. Cytat i rewizja źródłowa są widoczne w panelu **Dyskusje**. Wątki obsługują odpowiedzi, @wzmianki, edycję autora, moderację, rozwiązanie/ponowne otwarcie, filtry stanu i paginację. Komentarze ogólne pozostają w dotychczasowej sekcji strony.
 
-Przycisk cytatu zaznacza tekst. Niebieskie oznaczenia aktualnie wczytanych wątków otwierają panel po kliknięciu lub Enter w dokumencie. Żółte oznaczenie wskazuje wybrany fragment. **Wszystkie dyskusje** wychodzi z widoku pojedynczego wątku. Desktop ma prawy panel; telefon dialog zajmujący ekran. Escape zamyka dialog i przywraca fokus. Błąd zapisu zachowuje wpisaną treść.
+Przycisk cytatu zaznacza tekst. Niebieskie oznaczenia aktualnie wczytanych wątków otwierają panel po kliknięciu lub Enter w dokumencie. Żółte oznaczenie wskazuje wybrany fragment. **Wszystkie dyskusje** wychodzi z widoku pojedynczego wątku. Desktop ma prawy panel; telefon dialog zajmujący ekran. Escape zamyka dialog i przywraca fokus. Błąd zapisu zachowuje wpisaną treść. Po wygaśnięciu sesji zaloguj się na to samo konto w drugiej karcie i ponów zapis; formularz odświeży CSRF po ponownej kontroli dokumentu i konta.
 
 **Utwórz zadanie** jest dostępne obok dokumentu oraz w dyskusji. Tytuł i status są w krótkim formularzu; opis, termin i osoba odpowiedzialna są rozwijane. **Zadania strony** pokazują statusy i licznik otwartych zadań. Zadanie zachowuje stronę, rewizję i odnośnik do wątku oraz udostępnia historię. Usunięta dyskusja jest oznaczona jako niedostępna; istniejąca rewizja pozostaje dostępna zgodnie z ACL.
 
