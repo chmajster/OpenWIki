@@ -144,9 +144,12 @@ for (const format of ['visual', 'markdown']) test(`legacy ${format} page, revisi
     const context = await browser.newContext({bypassCSP: true}); const page = await context.newPage();
     await login(page);
     for (const path of [pathFor(document), pathFor(document) + '/revisions/1']) {
-        await page.goto(path); await expect(page.locator('body')).toContainText('Legacy safe');
+        await page.goto(path);
+        const content = page.locator('[data-document-content], [data-revision-content]');
+        await expect(content).toHaveCount(1); await expect(content).toContainText('Legacy safe');
         expect(await page.evaluate(() => window.__xss)).toBeUndefined();
-        expect(await page.locator('article[onclick], p[onclick], svg').count()).toBe(0);
+        // Check untrusted document HTML; the application shell contains its own safe SVG icons.
+        expect(await content.locator('article[onclick], p[onclick], svg').count()).toBe(0);
         if (format === 'markdown') await expect(page.locator('table')).toContainText('Historical table');
     }
     const response = await request.get('/api/v1/pages/' + document.id, {headers: {Authorization: 'Bearer ' + fixture().token}});

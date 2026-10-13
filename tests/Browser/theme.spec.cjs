@@ -164,7 +164,8 @@ test('Polish light document, discussions, tasks and work center fit 390, 768 and
         await page.locator('[data-panel-close]').click();
     }
     await page.locator('[data-tasks-list]').getByRole('button',{name:'Potwierdź poprawność kopii'}).click();
-    await expect(page.locator('[data-task-dialog]')).toBeVisible(); await page.screenshot({path:'storage/temp/theme-light-task.png'});
+    await expect(page.locator('[data-task-dialog]')).toBeVisible(); await expect(page.locator('[data-task-save]')).toBeEnabled();
+    await page.screenshot({path:'storage/temp/theme-light-task.png'});
     await page.locator('[data-task-close]').click(); await page.goto('/?type=task'); await expect(page.locator('[data-work-center]')).toContainText('Potwierdź poprawność kopii');
     await page.evaluate(() => scrollTo({top:0,behavior:'instant'}));
     await page.screenshot({path:'storage/temp/theme-light-center.png'}); await choose(page,'dark');
