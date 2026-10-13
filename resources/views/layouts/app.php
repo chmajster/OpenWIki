@@ -6,11 +6,12 @@ $notificationCount = $currentUser === null
     : (new \OpenWiki\Wiki\PageEngagementService($app->database()))->unreadCount((int) $currentUser['id']);
 ?>
 <!doctype html>
-<html lang="<?= $e($locale) ?>">
+<html lang="<?= $e($locale) ?>" data-user-id="<?= (int) ($currentUser['id'] ?? 0) ?>" data-instance-id="<?= substr(hash('sha256', $app->basePath() . \OpenWiki\Core\Env::get('APP_URL', '')), 0, 16) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= $e($pageTitle) ?></title>
+    <script src="/assets/theme.js"></script>
     <link rel="stylesheet" href="/assets/app.css">
     <?php if (!empty($editorWorkspace)): ?><link rel="stylesheet" href="/assets/document-workspace.css"><?php endif; ?>
     <script src="/assets/app.js" defer></script>
@@ -31,6 +32,7 @@ $notificationCount = $currentUser === null
                 <span class="shortcut">Ctrl K</span>
             </form>
             <nav class="top-actions" aria-label="<?= $e($t('Account actions')) ?>">
+                <?php require __DIR__ . '/../partials/theme-selector.php'; ?>
                 <?php if ($currentUser !== null): ?>
                     <a class="button button--ghost notification-link" href="/notifications"><?= $e($t('Notifications')) ?><?php if ($notificationCount > 0): ?><span class="notification-badge"><?= (int) $notificationCount ?></span><?php endif; ?></a>
                     <details class="account-menu" data-close-on-escape><summary class="button button--secondary"><?= $e($currentUser['username']) ?></summary><div class="menu-items">
@@ -62,6 +64,8 @@ $notificationCount = $currentUser === null
                     <?php require __DIR__ . '/../partials/language-form.php'; ?>
                 <?php endif; ?>
             </nav>
+        <?php else: ?>
+            <nav class="top-actions" aria-label="<?= $e($t('Appearance')) ?>"><?php require __DIR__ . '/../partials/theme-selector.php'; ?></nav>
         <?php endif; ?>
     </div>
 </header>

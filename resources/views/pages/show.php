@@ -86,7 +86,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
         <?php if (!empty($canReadWorking)): ?><a class="button" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/review">Obieg i aktualność · robocza rewizja <?= (int) $headVersion ?></a><?php endif; ?>
         <a href="/knowledge/overdue">Dokumenty po terminie przeglądu</a></div>
         <div class="document-layout <?= !empty($tableOfContents) ? 'document-layout--with-toc' : '' ?>">
-            <div class="document card" data-document-content>
+            <div class="document card document-content" data-document-content>
                 <?= $renderedContent ?>
             </div>
             <?php if (!empty($tableOfContents)): ?>

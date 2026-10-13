@@ -387,4 +387,10 @@ return [
     'Open thread' => 'Otwarty',
     'In review' => 'Do recenzji',
     'All discussions' => 'Wszystkie dyskusje',
+    'Theme' => 'Motyw',
+    'Color theme' => 'Motyw kolorystyczny',
+    'Appearance' => 'Wygląd',
+    'Follow system' => 'Systemowy',
+    'Light' => 'Jasny',
+    'Dark' => 'Ciemny',
 ];

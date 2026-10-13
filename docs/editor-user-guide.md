@@ -12,6 +12,8 @@ Panel po prawej pozwala wyszukać szablon, ograniczyć kategorię, zobaczyć pod
 
 Menu dodatkowych działań zawiera szablony, ustawienia zapisu, wyszukiwanie, tryb skupienia, szerokość dokumentu i motyw. Motyw jasny, ciemny lub systemowy oraz szerokość standardowa, szeroka lub pełna są zapamiętywane osobno dla konta i instancji. Podgląd strony korzysta z tego samego serwerowego przetwarzania Markdown i makr co odczyt zapisanej strony. Emoji jest częścią tytułu, a obraz nagłówkowy pozostaje chronionym obrazem dokumentu z dostępnymi alt, podpisem i wymiarami.
 
+Motyw jest wspólny dla edytora i całej aplikacji. Poza edytorem zmienisz go w menu **Motyw** na górnym pasku (ikona słońca na telefonie). Wybór jest zapamiętywany w przeglądarce i aktualizowany również w innych kartach tego konta; Systemowy reaguje na zmianę ustawień systemu. Przy niedostępnym localStorage można przełączać motyw, ale wybór nie przetrwa przeładowania.
+
 W panelu zapisu rozróżniane są niezapisane zmiany, zapisywanie, potwierdzenie serwera z czasem, konflikt, brak połączenia i błąd. Osobny komunikat informuje, czy najnowsza kopia została rzeczywiście zapisana lokalnie. Stan wcześniejszego żądania nie potwierdza późniejszych zmian. Zapis zachowuje kursor, zaznaczenie i przewinięcie.
 
 ## Odzyskiwanie i konflikty

@@ -16,7 +16,7 @@
         <button type="button" data-open-find>Znajdź i zamień</button><button type="button" data-focus-mode aria-pressed="false">Tryb skupienia</button>
         <button class="button" type="button" data-undo-conversion hidden>Wróć do treści sprzed konwersji</button>
         <label>Szerokość dokumentu<select data-document-width><option value="standard">Standardowa</option><option value="wide">Szeroka</option><option value="full">Pełna</option></select></label>
-        <label>Motyw<select data-workspace-theme><option value="system">Systemowy</option><option value="light">Jasny</option><option value="dark">Ciemny</option></select></label>
+        <label><?= $e($t('Theme')) ?><select data-workspace-theme data-theme-select><option value="system"><?= $e($t('Follow system')) ?></option><option value="light"><?= $e($t('Light')) ?></option><option value="dark"><?= $e($t('Dark')) ?></option></select></label>
         <p class="field-help" data-version-hint><?= $isEdit ? 'Wersja bazowa: ' . (int) $field('base_version', $page['version']) : 'Pierwszy zapis utworzy rewizję 1.' ?></p>
         <span data-word-count></span>
     </div></details>
