@@ -22,9 +22,9 @@ final class SearchRepository
         foreach ($type === 'all' ? array_diff(\OpenWiki\Search\SearchInput::TYPES, ['all']) : [$type] as $kind) {
             if ($kind === 'user' && (!$authenticated || ($filters['space'] ?? '') !== '' || ($filters['tag'] ?? '') !== '')) continue;
             if ($kind === 'space' && (($filters['author'] ?? '') !== '' || ($filters['tag'] ?? '') !== '')) continue;
-            if (($filters['visibility'] ?? 'all') === 'working' && !in_array($kind, ['page', 'attachment', 'tag'], true)) continue;
-            foreach (in_array($kind, ['page', 'attachment', 'tag'], true) && ($filters['visibility'] ?? 'all') !== 'published' ? [false, true] : [false] as $working) {
-                if (in_array($kind, ['attachment', 'tag'], true) && ($filters['visibility'] ?? '') === 'working' && !$working) continue;
+            if (($filters['visibility'] ?? 'all') === 'working' && !in_array($kind, ['page', 'attachment', 'tag', 'comment'], true)) continue;
+            foreach (in_array($kind, ['page', 'attachment', 'tag', 'comment'], true) && ($filters['visibility'] ?? 'all') !== 'published' ? [false, true] : [false] as $working) {
+                if (in_array($kind, ['attachment', 'tag', 'comment'], true) && ($filters['visibility'] ?? '') === 'working' && !$working) continue;
                 [$sql, $params] = $plans->build($kind, $query, $filters, null, $working);
                 foreach ($this->database->fetchAll($sql, $params) as $row) { $row['branch'] = $working; $rows[] = $row; }
             }

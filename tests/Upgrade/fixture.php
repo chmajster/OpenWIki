@@ -67,7 +67,7 @@ if ($action === 'snapshot') {
     $page = $db->fetchOne('SELECT * FROM pages WHERE slug = "preserved"');
     $revision = $db->fetchOne('SELECT * FROM page_revisions WHERE page_id = ? AND revision_number = ?', [$page['id'], $page['version']]);
     if ((int) $page['published_revision'] !== 3 || $page['workflow_state'] !== 'published' || $revision['content_html'] !== $page['content_html'] || !(bool) $revision['was_published']) throw new RuntimeException('Current publication was not migrated exactly.');
-    foreach (['reviewer' => ['page.review', 'page.verify', 'page.view', 'space.view'], 'publisher' => ['page.publish', 'page.view', 'space.view']] as $role => $expected) {
+    foreach (['reviewer' => ['comment.create', 'comment.resolve', 'page.review', 'page.verify', 'page.view', 'space.view', 'task.create', 'task.update_own'], 'publisher' => ['comment.create', 'comment.resolve', 'page.publish', 'page.view', 'space.view', 'task.create', 'task.update_own']] as $role => $expected) {
         $grants = array_column($db->fetchAll('SELECT p.name FROM permissions p INNER JOIN role_permissions rp ON rp.permission_id = p.id INNER JOIN roles r ON r.id = rp.role_id WHERE r.slug = ? ORDER BY p.name', [$role]), 'name');
         if ($grants !== $expected) throw new RuntimeException('Unexpected review role grants.');
     }

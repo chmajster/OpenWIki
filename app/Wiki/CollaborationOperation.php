@@ -32,7 +32,7 @@ final class CollaborationOperation
             }
             $result = $write();
             if ($operation !== null) {
-                $this->db->execute('INSERT INTO collaboration_operations (user_id, operation_id, kind, input_hash, resource_id, version) VALUES (?, ?, ?, ?, ?, ?)', [$user, $operation, $kind, $hash, $result['id'], $result['version']]);
+                $this->db->execute('INSERT INTO collaboration_operations (user_id, operation_id, kind, input_hash, resource_id, version, created_at) VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())', [$user, $operation, $kind, $hash, $result['id'], $result['version']]);
             }
             return $result;
         });
@@ -62,5 +62,9 @@ final class CollaborationOperation
             }
         }
         return $input;
+    }
+    public function prune(): void
+    {
+        $this->db->execute('DELETE FROM collaboration_operations WHERE created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)');
     }
 }

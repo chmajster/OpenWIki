@@ -124,7 +124,7 @@ final class CommentService
             $anchor = isset($options['anchor']) ? CommentAnchor::create(CommentAnchor::text($context['source']['content_html']), is_array($options['anchor']) ? $options['anchor'] : []) : null;
             $id = $this->database->insert('INSERT INTO comments (page_id, parent_id, author_id, body_html, thread_id, revision_number, visibility, anchor_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())', [$pageId, $parentId, $authorId, $this->renderBody($body), $root['id'] ?? null, $revision, $visibility, $anchor === null ? null : json_encode($anchor, JSON_THROW_ON_ERROR)]);
             if ($root === null) {
-                $this->database->execute('UPDATE comments SET thread_id = id WHERE id = ?', [$id]);
+                $this->database->execute('UPDATE comments SET thread_id = id, updated_at = created_at WHERE id = ?', [$id]);
             }
             $row = $this->read($id, $authorId, $ceiling, $pageId);
             $this->notify($row, $authorId, $body, $parent === null ? 'comment.created' : 'reply', 'comment:' . $id . ':create', true, $parent['author_id'] ?? null);

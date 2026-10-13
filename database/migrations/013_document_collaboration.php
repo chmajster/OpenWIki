@@ -50,8 +50,9 @@ return ['version' => '013_document_collaboration', 'up' => [
     ]),
     $table('collaboration_operations', ['user_id' => 'BIGINT UNSIGNED NOT NULL', 'operation_id' => 'CHAR(36) NOT NULL', 'kind' => 'VARCHAR(30) NOT NULL', 'input_hash' => 'CHAR(64) NOT NULL', 'resource_id' => 'BIGINT UNSIGNED NOT NULL', 'version' => 'INT UNSIGNED NOT NULL', 'created_at' => 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP'], [
         'primary' => ['PRIMARY KEY (user_id, operation_id)', $index('collaboration_operations', 'PRIMARY', 'user_id,operation_id', true)],
+        'retention' => ['INDEX idx_collaboration_created (created_at)', $index('collaboration_operations', 'idx_collaboration_created', 'created_at')],
         'user_fk' => ['CONSTRAINT fk_collaboration_actor FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE', $fk('collaboration_operations', 'user_id', 'users', 'CASCADE')],
     ]),
-    'INSERT IGNORE INTO permissions (name) VALUES ("task.create"), ("task.manage"), ("task.update_own"), ("comment.resolve")',
+    'INSERT IGNORE INTO permissions (name) VALUES ("task.create"), ("task.manage"), ("task.update_own"), ("comment.resolve"), ("comment.create")',
     'INSERT IGNORE INTO role_permissions (role_id, permission_id) SELECT r.id, p.id FROM roles r CROSS JOIN permissions p WHERE r.is_system = 1 AND ((r.slug IN ("admin", "space-admin") AND p.name IN ("task.create", "task.manage", "task.update_own", "comment.resolve")) OR (r.slug IN ("editor", "author", "reviewer", "publisher") AND p.name IN ("task.create", "task.update_own", "comment.create", "comment.resolve")) OR (r.slug = "viewer" AND p.name = "task.update_own"))',
 ]];

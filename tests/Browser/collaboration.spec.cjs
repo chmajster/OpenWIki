@@ -16,7 +16,7 @@ test('private editor draft is resumed through the work center without creating a
     const context=await browser.newContext(),other=await context.newPage();try{await login(other,1);await other.goto('/?type=draft');await expect(other.locator('[data-work-center]')).not.toContainText(title);}finally{await context.close();}
     expect((await api(request,'get','pages?space='+fixture().spaceKey)).some(item=>item.title===title)).toBeFalsy();
 });
-test('Polish collaboration views and dark theme preserve functional controls',async({page,request})=>{
+test('Polish collaboration views use the shared application theme and functional controls',async({page,request})=>{
     await login(page);await page.context().addCookies([{name:'openwiki_locale',value:'pl',url:'http://127.0.0.1:8765'}]);
     const document=await api(request,'post','pages',{space_id:fixture().spaceId,title:'Instrukcja odtworzenia',content_format:'visual',content_html:'<h2>Odtworzenie środowiska</h2><p>Sprawdź kopię zapasową przed rozpoczęciem odtwarzania.</p>',status:'published'});
     await page.goto('/spaces/'+fixture().spaceKey+'/pages/'+document.slug);await select(page,'kopię zapasową');
@@ -30,7 +30,7 @@ test('Polish collaboration views and dark theme preserve functional controls',as
     await page.locator('[data-task-dialog] [name=assignee_id]').selectOption(String(fixture().users[0].id));
     await page.locator('[data-task-save]').click();await expect(page.locator('[data-task-dialog]')).not.toBeVisible();
     await page.locator('[data-panel-close]').click();await page.locator('[data-tasks-list]').getByRole('button',{name:'Zweryfikuj odtwarzanie'}).click();
-    await expect(page.locator('[data-task-source] a')).toHaveCount(2);await page.screenshot({path:'storage/temp/collaboration-polish-task.png'});
+    await expect(page.locator('[data-task-source] a')).toHaveCount(2);await expect(page.locator('[data-task-save]')).toBeEnabled();await page.screenshot({path:'storage/temp/collaboration-polish-task.png'});
     await page.locator('[data-task-close]').click();await page.goto('/?type=task');await expect(page.locator('[data-work-center]')).toContainText('Zweryfikuj odtwarzanie');
     await page.screenshot({path:'storage/temp/collaboration-polish-center.png'});
 });

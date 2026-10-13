@@ -23,6 +23,7 @@ final class SearchService
             foreach ($candidates as $row) {
                 $type = $row['type']; $pageId = (int) ($row['page_id'] ?? 0);
                 if ($pageId !== 0 && !$access->visible($pageId, (bool) $row['working'])) continue;
+                if ($type === 'comment' && (bool) $row['working'] && !$access->visibleWorking($pageId)) continue;
                 if ($type === 'space' && !($access->spaces[(int) $row['space_id']]['search_visible'] ?? false)) continue;
                 if ($type === 'user' && $user === null) continue;
                 if ($type === 'attachment') {
@@ -69,7 +70,7 @@ final class SearchService
                     if ($privateRevision) $result['url'] .= '/revisions/' . $row['revision'];
                     $result['meta'] = $space['name'] . ' · ' . implode(' / ', array_column($result['path'], 'title'));
                     if ($type === 'page') { $result['slug'] = $slug; $result['status'] = $row['status']; }
-                    if ($type === 'comment') { $result['url'] .= $row['comment_revision'] === null ? '#comment-' . $id : '#discussion-' . ($row['thread_id'] ?? $id); $result['page_title'] = $row['title']; $result['author'] = $row['author']; }
+                    if ($type === 'comment') { $result['url'] .= ((bool) $row['working'] ? '/revisions/' . $row['comment_revision'] : '') . ($row['comment_revision'] === null ? '#comment-' . $id : '#discussion-' . ($row['thread_id'] ?? $id)); $result['page_title'] = $row['title']; $result['author'] = $row['author']; }
                     if ($type === 'attachment') {
                         $legacy = !(bool) $space['review_workflow'] && $pageRow['status'] === 'published' && ($pageRow['published_revision'] === null || (int) $pageRow['published_revision'] === (int) $pageRow['version']);
                         $result['url'] = '/attachments/' . $id . '/download' . ((bool) $row['working'] || $legacy ? '' : '?revision=' . $row['revision']);

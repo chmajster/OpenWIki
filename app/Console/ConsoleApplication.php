@@ -245,6 +245,7 @@ TEXT);
         $database = $app->database();
         (new RateLimiter($database))->prune(86400);
         (new \OpenWiki\Wiki\EditSessionService($database))->prune();
+        (new \OpenWiki\Wiki\CollaborationOperation($database))->prune();
         (new \OpenWiki\Attachments\DraftFileService($database, $this->basePath))->prune();
 
         $database->execute(

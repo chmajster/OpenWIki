@@ -45,7 +45,7 @@ final class CommentController extends Controller
                 (int) $page['id'],
                 (int) $space['id'],
                 (int) $user['id'],
-                (string) $request->input('body', ''),
+                $this->body($request),
                 $parentId === null ? null : (int) $parentId,
                 (string) $page['title'],
                 $this->pageUrl($space, $page), [], null, $request
@@ -86,7 +86,7 @@ final class CommentController extends Controller
             if (!(new CommentService($this->app->database()))->update(
                 (int) $commentId,
                 (int) $user['id'],
-                (string) $request->input('body', ''), (int) $page['id'], null, (array) $request->input(), $request
+                $this->body($request), (int) $page['id'], null, (array) $request->input(), $request
             )) {
                 return $this->render('errors/404', ['title' => 'Comment not found'], 404);
             }
@@ -99,6 +99,8 @@ final class CommentController extends Controller
                 return $this->render('errors/403', ['title' => 'Permission denied'], 403);
             }
             throw $exception;
+        } catch (\DomainException $exception) {
+            return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
         return Response::redirect($this->pageUrl($space, $page) . '#comment-' . (int) $commentId);
@@ -141,6 +143,8 @@ final class CommentController extends Controller
                 return $this->render('errors/403', ['title' => 'Permission denied'], 403);
             }
             throw $exception;
+        } catch (\DomainException $exception) {
+            return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
         return Response::redirect($this->pageUrl($space, $page) . '#comments');
@@ -169,5 +173,11 @@ final class CommentController extends Controller
     {
         return '/spaces/' . rawurlencode($space['space_key'])
             . '/pages/' . rawurlencode($page['slug']);
+    }
+    private function body(Request $request): string
+    {
+        $body = $request->input('body', '');
+        if (!is_string($body)) throw new \InvalidArgumentException('Treść komentarza musi być tekstem.');
+        return $body;
     }
 }

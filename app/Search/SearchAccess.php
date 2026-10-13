@@ -13,6 +13,7 @@ final class SearchAccess
     public array $pages = [];
     private array $visible = [];
     private array $working = [];
+    private array $workingStrict = [];
     private array $actions = [];
 
     public function __construct(Database $db, array $spaceIds, array $pageIds, array $workingIds, private readonly ?int $user, private readonly array $permissions, bool $strictWorking = false, bool $includeActions = false)
@@ -62,7 +63,8 @@ final class SearchAccess
                 }
                 // Working content is a separate resource even if the public projection remains readable.
                 if ($this->visible[(int) $page['id']] && isset($workingNeeded[(int) $page['id']])) {
-                    $this->working[(int) $page['id']] = $acl->canReadWorkingFor($page, $space, $user, $this->can('*'), $permissions)
+                    $this->workingStrict[(int) $page['id']] = $acl->canReadWorkingFor($page, $space, $user, $this->can('*'), $permissions);
+                    $this->working[(int) $page['id']] = $this->workingStrict[(int) $page['id']]
                         || (!$strictWorking && !(bool) $space['review_workflow'] && $page['published_revision'] === null && $page['status'] !== 'published');
                 }
             }
@@ -72,6 +74,7 @@ final class SearchAccess
 
     public function can(string $permission): bool { return in_array('*', $this->permissions, true) || in_array($permission, $this->permissions, true); }
     public function visible(int $id, bool $working = false): bool { return $working ? ($this->working[$id] ?? false) : ($this->visible[$id] ?? false); }
+    public function visibleWorking(int $id): bool { return $this->workingStrict[$id] ?? false; }
     public function action(int $id, string $permission): bool { return $this->actions[$id][$permission] ?? false; }
 
     public function path(int $id): array

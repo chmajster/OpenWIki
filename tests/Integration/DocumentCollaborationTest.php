@@ -110,6 +110,11 @@ final class DocumentCollaborationTest extends TestCase
             self::assertCount(1, $public['data'][0]['replies']);
             self::assertNotNull($public['data'][0]['location']);
             $private = $this->discussion($db, $u, $s, $p, 2);
+            $query = \OpenWiki\Search\SearchInput::fromRequest(new \OpenWiki\Core\Request('GET', '/search', ['q'=>'Please check', 'type'=>'comment', 'visibility'=>'working'], [], [], []));
+            $search = new \OpenWiki\Search\SearchService($db);
+            self::assertSame(0, $search->search($query, $u['reader'], ['page.view'])['meta']['total']);
+            $result = $search->search($query, $u['editor'], ['page.view','page.edit']);
+            self::assertSame(1, $result['meta']['total']); self::assertStringEndsWith('/revisions/2#discussion-'.$private, $result['data'][0]['url']);
             self::assertSame(1, $comments->threads($p, 1, $u['reader'])['meta']['total']);
             self::assertSame(3, $events->unreadCount($u['reader']));
             try {

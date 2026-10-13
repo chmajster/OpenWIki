@@ -275,6 +275,8 @@ Webhook requests are JSON POST requests signed with `X-OpenWiki-Signature: sha25
 
 ## Multi-factor authentication
 
+Fragment discussions, page tasks, the unified work center and access-aware notifications are described in the [collaboration guide](docs/document-collaboration.md), including RBAC, API, migration 013, cron and upgrade instructions.
+
 OpenWiki supports TOTP MFA compatible with Google Authenticator, Microsoft Authenticator, Authy and 1Password.
 
 Users can enroll from `/account/mfa/setup`. TOTP secrets are encrypted at rest with AES-256-GCM. Enrollment generates ten one-time recovery codes; only SHA-256 hashes of recovery codes are stored.
@@ -454,6 +456,8 @@ Available scopes:
 spaces:read       spaces:write
 pages:read        pages:write
 comments:read     comments:write
+tasks:read        tasks:write
+work:read
 search:read
 users:read        users:write
 groups:read       groups:write
@@ -476,7 +480,15 @@ GET,POST                 /api/v1/pages
 GET,PUT,PATCH,DELETE     /api/v1/pages/{id}
 
 GET,POST                 /api/v1/comments
-PUT,PATCH,DELETE          /api/v1/comments/{id}
+GET,PUT,PATCH,DELETE      /api/v1/comments/{id}
+POST                     /api/v1/comments/{id}/status
+GET                      /api/v1/comments/{id}/replies
+GET                      /api/v1/pages/{id}/discussions
+GET,POST                 /api/v1/pages/{id}/tasks
+GET                      /api/v1/pages/{id}/task-assignees
+GET,PUT,PATCH            /api/v1/tasks/{id}
+GET                      /api/v1/tasks/{id}/history
+GET                      /api/v1/work
 
 GET                       /api/v1/search
 GET,POST                  /api/v1/users

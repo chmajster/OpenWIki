@@ -4,6 +4,9 @@
 return [
     'Discussion is unavailable.' => 'Dyskusja jest niedostępna.',
     'Selected space' => 'Wybrana przestrzeń',
+    'Action' => 'Akcja',
+    'Reset' => 'Wyczyść filtry',
+    'Sort' => 'Sortowanie',
     'Search' => 'Szukaj', 'Search documentation…' => 'Szukaj w dokumentacji…', 'Account actions' => 'Konto',
     'Interface language' => 'Język interfejsu', 'More actions' => 'Więcej działań', 'Create space' => 'Utwórz przestrzeń',
     'Notifications' => 'Powiadomienia', 'Sessions' => 'Sesje', 'API tokens' => 'Tokeny API', 'Administration' => 'Administracja',

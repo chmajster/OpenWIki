@@ -1,6 +1,9 @@
 const catalog = JSON.parse(document.querySelector("[data-ui-translations]")?.value || "{}");
 const t = (value) => catalog[value] || value;
 const statuses = { todo: "To do", in_progress: "In progress", blocked: "Blocked", done: "Done", cancelled: "Cancelled" };
+const uuid = () => typeof crypto.randomUUID === 'function' ? crypto.randomUUID()
+  : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, character =>
+    (Number(character) ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(character) / 4).toString(16));
 const el = (tag, text, className) => {
   const item = document.createElement(tag);
   if (text !== void 0) item.textContent = text;
@@ -73,7 +76,7 @@ document.querySelectorAll("[data-collaboration]").forEach((root) => {
     const hash = JSON.stringify(input);
     if (form.dataset.operationInput !== hash) {
       form.dataset.operationInput = hash;
-      form.dataset.operationId = crypto.randomUUID();
+      form.dataset.operationId = uuid();
     }
     return { ...input, operation_id: form.dataset.operationId };
   };
@@ -217,7 +220,7 @@ document.querySelectorAll("[data-collaboration]").forEach((root) => {
           const target = event.currentTarget;
           target.disabled = true;
           try {
-            await request("discussion-status", { id: thread.id, base_version: Number(thread.version), status: thread.thread_status === "open" ? "resolved" : "open", operation_id: crypto.randomUUID() }, true);
+            await request("discussion-status", { id: thread.id, base_version: Number(thread.version), status: thread.thread_status === "open" ? "resolved" : "open", operation_id: uuid() }, true);
             await loadThreads(discussionPage);
           } catch (error) {
             discussionFeedback.textContent = error.message;
