@@ -26,6 +26,8 @@ Właściwości formatowania są kontrolowanymi atrybutami. Dowolny CSS, aktywny 
 
 Dobór rozszerzeń wykorzystuje istniejący model HTML, selekcje komórek i historię ProseMirror. Pozwala rozwijać narzędzia bez powrotu do ręcznej edycji DOM i execCommand.
 
+Pełnoekranowy workspace zachowuje dotychczasowy Tiptap zamiast wprowadzać drugi edytor lub format. Pozwala używać istniejących rozszerzeń HTML, załączników, makr, kopert i testów zgodności, ograniczając koszt utrzymania. `document-workspace.js` zarządza tytułem, panelami, szablonami, podglądem i potwierdzeniem publikacji poza dokumentem. `workspace-tools.js` wykonuje wstawianie, przenoszenie, duplikowanie i transformacje przez transakcje modelu. `reader-format.js` współdzieli formatowanie kodu, tabel i diagramów między odczytem a podglądami. Osobny CSS workspace nie zmienia widoków administracyjnych.
+
 ## Źródło, projekcje i migracja
 
 `pages.document_json` i `page_revisions.document_json` przechowują `{version: 1, format: "visual"|"markdown", source: string}`. Koperta jest jedynym źródłem. W Visual źródłem jest bezpieczny HTML reprezentujący wspierane węzły/atrybuty modelu ProseMirror; w Markdown oryginalny tekst. `content_html`, `content_markdown` i tekst wyszukiwarki pozostają projekcjami zgodnymi ze starszymi klientami. Pole `document` API ma pierwszeństwo nad przesłanymi projekcjami i jest ściśle walidowane. `ContentService::storedSource` nakłada źródło przy odczycie repozytorium bez zapisu do bazy.
@@ -55,6 +57,7 @@ Publikacja korzysta z osobnego UUID i PageWriteService, który współdzielą UI
 | GET `/spaces/{key}/editor-drafts` | Szkice/punkty/kontekst, właściciel + aktualny ACL dokumentu/przestrzeni |
 | POST `/spaces/{key}/editor-drafts` | Niekompletny szkic, konto edytora + ACL + CSRF + CAS |
 | POST `/spaces/{key}/editor-preview` i `editor-convert` | Wspólny renderer/konwersja, ACL + CSRF |
+| GET `/spaces/{key}/editor-workspace` | Lokalizacja i informacja o dostępie, aktualny ACL źródła i celu; wyłącznie dostępni rodzice, bez zasad ACL i danych ukrytych stron |
 | GET `/spaces/{key}/editor-pages` | Ograniczona wyszukiwarka stron z ACL każdej strony |
 | GET `/spaces/{key}/editor-users` | ACL kontekstu + `user.view`; bez katalogu wyłącznie własny użytkownik |
 | POST `/spaces/{key}/editor-files` | Prywatny plik, właściciel/kontekst + `attachment.upload` + CSRF + receipt/hash |
@@ -62,6 +65,10 @@ Publikacja korzysta z osobnego UUID i PageWriteService, który współdzielą UI
 | GET `/spaces/{key}/pages/{slug}/revisions/{number}` | Bezpieczny, niezmienny odczyt konkretnej rewizji, aktualny ACL strony |
 
 Makra zachowują ACL odczytu; profil użytkownika dodatkowo wymaga `user.view` lub własnej nazwy. HTML-linki i składnia `[[...]]` zasilają backlinks. Pliki szkicu mają niejawne klucze fizycznego magazynu; sam URL lub identyfikator nie nadaje dostępu. Adopcja odnajduje rzeczywiste odnośniki/obrazy w DOM, a nie literalny tekst dokumentacji w bloku kodu. Nie można użyć pliku innego użytkownika/dokumentu.
+
+`PageWorkspaceService` dostarcza bezpieczny kontekst potwierdzenia. Wynik nie zastępuje autoryzacji zapisu: `PageWriteService` ponownie sprawdza uprawnienia w transakcji. Nowy szkic może wybrać inną dostępną przestrzeń. Tożsamość szkicu i plików pozostaje w źródłowej przestrzeni do potwierdzenia; usługa blokuje obie przestrzenie według rosnących identyfikatorów, adoptuje pliki z oryginalnego kontekstu i potwierdza wyłącznie wysłaną generację. Inne karty i późniejsze zmiany zachowują kopie. Istniejąca strona korzysta z dedykowanej operacji przenoszenia, a wybór rodzica wymaga `page.move`. Błąd pobrania kontekstu blokuje potwierdzenie i pozostawia odzyskiwalny dokument.
+
+Szablony startowe są katalogiem w `PageTemplateService`, uzupełniającym istniejące szablony bez zmiany ich źródeł. Nie potrzeba migracji schematu ani rewizji. Obraz nagłówkowy zapisuje istniejący węzeł figure z kontrolowaną klasą `page-cover`; emoji jest zwykłym tekstem tytułu. Zastąpienie treści przez szablon zachowuje dotychczasowe źródło jako kopię konwersji. Pełny podgląd stosuje `ContentService` oraz `MacroService`, a dodatki widoku nie trafiają do koperty dokumentu.
 
 Potwierdzenie publikacji zawiera `asset_replacements`, mapę źródłowego i chronionego adresu. Klient aktualizuje rzeczywiste węzły oraz HTML kopii konwersji według adresu, bez dopasowywania pozycji odnośników (dekoracja wiki może dodać kolejne). Pending Markdown zachowuje dokładne bajty; kolejne warunkowe zastosowanie przepisuje miejsca docelowe obrazów/linków po stronie serwera, zachowując bloki i fragmenty kodu. Starszy prywatny adres z historii undo jest akceptowany tylko dla właściciela i załącznika już adoptowanego przez tę samą stronę. Upload jest chwilowo niedostępny podczas publikacji/konwersji, z widoczną odmową dla wklejenia/przeciągnięcia. Kopia konwersji również aktualizuje retencję swoich plików. Cleanup obrazów po nieudanym zapisie usuwa tylko pliki tej operacji; zewnętrzny import może osobno posprzątać cały wycofany zbiór.
 

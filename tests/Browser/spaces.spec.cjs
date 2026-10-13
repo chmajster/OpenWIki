@@ -1,3 +1,4 @@
+const {publish, editMetadata, openPublication, openMore, clickTool} = require('./workspace-helpers.cjs');
 const {test, expect} = require('@playwright/test');
 test.describe.configure({timeout: 90000});
 const fs = require('node:fs');
@@ -46,10 +47,10 @@ test('settings form, group picker, effective decisions and archived reads use th
     await expect(effective.locator('[data-effective-result]')).toContainText(`group #${group.id}`);
     await page.screenshot({path: 'storage/temp/space-settings-desktop.png', fullPage: true});
     const context = await browser.newContext(), reader = await context.newPage(); await login(reader, 3); await reader.goto(pathFor(space, document)); await expect(reader.locator('[data-document-content]')).toContainText('Dokumentacja');
-    await page.locator('[name=status]').selectOption('archived'); await page.getByRole('button', {name: 'Zapisz ustawienia'}).click();
+    await editMetadata(page, '[name=status]', 'selectOption', 'archived'); await page.getByRole('button', {name: 'Zapisz ustawienia'}).click();
     await reader.reload(); await expect(reader.locator('[data-document-content]')).toContainText('Dokumentacja');
     const denied = await request.put(`/api/v1/pages/${document.id}`, {headers: {Authorization: 'Bearer ' + fixture().token}, data: {base_version: 1, title: 'Forbidden'}}); expect(denied.status()).toBe(403);
-    await page.locator('[name=status]').selectOption('active'); await page.getByRole('button', {name: 'Zapisz ustawienia'}).click(); expect((await api(request, 'get', `spaces/${space.id}`)).status).toBe('active');
+    await editMetadata(page, '[name=status]', 'selectOption', 'active'); await page.getByRole('button', {name: 'Zapisz ustawienia'}).click(); expect((await api(request, 'get', `spaces/${space.id}`)).status).toBe('active');
     await context.close();
 });
 
@@ -94,7 +95,7 @@ test('phone tree, copy dialog and cross-space access preview preserve document r
     await expect(image).toHaveAttribute('alt', 'Schemat'); await expect(page.locator('figcaption')).toHaveText('Podpis schematu');
     await expect.poll(() => image.evaluate(img => img.complete && img.naturalWidth > 0)).toBeTruthy();
     await page.goto(pathFor(target, copied) + '/edit'); await expect(page.locator('[data-visual-editor] img')).toHaveAttribute('data-attachment-id', copiedAttachment);
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content] img')).toHaveAttribute('data-attachment-id', copiedAttachment); await expect(page.locator('figcaption')).toHaveText('Podpis schematu');
+    await publish(page); await expect(page.locator('[data-document-content] img')).toHaveAttribute('data-attachment-id', copiedAttachment); await expect(page.locator('figcaption')).toHaveText('Podpis schematu');
 });
 
 test('visible child of hidden parent does not disclose parent metadata to guests', async ({page, request, browser}) => {

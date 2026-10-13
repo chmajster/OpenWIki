@@ -1,3 +1,4 @@
+const {publish, editMetadata, openPublication, openMore, clickTool} = require('./workspace-helpers.cjs');
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs');
 
@@ -38,10 +39,10 @@ test('the real create form transfers the latest source in both directions and sa
     await page.goto('/spaces/' + fixture().spaceKey + '/pages/create');
     const title = unique('Created through form');
     await page.locator('[name=title]').fill(title);
-    await page.locator('[name=slug]').fill('form-' + Date.now());
-    await page.locator('[name=parent_id]').selectOption(String(parent.id));
-    await page.locator('[name=tags]').fill('browser, visual');
-    await page.locator('[name=change_summary]').fill('All fields saved through the form');
+    await editMetadata(page, '[name=slug]', 'fill', 'form-' + Date.now());
+    await editMetadata(page, '[name=parent_id]', 'selectOption', String(parent.id));
+    await editMetadata(page, '[name=tags]', 'fill', 'browser, visual');
+    await editMetadata(page, '[name=change_summary]', 'fill', 'All fields saved through the form');
     await editor(page).fill('Visual latest');
     await editor(page).press('ControlOrMeta+A');
     await editor(page).press('ControlOrMeta+B');
@@ -53,7 +54,7 @@ test('the real create form transfers the latest source in both directions and sa
     await expect(page.locator('[data-rich-command=bold]')).toBeEnabled();
     await expect(editor(page).locator('strong')).toHaveText('Format retained');
     await page.screenshot({path: 'storage/temp/editor-desktop.png'});
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content]')).toContainText('Markdown latest');
     const pages = await api(request, 'get', 'pages?space=' + fixture().spaceKey);
     const saved = await api(request, 'get', 'pages/' + pages.find((row) => row.title === title).id);
@@ -81,9 +82,9 @@ test('lossy conversion previews changes, supports cancellation and keeps reversi
     await expect(page.locator('[data-markdown-editor]')).toHaveValue('Underline survives recovery');
     await page.reload();
     await page.getByRole('button', {name: 'Restore recovered content', exact: true}).click();
-    await page.getByRole('button', {name: 'Return to content before conversion', exact: true}).click();
+    await clickTool(page, '[data-undo-conversion]');
     await expect(editor(page).locator('u')).toHaveText('Underline survives recovery');
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content] u')).toHaveText('Underline survives recovery');
 });
 
@@ -92,7 +93,7 @@ test('conflicts retain the base through retry and recovery until an explicit res
     await page.goto(pathFor(document) + '/edit');
     await editor(page).fill('Local document');
     await api(request, 'patch', 'pages/' + document.id, {base_version: 1, content_html: '<p>Server document</p>'});
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-conflict-panel]')).toBeVisible();
     await expect(page.locator('[name=base_version]')).toHaveValue('1');
     await expect(page.locator('[data-conflict-base]')).toContainText('Base document');
@@ -104,17 +105,17 @@ test('conflicts retain the base through retry and recovery until an explicit res
     await page.reload();
     await page.getByRole('button', {name: 'Restore recovered content', exact: true}).click();
     await expect(page.locator('[name=base_version]')).toHaveValue('1');
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-conflict-panel]')).toBeVisible();
     await page.locator('[data-resolve-conflict]').click();
     await expect(page.locator('[name=base_version]')).toHaveValue('2');
     await editor(page).fill('Server and local reviewed together');
     await api(request, 'patch', 'pages/' + document.id, {base_version: 2, content_html: '<p>Another concurrent update</p>'});
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-conflict-server]')).toContainText('Another concurrent update');
     await expect(page.locator('[name=base_version]')).toHaveValue('2');
     await page.locator('[data-resolve-conflict]').click();
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content]')).toContainText('Server and local reviewed together');
     expect((await api(request, 'get', 'pages/' + document.id)).version).toBe(4);
 });
@@ -126,9 +127,9 @@ for (const failure of ['network', '403', '422', '500']) {
         await editor(page).fill('Recoverable rich document');
         await editor(page).press('ControlOrMeta+A');
         await editor(page).press('ControlOrMeta+B');
-        await page.locator('[name=tags]').fill('recoverable');
-        await page.locator('[name=change_summary]').fill('Recoverable summary');
-        if (failure === '422') await page.locator('[name=tags]').fill(Array.from({length: 31}, (_, index) => 'tag' + index).join(','));
+        await editMetadata(page, '[name=tags]', 'fill', 'recoverable');
+        await editMetadata(page, '[name=change_summary]', 'fill', 'Recoverable summary');
+        if (failure === '422') await editMetadata(page, '[name=tags]', 'fill', Array.from({length: 31}, (_, index) => 'tag' + index).join(','));
         const endpoint = '**' + pathFor(document);
         await page.route(endpoint, async (route) => {
             if (failure === 'network') return route.abort('failed');
@@ -136,7 +137,7 @@ for (const failure of ['network', '403', '422', '500']) {
             if (failure === '403') return route.continue({postData: JSON.stringify({...route.request().postDataJSON(), editor_user_id: fixture().users[1].id})});
             return route.continue();
         });
-        await page.locator('[data-save-button]').click();
+        await publish(page);
         await expect(state(page)).toContainText('retained');
         await expect(editor(page).locator('b,strong')).toHaveText('Recoverable rich document');
         await expect(page.locator('[name=base_version]')).toHaveValue('1');
@@ -146,8 +147,8 @@ for (const failure of ['network', '403', '422', '500']) {
         await page.getByRole('button', {name: 'Restore recovered content', exact: true}).click();
         await expect(editor(page).locator('b,strong')).toHaveText('Recoverable rich document');
         await expect(page.locator('[name=change_summary]')).toHaveValue('Recoverable summary');
-        await page.locator('[name=tags]').fill('recoverable');
-        await page.locator('[data-save-button]').click();
+        await editMetadata(page, '[name=tags]', 'fill', 'recoverable');
+        await publish(page);
         await expect(page.locator('[data-document-content]')).toContainText('Recoverable rich document');
     });
 }
@@ -171,10 +172,10 @@ test('typing during an actual autosave keeps later content and metadata pending'
     const earlier = await capturedRequest;
     await editor(page).fill('Later content stays');
     await page.locator('[name=title]').fill('Later title');
-    await page.locator('[name=slug]').fill('later-' + Date.now());
-    await page.locator('[name=parent_id]').selectOption(String(parent.id));
-    await page.locator('[name=tags]').fill('later-tag');
-    await page.locator('[name=change_summary]').fill('Later summary');
+    await editMetadata(page, '[name=slug]', 'fill', 'later-' + Date.now());
+    await editMetadata(page, '[name=parent_id]', 'selectOption', String(parent.id));
+    await editMetadata(page, '[name=tags]', 'fill', 'later-tag');
+    await editMetadata(page, '[name=change_summary]', 'fill', 'Later summary');
     release();
     await expect.poll(() => count).toBeGreaterThan(1);
     await expect(state(page)).toHaveAttribute('data-state', 'server');
@@ -207,7 +208,7 @@ test('tabs keep independent drafts, another account gets none, and new documents
     await expect(state(second)).toHaveAttribute('data-state', 'server');
     const draftUrl = '/spaces/' + fixture().spaceKey + '/editor-drafts?document_key=page:' + document.id;
     expect((await (await second.request.get(draftUrl)).json()).data.drafts).toHaveLength(2);
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content]')).toContainText('First tab content');
     expect((await (await second.request.get(draftUrl)).json()).data.drafts).toHaveLength(1);
     await second.reload();
@@ -239,7 +240,7 @@ test('a second Visual form save retains backlinks and works at mobile width', as
     await page.setViewportSize({width: 390, height: 844});
     await page.goto(pathFor(source) + '/edit');
     await page.screenshot({path: 'storage/temp/editor-mobile.png'});
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content] a')).toHaveText(target.title);
     await page.goto(pathFor(target));
     await expect(page.locator('#backlinks a').filter({hasText: source.title})).toBeVisible();
@@ -250,10 +251,11 @@ test('a session expiring during editing retains the document through sign-in and
     const document = await create(request);
     await page.goto(pathFor(document) + '/edit');
     await editor(page).fill('Content before session expiry');
-    await page.locator('[name=change_summary]').fill('Expired session recovery');
+    await editMetadata(page, '[name=change_summary]', 'fill', 'Expired session recovery');
     const csrf = await page.locator('form[action="/logout"] input[name="_token"]').inputValue();
     await page.request.post('/logout', {form: {_token: csrf}});
-    await page.locator('[data-save-button]').click();
+    await openPublication(page);
+    await expect(page.locator('[data-confirm-publication]')).toBeDisabled();
     await expect(state(page)).toContainText('Authentication required');
     await expect(editor(page)).toHaveText('Content before session expiry');
     await expect(page.locator('[name=base_version]')).toHaveValue('1');
@@ -262,7 +264,7 @@ test('a session expiring during editing retains the document through sign-in and
     await page.getByRole('button', {name: 'Restore recovered content', exact: true}).click();
     await expect(editor(page)).toHaveText('Content before session expiry');
     await expect(page.locator('[name=change_summary]')).toHaveValue('Expired session recovery');
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content]')).toContainText('Content before session expiry');
 });
 
@@ -291,7 +293,7 @@ test('typing during conversion keeps the current source until the latest convers
     await page.unroute(endpoint);
     await page.getByRole('tab', {name: 'Markdown', exact: true}).click();
     await expect(page.locator('[data-markdown-editor]')).toHaveValue('Latest source while conversion was pending');
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content]')).toContainText('Latest source while conversion was pending');
 });
 
@@ -302,10 +304,10 @@ test('a new-page server draft restores all metadata after local storage is clear
     const documentKey = 'new:' + new URL(originalUrl).searchParams.get('document');
     const title = unique('Server recovered new page');
     await page.locator('[name=title]').fill(title);
-    await page.locator('[name=slug]').fill('new-recovered-' + Date.now());
-    await page.locator('[name=parent_id]').selectOption(String(parent.id));
-    await page.locator('[name=tags]').fill('new-draft-tag');
-    await page.locator('[name=change_summary]').fill('New draft summary');
+    await editMetadata(page, '[name=slug]', 'fill', 'new-recovered-' + Date.now());
+    await editMetadata(page, '[name=parent_id]', 'selectOption', String(parent.id));
+    await editMetadata(page, '[name=tags]', 'fill', 'new-draft-tag');
+    await editMetadata(page, '[name=change_summary]', 'fill', 'New draft summary');
     await editor(page).fill('New page rich content');
     await editor(page).press('ControlOrMeta+A');
     await editor(page).press('ControlOrMeta+B');
@@ -323,7 +325,7 @@ test('a new-page server draft restores all metadata after local storage is clear
     await expect(page.locator('[name=change_summary]')).toHaveValue('New draft summary');
     await expect(editor(page).locator('b,strong')).toHaveText('New page rich content');
     await expect(page.locator('[name=base_version]')).toHaveValue('0');
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content]')).toContainText('New page rich content');
     const drafts = await page.request.get('/spaces/' + fixture().spaceKey + '/editor-drafts?document_key=' + encodeURIComponent(documentKey));
     expect((await drafts.json()).data.drafts).toEqual([]);
@@ -345,10 +347,10 @@ test('later edits during first-page submission remain in the editor with the con
         await gate;
         await route.fulfill({response});
     });
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     const document = await saved;
     await editor(page).fill('Later content during save');
-    await page.locator('[name=tags]').fill('later-during-submit');
+    await editMetadata(page, '[name=tags]', 'fill', 'later-during-submit');
     release();
     await expect(page.locator('[name=base_version]')).toHaveValue('1');
     await expect(editor(page)).toHaveText('Later content during save');
@@ -357,7 +359,7 @@ test('later edits during first-page submission remain in the editor with the con
     await page.unroute(endpoint);
     expect(await page.locator('[data-editor-form]').getAttribute('action')).toBe(pathFor(document));
     expect(await page.locator('[data-editor-form]').evaluate((form) => [...form.elements].filter((element) => element.validity && !element.validity.valid).map((element) => ({name: element.name, message: element.validationMessage})))).toEqual([]);
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content]')).toContainText('Later content during save');
     expect((await api(request, 'get', 'pages/' + document.id)).version).toBe(2);
 });
@@ -370,7 +372,7 @@ test('conversion recovery is available in revision history after the converted p
     await editor(page).press('ControlOrMeta+U');
     await page.getByRole('tab', {name: 'Markdown', exact: true}).click();
     await page.getByRole('button', {name: 'Convert and keep recovery copy', exact: true}).click();
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content]')).toContainText('Original rich formatting');
     await page.getByRole('link', {name: 'History', exact: true}).click();
     await page.getByRole('button', {name: 'Restore content before conversion', exact: true}).click();
@@ -390,7 +392,7 @@ test('recovering another tab cannot delete that tab’s later recovery copy', as
     await expect(editor(second)).toHaveText('Recovery snapshot from tab one');
     await editor(page).fill('Newer work in tab one');
     await expect(state(page)).toHaveAttribute('data-state', 'server');
-    await second.locator('[data-save-button]').click();
+    await publish(second);
     await expect(second.locator('[data-document-content]')).toContainText('Recovery snapshot from tab one');
     const response = await second.request.get('/spaces/' + fixture().spaceKey + '/editor-drafts?document_key=page:' + document.id);
     expect((await response.json()).data.drafts.some((draft) => draft.html.includes('Newer work in tab one'))).toBeTruthy();
@@ -447,7 +449,7 @@ test('rich tools save and reopen tables, code languages, callouts, links and mac
     await page.getByRole('button', {name: 'Insert macro', exact: true}).click();
     await page.screenshot({path: 'storage/temp/daily-editor-desktop-rich.png', fullPage: true});
     await editor(page).press('ControlOrMeta+S');
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     const saved = page.locator('[data-document-content]');
     await expect(saved.locator('h2')).toContainText('Daily heading');
     await expect(saved.locator('table').first().locator('tr')).toHaveCount(3);
@@ -488,7 +490,7 @@ test('nested lists, checklist interaction and keyboard undo redo survive saving'
     await editor(page).pressSequentially('Task complete');
     await editor(page).locator('input[type=checkbox]').check();
     await editor(page).press('ControlOrMeta+S');
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content] ul ul li')).toHaveText('Nested');
     await expect(page.locator('[data-document-content] li[data-checked=true]')).toHaveText('Task complete');
     await page.getByRole('link', {name: 'Edit', exact: true}).click();
@@ -504,7 +506,7 @@ test('Markdown preview is identical to stored HTML including tables and task sta
     await page.getByRole('button', {name: 'Preview Markdown', exact: true}).click();
     await expect(page.locator('[data-preview-status]')).toContainText('same PHP renderer');
     const preview = await page.locator('[data-markdown-preview-content]').innerHTML();
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content] table')).toContainText('Żółć');
     expect((await api(request, 'get', 'pages/' + document.id)).content_html).toBe(preview);
     await page.getByRole('link', {name: 'Edit', exact: true}).click();
@@ -521,12 +523,12 @@ test('legacy transformations require a review and retain original HTML in revisi
     await expect(page.locator('[data-model-review]')).toBeVisible();
     await expect(page.locator('[data-save-button]')).toBeDisabled();
     await page.getByRole('button', {name: 'Keep original HTML', exact: true}).click();
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     expect((await api(request, 'get', 'pages/' + document.id)).content_html).toBe(legacy);
     await page.getByRole('link', {name: 'Edit', exact: true}).click();
     await page.getByRole('button', {name: 'Accept transformation and keep original', exact: true}).click();
     await expect(page.locator('[data-rich-command=bold]')).toBeEnabled();
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await page.getByRole('link', {name: 'History', exact: true}).click();
     await page.getByRole('button', {name: 'Restore content before conversion', exact: true}).click();
     await expect(page.locator('[data-document-content] figcaption strong')).toHaveText('Formatted caption');
@@ -562,7 +564,7 @@ test('external HTML paste retains safe structure and pasted images keep protecte
     await page.locator('[data-image-apply]').click();
     await expect(editor(page).locator('img')).toHaveAttribute('alt', 'Architecture diagram');
     await expect(editor(page).locator('figcaption')).toHaveText('Protected daily image');
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     const image = page.locator('[data-document-content] img');
     await expect(image).toHaveAttribute('alt', 'Architecture diagram');
     await expect(image).toHaveAttribute('width', '128');
@@ -573,7 +575,7 @@ test('external HTML paste retains safe structure and pasted images keep protecte
     await page.getByRole('link', {name: 'Edit', exact: true}).click();
     await expect(page.locator('[data-model-review]')).toBeHidden();
     await expect(editor(page).locator('img')).toHaveAttribute('alt', 'Architecture diagram');
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content] img')).toHaveAttribute('data-attachment-id', attachment);
 });
 
@@ -620,7 +622,7 @@ test('page link search, macro results and editor endpoints enforce actual ACL', 
     await limited.goto(pathFor(visibleChild) + '/edit');
     await expect(limited.locator('[name=parent_id]')).toHaveValue(String(hidden.id));
     await editor(limited).fill('Edited without moving out of the restricted parent');
-    await Promise.all([limited.waitForURL(pathFor(visibleChild)), limited.locator('[data-save-button]').click()]);
+    await Promise.all([limited.waitForURL(pathFor(visibleChild)), publish(limited)]);
     await expect(limited.locator('[data-document-content]')).toContainText('Edited without moving');
     expect((await api(request, 'get', 'pages/' + visibleChild.id)).parent_id).toBe(hidden.id);
     await context.close();
@@ -667,7 +669,7 @@ test('Polish interface, mobile tree, account menu and keyboard form work togethe
     await page.keyboard.press('Escape');
     await page.screenshot({path: 'storage/temp/daily-editor-mobile-editor-pl.png', fullPage: true});
     await editor(page).press('ControlOrMeta+S');
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content]')).toHaveText('Polska treść po zapisaniu');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
     await page.screenshot({path: 'storage/temp/daily-editor-mobile-pl.png', fullPage: true});
@@ -688,7 +690,7 @@ test('legacy merged tables, numbered lists and code remain editable and restorab
     await expect(editor(page).locator('th')).toHaveAttribute('colspan', '2');
     await page.getByRole('button', {name: 'Header row', exact: true}).click();
     await expect(editor(page).locator('th')).toHaveCount(0);
-    await page.locator('[data-save-button]').click();
+    await publish(page);
     await expect(page.locator('[data-document-content] ol')).toHaveAttribute('start', '3');
     await expect(page.locator('[data-document-content] ol ul li')).toHaveText('Nested legacy');
     await expect(page.locator('[data-document-content] code')).toHaveAttribute('data-language', 'php');

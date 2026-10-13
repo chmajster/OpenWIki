@@ -1,3 +1,4 @@
+const {publish, editMetadata, openPublication, openMore, clickTool} = require('./workspace-helpers.cjs');
 const {test, expect} = require('@playwright/test');
 const {execFileSync} = require('node:child_process');
 const {phpArguments} = require('./php-command.cjs');

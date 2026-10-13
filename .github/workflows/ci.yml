@@ -148,6 +148,7 @@ jobs:
             storage/temp/editor-*.png
             storage/temp/document-*.png
             storage/temp/daily-editor-*.png
+            storage/temp/workspace-*.png
             storage/temp/space-*.png
             storage/temp/editor-performance.json
           retention-days: 7
@@ -159,7 +160,7 @@ jobs:
           node scripts/package-release.cjs "$RUNNER_TEMP/openwiki.tar.gz"
           mkdir "$RUNNER_TEMP/openwiki-runtime"
           tar -xzf "$RUNNER_TEMP/openwiki.tar.gz" -C "$RUNNER_TEMP/openwiki-runtime"
-          for asset in wiki-editor.js diagram.js document-reader.js diagram.html; do test -s "$RUNNER_TEMP/openwiki-runtime/public/assets/$asset"; done
+          for asset in wiki-editor.js diagram.js document-reader.js diagram.html document-workspace.css; do test -s "$RUNNER_TEMP/openwiki-runtime/public/assets/$asset"; done
           test ! -d "$RUNNER_TEMP/openwiki-runtime/node_modules"
           test ! -f "$RUNNER_TEMP/openwiki-runtime/.env"
           cd "$RUNNER_TEMP/openwiki-runtime"
@@ -290,7 +291,7 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1/health >/dev/null
           test "$(sudo stat -c '%a' /var/www/openwiki-ci/.env)" = "640"
           test "$(sudo stat -c '%a' /var/www/openwiki-ci/install.sh)" = "755"
-          for asset in wiki-editor.js diagram.js document-reader.js diagram.html; do test -s "/var/www/openwiki-ci/public/assets/$asset"; done
+          for asset in wiki-editor.js diagram.js document-reader.js diagram.html document-workspace.css; do test -s "/var/www/openwiki-ci/public/assets/$asset"; done
           curl --fail --silent --show-error http://127.0.0.1/assets/wiki-editor.js >/dev/null
           sudo env OPENWIKI_INSTALL_DIR=/var/www/openwiki-ci NO_COLOR=1 bash ./install.sh --status
 
