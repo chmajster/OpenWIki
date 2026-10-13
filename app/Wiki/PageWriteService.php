@@ -150,12 +150,17 @@ final class PageWriteService
         $hashInput = $input;
         unset($hashInput['_token']);
         $operationHash = hash('sha256', json_encode([(int) $space['id'], $current['id'] ?? null, $hashInput], JSON_THROW_ON_ERROR));
+        $draftSpaceId = filter_var($input['draft_space_id'] ?? $space['id'], FILTER_VALIDATE_INT);
+        if ($draftSpaceId === false || $draftSpaceId < 1 || ($current !== null && $draftSpaceId !== (int) $space['id'])
+            || ($draftSpaceId !== (int) $space['id'] && !preg_match('/^new:[a-f0-9-]{36}$/D', (string) ($input['document_key'] ?? '')))) {
+            throw new \InvalidArgumentException('Invalid draft source space.');
+        }
         $inlineImages = $this->inlineImages;
         $imageCheckpoint = $inlineImages?->trackingCheckpoint() ?? 0;
         $ownsTransaction = !$this->database->pdo()->inTransaction();
         try {
             $saved = $this->database->transaction(function () use (
-                $space, $current, $input, $userId, $request, $can, $allowInlineImages, $inlineImages, $restoredRevision, $refreshLinks, $operationId, $operationHash
+                $space, $current, $input, $userId, $request, $can, $allowInlineImages, $inlineImages, $restoredRevision, $refreshLinks, $operationId, $operationHash, $draftSpaceId
             ): array {
                 if ($operationId !== null) {
                     $this->database->fetchOne('SELECT id FROM users WHERE id = :id FOR UPDATE', ['id' => $userId]);
@@ -169,7 +174,17 @@ final class PageWriteService
                     }
                 }
                 // Serialize hierarchy changes as well as version checks within one space.
-                $space = $this->database->fetchOne('SELECT * FROM spaces WHERE id = :id FOR UPDATE', ['id' => (int) $space['id']]);
+                $ids = array_values(array_unique([(int) $space['id'], $draftSpaceId])); sort($ids, SORT_NUMERIC);
+                $lockedSpaces = [];
+                foreach ($ids as $id) $lockedSpaces[$id] = $this->database->fetchOne('SELECT * FROM spaces WHERE id = ? AND deleted_at IS NULL FOR UPDATE', [$id]);
+                $space = $lockedSpaces[(int) $space['id']];
+                if ($space === null) throw new \DomainException('The destination space is unavailable.');
+                if ($draftSpaceId !== (int) $space['id']) {
+                    $source = $lockedSpaces[$draftSpaceId];
+                    if ($source === null || !(new \OpenWiki\Permissions\SpaceAccessService($this->database, true))->canEditFor($source, $userId, $can !== null && $can('*', null))) {
+                        throw new \DomainException('You no longer have permission to use the source draft.');
+                    }
+                }
                 $publicBefore = null;
                 if ($current !== null) {
                     $base = filter_var($input['base_version'] ?? null, FILTER_VALIDATE_INT);
@@ -185,7 +200,7 @@ final class PageWriteService
                     $publicBefore['tags'] = array_column((new WikiMetadataService($this->database))->tagsForPage((int) $fresh['id']), 'name');
                     $current = (new PageRepository($this->database))->working($fresh);
                 }
-                if ($can !== null && !$can($current === null ? 'page.create' : 'page.edit', $current)) {
+                if ($can !== null && !$can($current === null ? 'page.create' : 'page.edit', $current ?? ['id' => 0, 'space_id' => (int) $space['id'], 'parent_id' => null, 'inherit_acl' => 1, 'owner_id' => $userId, 'author_id' => $userId, 'status' => 'draft'])) {
                     throw new \DomainException('You do not have permission to save this page.');
                 }
                 if ((bool) $space['review_workflow']) {
@@ -244,7 +259,7 @@ final class PageWriteService
                     if ($this->basePath === null || !$allowInlineImages) throw new \DomainException('Draft files require attachment.upload permission.');
                     $files = new \OpenWiki\Attachments\DraftFileService($this->database, $this->basePath);
                     $currentHtml = $this->database->fetchOne('SELECT content_html FROM pages WHERE id = :id', ['id' => $id])['content_html'];
-                    $resolved = $files->materialize($currentHtml, $id, (int) $space['id'], $userId, (string) ($input['document_key'] ?? ''));
+                    $resolved = $files->materialize($currentHtml, $id, $draftSpaceId, $userId, (string) ($input['document_key'] ?? ''));
                     $assetUrls += $resolved['urls'];
                     $markdown = $data['content_markdown'] === null ? null : (new MarkdownRenderer())->replaceAssetUrls($data['content_markdown'], $resolved['urls']);
                     foreach (['pages' => 'id = :id', 'page_revisions' => 'page_id = :id AND revision_number = :version'] as $table => $where) {
@@ -255,7 +270,7 @@ final class PageWriteService
                     if ($data['conversion_backup'] !== null) {
                         $backup = $data['conversion_backup'];
                         $backupHtml = (new ContentService())->normalize($backup['format'], $backup['html'], $backup['markdown'])['html'];
-                        $restored = $files->materialize($backupHtml, $id, (int) $space['id'], $userId, (string) ($input['document_key'] ?? ''));
+                        $restored = $files->materialize($backupHtml, $id, $draftSpaceId, $userId, (string) ($input['document_key'] ?? ''));
                         $assetUrls += $restored['urls'];
                         $backup['html'] = $backup['format'] === 'visual' ? $restored['html'] : '';
                         $backup['markdown'] = (new MarkdownRenderer())->replaceAssetUrls($backup['markdown'], $restored['urls']);
@@ -282,10 +297,10 @@ final class PageWriteService
                 }
                 // Only the exact editor's acknowledged snapshot can be removed; other tabs survive.
                 if (isset($input['document_key'], $input['editor_id'], $input['draft_sequence'])) {
-                    (new EditSessionService($this->database))->acknowledgeDraft((int) $space['id'], $userId,
+                    (new EditSessionService($this->database))->acknowledgeDraft($draftSpaceId, $userId,
                         (string) $input['document_key'], (string) $input['editor_id'], (int) $input['draft_sequence']);
                     if (isset($input['recovery_editor_id'], $input['recovery_sequence'])) {
-                        (new EditSessionService($this->database))->acknowledgeDraft((int) $space['id'], $userId,
+                        (new EditSessionService($this->database))->acknowledgeDraft($draftSpaceId, $userId,
                             (string) $input['document_key'], (string) $input['recovery_editor_id'], (int) $input['recovery_sequence']);
                     }
                 }

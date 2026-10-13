@@ -544,6 +544,77 @@ final class PageSavingTest extends TestCase
         }
     }
 
+    public function testPublicationInAnotherSpaceAcknowledgesOnlyTheOriginalPrivateDraftAndReplaysOnce(): void
+    {
+        $db = $this->app->database();
+        $id = (new SpaceRepository($db))->create(['name' => 'Destination', 'space_key' => 'DEST-' . strtoupper(bin2hex(random_bytes(4))), 'description' => null, 'owner_id' => $this->userId, 'visibility' => 'private']);
+        $destination = $db->fetchOne('SELECT * FROM spaces WHERE id = ?', [$id]);
+        $document = 'new:10000000-1000-4000-8000-100000000000'; $editor = '22222222-2222-4222-8222-222222222222';
+        $drafts = new EditSessionService($db);
+        $drafts->saveEditorDraft((int) $this->space['id'], $this->userId, $document, $editor, 7, 0, ['title' => 'Destination page', 'publication_space_id' => (string) $id, 'baseVersion' => 0]);
+        $drafts->saveEditorDraft((int) $this->space['id'], $this->userId, $document, '33333333-3333-4333-8333-333333333333', 8, 0, ['title' => 'Other tab']);
+        $input = ['title' => 'Destination page', 'content_html' => '<p>Private source document</p>', 'publication_space_id' => (string) $id, 'publication_parent_id' => '',
+            'document_key' => $document, 'editor_id' => $editor, 'draft_sequence' => 7, 'base_version' => 0, 'operation_id' => '44444444-4444-4444-8444-444444444444'];
+        $controller = new PageController($this->app);
+        $first = $controller->store($this->request($input), $this->space['space_key']);
+        self::assertSame(200, $first->status(), $first->body());
+        $saved = json_decode($first->body(), true)['data'];
+        self::assertSame($id, (int) $saved['page']['space_id']);
+        self::assertStringContainsString($destination['space_key'], $saved['url']);
+        self::assertSame(7, (int) $db->fetchOne('SELECT acknowledged_sequence FROM page_editor_drafts WHERE editor_id = ?', [$editor])['acknowledged_sequence']);
+        self::assertSame(0, (int) $db->fetchOne('SELECT acknowledged_sequence FROM page_editor_drafts WHERE editor_id = ?', ['33333333-3333-4333-8333-333333333333'])['acknowledged_sequence']);
+        $repeat = $controller->store($this->request($input), $this->space['space_key']);
+        self::assertSame(200, $repeat->status(), $repeat->body());
+        self::assertSame($saved['page']['id'], json_decode($repeat->body(), true)['data']['page']['id']);
+        self::assertSame(1, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM page_revisions WHERE page_id = ?', [$saved['page']['id']])['total']);
+    }
+
+    public function testWorkspaceCatalogAndPreviewDoNotRewriteExistingSources(): void
+    {
+        $service = new \OpenWiki\Wiki\PageTemplateService($this->app->database());
+        $original = '<h2>Stored template</h2><p><u>Keep formatting</u></p>';
+        $template = $service->save(null, ['name' => 'Existing custom', 'description' => 'Custom source', 'content_html' => $original, 'content_markdown' => ''], $this->userId);
+        $catalog = $service->catalog();
+        self::assertGreaterThanOrEqual(9, count($catalog));
+        foreach ($catalog as $row) if (str_starts_with((string) $row['id'], 'builtin:')) self::assertSame('visual', $row['content_format']);
+        self::assertSame($original, array_values(array_filter($catalog, fn (array $row): bool => $row['id'] === $template))[0]['content_html']);
+        self::assertSame($original, $this->app->database()->fetchOne('SELECT content_html FROM page_templates WHERE id = ?', [$template])['content_html']);
+        $context = (new \OpenWiki\Wiki\PageWorkspaceService($this->app))->context((int) $this->space['id']);
+        self::assertTrue($context['can_publish']);
+        $controller = new PageDraftController($this->app);
+        $preview = $controller->preview($this->request(['document_key' => 'new:10000000-1000-4000-8000-100000000000', 'document_preview' => true,
+            'content_format' => 'visual', 'content_html' => '<h2>Preview title</h2><h2>Another heading</h2><p>{{toc}}</p><script>alert(1)</script>']), $this->space['space_key']);
+        self::assertSame(200, $preview->status(), $preview->body());
+        $html = json_decode($preview->body(), true)['data']['html'];
+        self::assertStringNotContainsString('<script', $html);
+        self::assertStringContainsString('href="#', $html);
+        self::assertStringNotContainsString('{{toc}}', $html);
+    }
+
+    public function testWorkspaceFiltersHiddenParentsAndDeniesAForgedDestinationWithoutAcknowledgingTheDraft(): void
+    {
+        $db = $this->app->database();
+        $hidden = (new PageWriteService($db))->save($this->space, null, ['title' => 'Secret parent metadata', 'status' => 'published'], $this->userId);
+        (new \OpenWiki\Permissions\PageAclService($this->app))->addRule((int) $hidden['id'], 'user', $this->otherUserId, 'page.view', 'allow', true);
+        $destination = (new SpaceRepository($db))->create(['name' => 'Secret destination metadata', 'space_key' => 'DENY-' . strtoupper(bin2hex(random_bytes(4))), 'description' => null, 'owner_id' => $this->otherUserId, 'visibility' => 'private']);
+        $this->limitActor(['page.view', 'page.edit', 'page.create']);
+        $service = new \OpenWiki\Wiki\PageWorkspaceService($this->app);
+        $context = $service->context((int) $this->space['id']);
+        self::assertFalse($context['can_publish']);
+        self::assertNotContains((int) $hidden['id'], array_column($context['parents'], 'id'));
+        self::assertStringNotContainsString('Secret parent metadata', json_encode($context, JSON_THROW_ON_ERROR));
+        self::assertNotContains($destination, array_map('intval', array_column($service->spaces(), 'id')));
+        try { $service->context((int) $this->space['id'], null, (int) $hidden['id']); self::fail('A hidden parent must not be selectable.'); }
+        catch (\DomainException $exception) { self::assertStringNotContainsString($hidden['title'], $exception->getMessage()); }
+        $document = 'new:10000000-1000-4000-8000-100000000000'; $editor = '22222222-2222-4222-8222-222222222222';
+        (new EditSessionService($db))->saveEditorDraft((int) $this->space['id'], $this->userId, $document, $editor, 1, 0, ['title' => 'Private recovery']);
+        $response = (new PageController($this->app))->store($this->request(['title' => 'Denied publication', 'content_html' => '<p>Recover me</p>',
+            'publication_space_id' => (string) $destination, 'document_key' => $document, 'editor_id' => $editor, 'draft_sequence' => 1, 'base_version' => 0]), $this->space['space_key']);
+        self::assertSame(403, $response->status(), $response->body());
+        self::assertSame(0, (int) $db->fetchOne('SELECT acknowledged_sequence FROM page_editor_drafts WHERE editor_id = ?', [$editor])['acknowledged_sequence']);
+        self::assertSame(0, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM pages WHERE space_id = ?', [$destination])['total']);
+    }
+
     private function lifecyclePolicy(): callable
     {
         $acl = new \OpenWiki\Permissions\PageAclService($this->app);
