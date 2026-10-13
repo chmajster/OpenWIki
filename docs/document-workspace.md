@@ -93,19 +93,19 @@ undo/redo i kolejności po publikacji. Zaznaczenie całego bloku nie uruchamia
 paska tekstowego zasłaniającego jego menu.
 
 Pomiar `editor-performance.spec.cjs` na Windows 11, Ryzen 7 7800X3D,
-Node 24.21.0 i Chromium 156.0.8078.4 dotyczył źródła 107 054 znaków z tabelą,
-kodem i chronionym PNG. Zestaw PHPUnit równolegle używał osobnej bazy testowej.
+Node 24.21.0 i Chromium 156.0.8078.4 dotyczył źródła 107 052 znaków z tabelą,
+kodem i chronionym PNG, na lokalnej MariaDB 10.4.32 i PHP 8.2.12.
 
 | Pomiar | Wynik |
 | --- | --- |
-| Trzy otwarcia edytora | 1537 / 3092 / 3228 ms |
-| Mediana input → następna klatka | 11 ms |
-| Najdłuższy pomiar input → klatka | 18 ms |
-| Zapis prywatnego szkicu | 1584 ms |
-| Potwierdzenie i odczyt strony | 5654 ms |
+| Trzy otwarcia edytora | 366 / 269 / 279 ms |
+| Mediana input → następna klatka | 10 ms |
+| Najdłuższy pomiar input → klatka | 17 ms |
+| Zapis prywatnego szkicu | 184 ms |
+| Potwierdzenie i odczyt strony | 661 ms |
 
 To pomiar rzeczywistego scenariusza na tym stanowisku, obejmujący lokalny PHP
-i kontener MySQL; nie jest gwarancją opóźnienia produkcyjnego. Dane JSON są
+i MariaDB; nie jest gwarancją opóźnienia produkcyjnego. Dane JSON są
 w `storage/temp/editor-performance.json`. `npm run build`, `npm run check:js`
 i walidacja Composer uzupełniają testy formularza. Paczka runtime była
 rozpakowana i sprawdzona rendererem PHP oraz kontrolą obecności bundle/CSS,
