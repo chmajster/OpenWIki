@@ -2,6 +2,12 @@
 
 OpenWiki is a self-hosted knowledge base and enterprise wiki written for PHP 8.2+ and MySQL 8/MariaDB.
 
+## Wygląd
+
+W górnym pasku wybierz **Motyw → Jasny, Ciemny lub Systemowy**. Ten sam wybór jest dostępny w menu **Więcej działań** edytora i obejmuje całą aplikację: strony, recenzje, centrum pracy, dyskusje, zadania, wyszukiwanie, administrację, logowanie i instalator. Systemowy jest ustawieniem domyślnym i reaguje na zmianę wyglądu systemu.
+
+Preferencja jest zapamiętywana w tej przeglądarce osobno dla konta i instancji oraz synchronizowana między jej kartami. Dotychczasowy wybór motywu edytora jest zachowany. Przy zablokowanym magazynie przeglądarki przełącznik nadal działa bez trwałego zapisu; bez JavaScript interfejs korzysta z jasnej palety. Motyw nie zmienia zapisanej treści dokumentów i nie wymaga migracji bazy.
+
 ## Requirements
 
 - PHP 8.2+
