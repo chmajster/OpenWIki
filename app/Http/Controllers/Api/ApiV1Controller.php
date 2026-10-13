@@ -369,7 +369,7 @@ final class ApiV1Controller extends Controller
         } catch (\Throwable $error) { return \OpenWiki\Http\CollaborationResponse::failure($error); }
     }
 
-    public function createComment(Request $request): Response { return $this->collaborationApi($request,'comment-create','comments:write',(string)$request->input('page_id','')); }
+    public function createComment(Request $request): Response { return $this->collaborationApi($request,'comment-create','comments:write',$request->input('page_id')); }
     public function workCenter(Request $request): Response
     {
         [$context,$failure]=$this->apiAuth($request,'work:read');
@@ -394,7 +394,7 @@ final class ApiV1Controller extends Controller
     public function taskHistory(Request $request,string $id): Response { return $this->collaborationApi($request,'task-history','tasks:read',null,$id,'task'); }
     public function taskAssignees(Request $request,string $id): Response { return $this->collaborationApi($request,'assignees','tasks:write',$id); }
 
-    private function collaborationApi(Request $request,string $action,string $scope,?string $page=null,?string $resource=null,string $kind=''): Response
+    private function collaborationApi(Request $request,string $action,string $scope,mixed $page=null,?string $resource=null,string $kind=''): Response
     {
         [$context,$failure]=$this->apiAuth($request,$scope);
         if ($failure!==null) return $failure;

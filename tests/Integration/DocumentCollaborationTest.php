@@ -61,6 +61,10 @@ final class DocumentCollaborationTest extends TestCase
             $comments->delete($anchored,$u['editor'],false,$p);
             self::assertNull($tasks->read((int)$linked['id'],$u['editor'])['discussion_url']);
             self::assertStringEndsWith('/revisions/1',$tasks->read((int)$linked['id'],$u['editor'])['source_url']);
+            $db->execute('UPDATE collaboration_operations SET created_at=DATE_SUB(UTC_TIMESTAMP(), INTERVAL 31 DAY)');
+            (new \OpenWiki\Wiki\CollaborationOperation($db))->prune();
+            self::assertSame(0,(int)$db->fetchOne('SELECT COUNT(*) total FROM collaboration_operations')['total']);
+            self::assertSame(2,(int)$db->fetchOne('SELECT COUNT(*) total FROM page_tasks')['total']);
         });
     }
     private function fixture(Database $db): array
@@ -205,6 +209,13 @@ final class DocumentCollaborationTest extends TestCase
                 $comments->read($root, $u['editor'], null, $p + 1);
                 self::fail('Context mismatch accepted.');
             } catch (\OutOfBoundsException) {
+            }
+            foreach ([true, 1.5, []] as $invalid) {
+                try {
+                    $tasks->create($p, $u['editor'], ['title'=>'Invalid assignee', 'assignee_id'=>$invalid]);
+                    self::fail('A non-integer identifier was accepted.');
+                } catch (\InvalidArgumentException) {
+                }
             }
             try {
                 $tasks->create($p, $u['editor'], ['title' => 'No token right'], ['page.view']);

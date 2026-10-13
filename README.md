@@ -273,9 +273,11 @@ Supported events:
 Webhook requests are JSON POST requests signed with `X-OpenWiki-Signature: sha256=<HMAC>`. Secrets are encrypted at rest with AES-256-GCM using the application key. Delivery retries are processed by `php bin/console cron:run`. Redirects are disabled and private, reserved and loopback destinations are rejected to reduce SSRF risk.
 
 
-## Multi-factor authentication
+## Documentation collaboration
 
 Fragment discussions, page tasks, the unified work center and access-aware notifications are described in the [collaboration guide](docs/document-collaboration.md), including RBAC, API, migration 013, cron and upgrade instructions.
+
+## Multi-factor authentication
 
 OpenWiki supports TOTP MFA compatible with Google Authenticator, Microsoft Authenticator, Authy and 1Password.
 

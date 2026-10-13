@@ -40,7 +40,7 @@ final class CollaborationAccess
         if ($optional && ($value === '' || $value === null)) {
             return null;
         }
-        $id = filter_var($value, FILTER_VALIDATE_INT);
+        $id = is_int($value) || is_string($value) ? filter_var($value, FILTER_VALIDATE_INT) : false;
         if ($id === false || $id < 1) {
             throw new \InvalidArgumentException('Nieprawidłowy identyfikator.');
         }
