@@ -522,6 +522,7 @@ document.querySelectorAll("[data-collaboration]").forEach((root) => {
   });
   article.tabIndex = 0;
   article.addEventListener('click', event => {
+    if (event.target.closest('a,button,input,select,textarea,[contenteditable]')) return;
     if (!window.getSelection().isCollapsed) return;
     const caret = document.caretRangeFromPoint?.(event.clientX, event.clientY);
     const point = document.caretPositionFromPoint?.(event.clientX, event.clientY);
@@ -531,6 +532,7 @@ document.querySelectorAll("[data-collaboration]").forEach((root) => {
     if (link) { highlight(link.thread, true); panelFocus = article; }
   });
   article.addEventListener('keydown', event => {
+    if (event.target.closest('a,button,input,select,textarea,[contenteditable]')) return;
     if (event.key !== 'Enter') return;
     const selection = window.getSelection();
     if (!selection.focusNode || !article.contains(selection.focusNode)) return;

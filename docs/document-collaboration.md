@@ -67,7 +67,7 @@ GET       /api/v1/work?space=ID&type=task&status=active&deadline=overdue&sort=du
 
 Nowa dyskusja: page_id, body, revision_number, anchor: {quote, start, hash}. Start liczy punkty kodowe Unicode, hash to SHA-256 kanonicznego tekstu rewizji. Odpowiedź używa parent_id i dziedziczy kontekst. Edycja komentarza fragmentu wymaga base_version; ogólny komentarz zachowuje kompatybilność API. Zmiana wątku: status open/resolved, base_version i opcjonalny operation_id.
 
-Zadanie: title, description, assignee_id, due_date, status, opcjonalnie thread_id/revision_number i UUID. Aktualizacja wymaga wersji. Statusy: todo, in_progress, blocked, done, cancelled. Typy pracy: task, review, freshness, discussion, draft, ownership. Attention=1&space=ID wybiera uwagę w przestrzeni. Wyszukiwanie komentarzy roboczych stosuje te same granice rewizji.
+Zadanie: title, description, assignee_id, due_date, status, opcjonalnie thread_id/revision_number i UUID. Aktualizacja wymaga wersji. Statusy: todo, in_progress, blocked, done, cancelled. Typy pracy: task, review, freshness, discussion, draft, ownership. Parametr attention=1&space=ID wybiera uwagę w przestrzeni. Wyszukiwanie komentarzy roboczych stosuje te same granice rewizji.
 
 ## Instalacja i aktualizacja
 

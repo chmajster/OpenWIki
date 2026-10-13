@@ -65,7 +65,7 @@ final class NotificationAccess
         }
         $resources = [];
         if ($comments !== []) {
-            foreach ($this->db->fetchAll('SELECT c.id,c.page_id,c.visibility,c.deleted_at,CASE WHEN root.anchor_json IS NOT NULL THEN root.deleted_at ELSE NULL END AS root_deleted FROM comments c LEFT JOIN comments root ON root.id=c.thread_id WHERE c.id IN (' . implode(',', $comments) . ')') as $row) {
+            foreach ($this->db->fetchAll('SELECT c.id,c.page_id,c.thread_id,c.revision_number,c.visibility,c.deleted_at,CASE WHEN root.anchor_json IS NOT NULL THEN root.deleted_at ELSE NULL END AS root_deleted FROM comments c LEFT JOIN comments root ON root.id=c.thread_id WHERE c.id IN (' . implode(',', $comments) . ')') as $row) {
                 $resources['comment:' . $row['id']] = $row;
             }
         }
@@ -80,7 +80,7 @@ final class NotificationAccess
                 $published[$row['page_id'] . ':' . $row['revision_number']] = (bool) $row['was_published'];
             }
         }
-        return array_values(array_filter($rows, static function (array $row) use ($access, $resources, $published): bool {
+        $visible = array_values(array_filter($rows, static function (array $row) use ($access, $resources, $published): bool {
             $page = (int) $row['page_id'];
             if (!$access->visible($page, (bool) $row['working'])) {
                 return false;
@@ -102,5 +102,18 @@ final class NotificationAccess
             }
             return true;
         }));
+        foreach ($visible as &$row) {
+            if (!in_array($row['resource_type'], ['comment', 'task'], true)) continue;
+            $page = $access->pages[(int) $row['page_id']];
+            $space = $access->spaces[(int) $page['space_id']];
+            $resource = $resources[$row['resource_type'] . ':' . $row['resource_id']];
+            $base = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($page['slug']);
+            if ((bool) $row['working'] || $resource['visibility'] === 'working') $base .= '/review';
+            $fragment = $row['resource_type'] === 'task' ? 'task-' . (int) $resource['id']
+                : ($resource['revision_number'] === null ? 'comment-' . (int) $resource['id'] : 'discussion-' . (int) ($resource['thread_id'] ?? $resource['id']));
+            $row['target_url'] = $base . '#' . $fragment;
+        }
+        unset($row);
+        return $visible;
     }
 }

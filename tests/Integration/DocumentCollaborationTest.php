@@ -175,6 +175,10 @@ final class DocumentCollaborationTest extends TestCase
             $reminders = new \OpenWiki\Wiki\TaskReminderService($db);
             self::assertSame(1, $reminders->run());
             self::assertSame(0, $reminders->run());
+            $db->execute('UPDATE pages SET slug="renamed" WHERE id=?', [$p]);
+            foreach ($events->notificationsForUser($u['reader']) as $notification) {
+                self::assertStringStartsWith('/spaces/COLLAB/pages/renamed#', $notification['target_url']);
+            }
             $db->execute('INSERT INTO page_acl (page_id,principal_type,principal_id,permission,effect,inherit_to_children) VALUES (?,"user",?,"page.view","deny",1)', [$p, $u['reader']]);
             self::assertSame(0, $events->unreadCount($u['reader']));
             self::assertSame([], $events->notificationsForUser($u['reader']));
