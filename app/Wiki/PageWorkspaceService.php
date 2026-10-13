@@ -34,6 +34,8 @@ final class PageWorkspaceService
         return $this->app->database()->transaction(function () use ($space, $page, $parentId, $auth, $user): array {
             $acl = new PageAclService($this->app); $super = $auth->can('*'); $id = (int) $user['id'];
             $acl->snapshot($space, $id, $super);
+            if ($page !== null && !$acl->canFor($page, $space, 'page.edit', $id, $super, $auth->can('page.edit'))) throw new \DomainException('Nie masz prawa edytować tej strony.');
+            $canMove = $page === null || $acl->canFor($page, $space, 'page.move', $id, $super, $auth->can('page.move'));
             $repository = new PageRepository($this->app->database());
             $rows = $repository->tree((int) $space['id']); $byId = array_column($rows, null, 'id');
             $children = []; $blocked = [];
@@ -47,6 +49,7 @@ final class PageWorkspaceService
             foreach ($rows as $row) {
                 if (!$acl->canViewFor($row, $space, $id, $super, $auth->can('page.view'))) continue;
                 if (isset($blocked[(int) $row['id']])) continue;
+                if (!$canMove && (int) $row['id'] !== (int) ($page['parent_id'] ?? 0)) continue;
                 if ($page === null && !$acl->canFor($row, $space, 'page.create', $id, $super, $auth->can('page.create'))) continue;
                 $parents[] = ['id' => (int) $row['id'], 'title' => $row['title'], 'parent_id' => isset($byId[(int) ($row['parent_id'] ?? 0)])
                     && $acl->canViewFor($byId[(int) $row['parent_id']], $space, $id, $super, $auth->can('page.view')) ? (int) $row['parent_id'] : null];
@@ -63,7 +66,7 @@ final class PageWorkspaceService
             return ['space' => ['id' => (int) $space['id'], 'name' => $space['name'], 'space_key' => $space['space_key'], 'visibility' => $space['visibility']],
                 'parents' => $parents, 'parent' => $parent === null ? null : ['id' => (int) $parent['id'], 'title' => $parent['title']],
                 'can_publish' => !(bool) $space['review_workflow'] && $publish['allowed'], 'can_archive' => $acl->canFor($candidate, $space, 'page.archive', $id, $super, $auth->can('page.archive')),
-                'review_workflow' => (bool) $space['review_workflow'], 'publish_reason' => (bool) $space['review_workflow'] ? 'Przestrzeń wymaga osobnej recenzji konkretnej rewizji przed publikacją.' : $publish['reason'],
+                'can_change_parent' => $canMove, 'review_workflow' => (bool) $space['review_workflow'], 'publish_reason' => (bool) $space['review_workflow'] ? 'Przestrzeń wymaga osobnej recenzji konkretnej rewizji przed publikacją.' : $publish['reason'],
                 'access' => ($parentId === null ? 'Dostęp według przestrzeni. ' : 'Dostęp dziedziczony po rodzicu; ograniczenia ACL pozostają w mocy. ') . $view['reason'],
                 'user_id' => $id];
         });

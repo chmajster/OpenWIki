@@ -241,7 +241,7 @@ final class PageController extends Controller
             'page' => $page,
             'serverDraft' => null,
             'pages' => $this->visibleTree($space),
-            'templates' => [],
+            'templates' => (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->catalog(),
             'workspaceSpaces' => (new \OpenWiki\Wiki\PageWorkspaceService($this->app))->spaces($page),
             'tags' => isset($page['tags']) ? array_map(static fn (string $name): array => ['name' => $name], $page['tags']) : (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
             'canPublish' => !(bool) $space['review_workflow'] && $this->pageWritePolicy($space)('page.publish', $page ?? null),
@@ -490,9 +490,7 @@ final class PageController extends Controller
             'page' => $page,
             'serverDraft' => null,
             'pages' => $this->visibleTree($space),
-            'templates' => $page === null
-                ? (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->catalog()
-                : [],
+            'templates' => (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->catalog(),
             'workspaceSpaces' => (new \OpenWiki\Wiki\PageWorkspaceService($this->app))->spaces($page),
             'tags' => $page === null
                 ? []

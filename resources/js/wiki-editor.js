@@ -5,6 +5,7 @@ import {setupEditorTools} from './editor-tools.js';
 import {LocalRecovery} from './local-recovery.js';
 import {setupUploads} from './upload-queue.js';
 import {setupWorkspace} from './workspace-tools.js';
+import {setupDocumentWorkspace} from './document-workspace.js';
 'use strict';
 
 const editorRoot = document.querySelector('[data-wiki-editor]');
@@ -117,6 +118,8 @@ if (editorRoot) {
         userId, documentKey, editorId, sequence: generation, savedAt: new Date().toISOString(),
         baseVersion: Number(baseVersionField.value), title: form.elements.title.value,
         slug: form.elements.slug.value, parentId: form.elements.parent_id.value,
+        publication_space_id: form.elements.publication_space_id.value,
+        publication_parent_id: form.elements.publication_parent_id.value,
         content_owner_id: form.elements.content_owner_id.value, review_due_at: form.elements.review_due_at.value,
         status: form.elements.status.value, tags: form.elements.tags.value,
         changeSummary: form.elements.change_summary.value, format: formatInput.value,
@@ -146,6 +149,7 @@ if (editorRoot) {
         autosaveTimer = window.setTimeout(autosave, 2000);
         if (maximumSaveTimer === null) maximumSaveTimer = window.setTimeout(() => { maximumSaveTimer = null; autosave(); }, 10000);
         if (conflict) editorRoot.querySelector('[data-conflict-local]').textContent = describe(snapshot());
+        editorRoot.dispatchEvent(new Event('wiki:document-state'));
     };
     const initialHtml = visualEditor.innerHTML;
     visualEditor.replaceChildren();
@@ -177,7 +181,7 @@ if (editorRoot) {
         if (sourceOverride !== null) setVisualHtml(sourceOverride);
     });
     const restoreSnapshot = (data) => {
-        for (const key of ['title', 'slug', 'status', 'tags', 'content_owner_id', 'review_due_at']) {
+        for (const key of ['title', 'slug', 'status', 'tags', 'content_owner_id', 'review_due_at', 'publication_space_id', 'publication_parent_id']) {
             if (typeof data[key] === 'string') form.elements[key].value = data[key];
         }
         if (typeof data.parentId === 'string') form.elements.parent_id.value = data.parentId;
@@ -258,6 +262,7 @@ if (editorRoot) {
         document: data.document,
         content_owner_id: data.content_owner_id, review_due_at: data.review_due_at,
         title: data.title, slug: data.slug, parent_id: data.parentId, status: data.status,
+        publication_space_id: data.publication_space_id, publication_parent_id: data.publication_parent_id,
         tags: data.tags, change_summary: data.changeSummary, content_format: data.format,
         content_html: data.html, content_markdown: data.markdown, conversion_backup: data.conversionBackup,
         ...(recoveredSource ? {recovery_editor_id: recoveredSource.editorId, recovery_sequence: recoveredSource.sequence} : {})
@@ -482,18 +487,15 @@ if (editorRoot) {
     }
 
 
-    const templateSelector = editorRoot.querySelector('[data-template-selector]');
-    if (templateSelector) templateSelector.addEventListener('change', () => {
-        const option = templateSelector.options[templateSelector.selectedIndex];
-        if (!option?.value) return;
+    const applyTemplate = (template) => {
         conversionBackup = {format: formatInput.value, html: getVisualHtml(), markdown: markdownEditor.value};
-        setVisualHtml(option.dataset.html || '');
-        markdownEditor.value = option.dataset.markdown || '';
+        setVisualHtml(template.content_html || '');
+        markdownEditor.value = template.content_markdown || '';
         originalMarkdown = null;
         undoButton.hidden = false;
-        setMode(markdownEditor.value ? 'markdown' : 'visual');
+        setMode(template.content_format || (markdownEditor.value ? 'markdown' : 'visual'));
         markDirty();
-    });
+    };
     form.addEventListener('input', (event) => { if (!visualEditor.contains(event.target) && event.target.name) markDirty(); });
     form.addEventListener('change', (event) => { if (!visualEditor.contains(event.target) && event.target.name) markDirty(); });
 
@@ -525,12 +527,12 @@ if (editorRoot) {
             draftVersion = data.draft_version;
             draftGeneration = captured.sequence;
             draftAttempt = null;
-            saveState.dataset.state = generation === captured.sequence ? 'server' : 'unsaved';
+            saveState.dataset.state = lastSaveError ? 'error' : generation === captured.sequence ? 'server' : 'unsaved';
             if (generation === captured.sequence) saveState.textContent = data.stale
                 ? t('Recovery copy saved with its original base version. The server page has changed; saving will require conflict resolution.')
                 : 'Zapisano na serwerze o ' + data.saved_at + '. Szkic nie zmienia strony widocznej czytelnikom.';
             else saveState.textContent = t('An earlier draft was saved. Newer changes are still pending.');
-            if (lastSaveError) saveState.textContent += t(' The page save failed: ') + lastSaveError;
+            if (lastSaveError) saveState.textContent += t(' The page save failed: ') + lastSaveError + t(' Your document and its original base version are retained.');
         } catch (error) {
             if (error.status && error.status < 500) draftAttempt = null;
             if (error.draftConflict) {
@@ -567,6 +569,8 @@ if (editorRoot) {
         if (saving || converting || pendingImages > 0 || accountChanged || authStopped || conflict || modelPending) return;
         persistLocalRecovery();
         saving = true;
+        saveState.dataset.state = 'saving';
+        saveState.textContent = 'Zapisywanie dokumentu…';
         updateSaveButton();
         window.clearTimeout(autosaveTimer);
         try {
@@ -593,11 +597,17 @@ if (editorRoot) {
                 window.location.assign(data.url);
             } else {
                 // Later edits remain based on our now-confirmed revision and are saved separately.
-                form.action = data.url;
+                const pageUrl = '/spaces/' + encodeURIComponent(data.page.space_key) + '/pages/' + encodeURIComponent(data.page.slug);
+                const laterParent = form.elements.publication_space_id.value === String(data.page.space_id) ? form.elements.publication_parent_id.value : String(data.page.parent_id || '');
+                form.action = pageUrl;
                 const oldKey = recoveryKey;
                 isEdit = true;
                 editorRoot.dataset.isEdit = '1';
                 editorRoot.dataset.pageId = String(data.page.id);
+                editorRoot.dataset.spaceId = String(data.page.space_id);
+                for (const [key, suffix] of Object.entries({draftsUrl: 'editor-drafts', filesUrl: 'editor-files', previewUrl: 'editor-preview', workspaceUrl: 'editor-workspace', pagesUrl: 'editor-pages', usersUrl: 'editor-users', convertUrl: 'editor-convert'})) editorRoot.dataset[key] = '/spaces/' + encodeURIComponent(data.page.space_key) + '/' + suffix;
+                form.elements.publication_space_id.value = String(data.page.space_id);
+                form.elements.publication_parent_id.value = form.elements.parent_id.value = laterParent;
                 editorRoot.querySelectorAll('[data-editor-heading]').forEach((element) => { element.textContent = t('Edit page'); });
                 editorRoot.querySelector('[data-version-hint]').textContent = t('Based on version ') + data.page.version + '.';
                 editorRoot.querySelector('[data-editor-cancel]').href = data.url;
@@ -606,9 +616,9 @@ if (editorRoot) {
                 recoveryPrefix = 'openwiki:draft:v2:' + userId + ':' + editorRoot.dataset.spaceId + ':' + documentKey + ':' + instance + ':';
                 recoveryKey = recoveryPrefix + editorId;
                 draftVersion = 0; draftGeneration = 0; draftAttempt = null;
-                editorRoot.dataset.lockUrl = data.url + '/edit-lock';
-                editorRoot.dataset.unlockUrl = data.url + '/edit-unlock';
-                history.replaceState(null, '', data.url + '/edit');
+                editorRoot.dataset.lockUrl = pageUrl + '/edit-lock';
+                editorRoot.dataset.unlockUrl = pageUrl + '/edit-unlock';
+                history.replaceState(null, '', pageUrl + '/edit');
                 // Server mappings identify each source URL; wiki-link decoration may change anchor order.
                 const urls = new Map(Object.entries(data.page.asset_replacements || {}));
                 const attachmentId = (url) => /^\/attachments\/([1-9][0-9]*)\//.exec(url)?.[1];
@@ -656,7 +666,10 @@ if (editorRoot) {
             saveState.dataset.state = error.conflict ? 'conflict' : 'error';
             saveState.textContent = error.message + t(' Your document and its original base version are retained.');
         } finally { saving = false; updateSaveButton(); }
-        if (publishLatestAfterReplay && !saveButton.disabled) form.requestSubmit();
+        if (publishLatestAfterReplay && !saveButton.disabled) {
+            editorRoot.dataset.publicationReplay = '1';
+            try { form.requestSubmit(); } finally { delete editorRoot.dataset.publicationReplay; }
+        }
     });
     requestJson(editorRoot.dataset.draftsUrl + '?document_key=' + encodeURIComponent(documentKey)).then((data) => {
         for (const draft of data.drafts) {
@@ -692,7 +705,7 @@ if (editorRoot) {
         }
     });
     window.addEventListener('beforeunload', (event) => {
-        if (!dirty || generation === draftGeneration) return;
+        if (!dirty || generation === draftGeneration || Number(editorRoot.dataset.recoveryClose) === generation) return;
         persistLocalRecovery();
         event.preventDefault();
         event.returnValue = '';
@@ -712,5 +725,8 @@ if (editorRoot) {
     const refreshBasic = refreshTools;
     const refreshWorkspace = setupWorkspace(editorRoot, richEditor,
         () => formatInput.value === 'visual' && !accountChanged && !modelPending && sourceOverride === null, requestJson, snapshot);
-    refreshTools = () => { refreshBasic(); refreshWorkspace(); };
+    const refreshDocument = setupDocumentWorkspace({root: editorRoot, editor: richEditor, form, requestJson, snapshot, fields, safeHtml,
+        applyTemplate, preserve: persistLocalRecovery, saveDraft: autosave});
+    refreshTools = () => { refreshBasic(); refreshWorkspace(); refreshDocument(); };
+    refreshTools();
 }

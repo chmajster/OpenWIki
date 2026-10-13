@@ -1,7 +1,7 @@
 import {Fragment, Slice, DOMSerializer} from '@tiptap/pm/model';
 import {selectedRect, moveTableRow, moveTableColumn, handlePaste} from '@tiptap/pm/tables';
 import {closeHistory} from '@tiptap/pm/history';
-import {TextSelection} from '@tiptap/pm/state';
+import {TextSelection, NodeSelection} from '@tiptap/pm/state';
 import {diagramPreview} from './diagram-preview.js';
 
 export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
@@ -26,6 +26,7 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
     };
     root.querySelectorAll('[data-block-action]').forEach((button) => button.onclick = async () => {
         const block = selectedBlock(); if (!block || !canEdit()) return;
+        q('[data-block-menu]').open = false;
         const action = button.dataset.blockAction;
         if (action === 'up' || action === 'down') { moveBlock(block.index + (action === 'up' ? -1 : 1)); return; }
         if (action === 'duplicate') documentAction(editor.state.tr.insert(block.pos + block.node.nodeSize, block.node));
@@ -171,12 +172,6 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
         documentAction(tr); findIndex = -1; matches();
     };
     q('[data-replace-one]').onclick = () => replace(false); q('[data-replace-all]').onclick = () => replace(true);
-    q('[data-focus-mode]').onclick = () => {
-        const active = root.classList.toggle('is-focused'); document.body.classList.toggle('editor-focused', active);
-        q('[data-focus-mode]').setAttribute('aria-pressed', String(active));
-    };
-    new MutationObserver(() => { q('[data-focus-state]').textContent = q('[data-save-state]').textContent; }).observe(q('[data-save-state]'), {childList: true});
-
     let statsTimer;
     const statistics = () => {
         const text = editor.state.doc.textBetween(0, editor.state.doc.content.size, ' ');
@@ -210,27 +205,63 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
         if (command === 'link') q('[data-open-link]').click(); else if (command === 'clear') focus().unsetAllMarks().run(); else focus()[command === 'bold' ? 'toggleBold' : 'toggleItalic']().run();
     });
 
-    // Slash commands and mentions share a keyboard-operated list, with no HTML insertion.
-    const menu = q('[data-command-menu]'); let candidates = [], active = 0, range = null, querySequence = 0;
+    // The same transaction-backed picker serves slash commands and the block + button.
+    const menu = q('[data-command-menu]'), options = q('[data-command-options]'), search = q('[data-command-search]');
+    let candidates = [], active = 0, range = null, querySequence = 0, manual = false, insertion = null;
     const commands = [
-        ['Akapit', () => focus().setParagraph().run()], ...[1, 2, 3, 4, 5, 6].map((level) => ['Nagłówek H' + level, () => focus().setHeading({level}).run()]),
-        ['Tabela', () => q('[data-insert-table]').click()], ['Lista punktowana', () => focus().toggleBulletList().run()], ['Lista numerowana', () => focus().toggleOrderedList().run()], ['Lista zadań', () => focus().toggleTaskList().run()],
-        ['Kod', () => q('[data-open-code]').click()], ['Diagram Mermaid', () => q('[data-open-diagram]').click()], ['Sekcja i kolumny', () => q('[data-open-block]').click()], ['Callout', () => q('[data-open-callout]').click()], ['Makro', () => q('[data-open-macro]').click()], ['Separator', () => focus().setHorizontalRule().run()]
+        ['Akapit', () => focus().setParagraph().run(), 'Tekst', 'Zwykły tekst dokumentu', '¶'], ...[1, 2, 3, 4, 5, 6].map((level) => ['Nagłówek H' + level, () => focus().setHeading({level}).run(), 'Nagłówki', 'Poziom ' + level + ' w strukturze dokumentu', 'H' + level]),
+        ['Tabela', () => q('[data-insert-table]').click(), 'Bloki', 'Wybierz wiersze, kolumny i nagłówek', '▦'], ['Lista punktowana', () => focus().toggleBulletList().run(), 'Listy', 'Lista z możliwością zagnieżdżania', '☷'], ['Lista numerowana', () => focus().toggleOrderedList().run(), 'Listy', 'Uporządkowane kroki dokumentu', '1.'], ['Lista zadań', () => focus().toggleTaskList().run(), 'Listy', 'Zadania z edytowalnym stanem', '☑'],
+        ['Kod', () => q('[data-open-code]').click(), 'Bloki', 'Kod z językiem, numerami wierszy i podświetleniem', '</>'],
+        ['Diagram Mermaid', () => q('[data-open-diagram]').click(), 'Bloki', 'Diagram ze źródła tekstowego', '◇'],
+        ['Zwijana sekcja', () => { q('[data-block-kind]').value = 'disclosure'; q('[data-open-block]').click(); }, 'Układ', 'Tytuł i rozwijana treść', '▸'],
+        ['Kolumny', () => { q('[data-block-kind]').value = 'columns2'; q('[data-open-block]').click(); }, 'Układ', 'Dwie lub trzy kolumny', '▥'],
+        ...[['Informacja', 'info'], ['Ostrzeżenie', 'warning'], ['Sukces', 'success']].map(([name, kind]) => [name, () => { q('[data-open-callout]').click(); q('[data-callout-kind]').value = kind; }, 'Wyróżnienia', 'Wyróżniony blok z treścią', 'ⓘ']),
+        ['Cytat', () => focus().toggleBlockquote().run(), 'Bloki', 'Cytowany fragment dokumentu', '❞'],
+        ['Link do strony', () => q('[data-open-link]').click(), 'Odnośniki', 'Wyszukaj stronę lub podaj adres URL', '↗'],
+        ['Makro', () => q('[data-open-macro]').click(), 'Dynamiczne', 'Spis treści, dzieci, załączniki i parametry', '{}'],
+        ['Separator', () => focus().setHorizontalRule().run(), 'Układ', 'Oddziel części dokumentu', '―']
     ];
+    if (q('[data-image-picker]')) commands.push(['Obraz', () => q('[data-image-picker]').click(), 'Media', 'Chroniony obraz z alt, podpisem i rozmiarem', '▧']);
+    if (q('[data-attachment-picker]')) commands.push(['Plik', () => q('[data-attachment-picker]').click(), 'Media', 'Prywatny plik szkicu, dostęp po publikacji według ACL', '▤']);
+    const positionMenu = pos => {
+        const coordinates = editor.view.coordsAtPos(Math.min(pos, editor.state.doc.content.size));
+        menu.style.left = Math.max(8, Math.min(window.innerWidth - Math.min(320, window.innerWidth - 24) - 8, coordinates.left)) + 'px';
+        const height = menu.scrollHeight || Math.min(440, window.innerHeight * .7);
+        menu.style.top = Math.max(65, Math.min(window.innerHeight - height - 8, coordinates.bottom + 4)) + 'px';
+    };
+    const choose = action => {
+        if (!canEdit() || (!range && !manual)) return;
+        const selectedRange = range, after = insertion;
+        dismissMenu();
+        if (selectedRange) editor.commands.deleteRange(selectedRange);
+        if (after !== null) {
+            const tr = editor.state.tr.insert(after, editor.schema.nodes.paragraph.create());
+            editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, after + 1))); editor.view.focus();
+        }
+        action();
+    };
     const renderMenu = () => {
-        menu.replaceChildren(); menu.hidden = !candidates.length;
-        candidates.forEach(([label, action], index) => {
-            const button = document.createElement('button'); button.type = 'button'; button.role = 'option'; button.textContent = label; button.setAttribute('aria-selected', String(index === active));
-            button.onclick = () => { if (!canEdit() || !range) return; editor.commands.deleteRange(range); menu.hidden = true; range = null; action(); }; menu.append(button);
+        options.replaceChildren(); menu.hidden = false;
+        candidates.forEach(([label, action, category = 'Podstawowe', description = 'Wstaw lub przekształć zaznaczony blok', icon = '¶'], index) => {
+            const button = document.createElement('button'); button.type = 'button'; button.role = 'option'; button.id = 'editor-command-' + index; button.setAttribute('aria-selected', String(index === active));
+            const symbol = document.createElement('span'); symbol.textContent = icon; symbol.setAttribute('aria-hidden', 'true');
+            const name = document.createElement('span'); name.textContent = label;
+            const help = document.createElement('small'); help.textContent = category + ' · ' + description;
+            button.append(symbol, name, help); button.onmousedown = event => event.preventDefault(); button.onclick = () => choose(action); options.append(button);
         });
+        if (!candidates.length) { const empty = document.createElement('p'); empty.textContent = 'Brak pasujących elementów.'; options.append(empty); }
+        search.setAttribute('aria-activedescendant', candidates.length ? 'editor-command-' + active : '');
+        const selected = options.querySelector('[aria-selected=true]');
+        if (selected) { const item = selected.getBoundingClientRect(), box = options.getBoundingClientRect(); if (item.bottom > box.bottom) options.scrollTop += item.bottom - box.bottom; else if (item.top < box.top) options.scrollTop -= box.top - item.top; }
+        if (range) positionMenu(range.to);
     };
     const updateMenu = async () => {
         const sequence = ++querySequence, {$from, empty} = editor.state.selection;
         const before = $from.parent.isTextblock ? $from.parent.textBetween(0, $from.parentOffset) : '';
         const match = /(?:^|\s)([/@])([^\s/@]{0,30})$/.exec(before);
         if (!canEdit() || !empty || !match || editor.isActive('codeBlock') || editor.isActive('diagram')) { menu.hidden = true; range = null; return; }
-        range = {from: $from.pos - match[2].length - 1, to: $from.pos}; active = 0;
-        const coordinates = editor.view.coordsAtPos($from.pos); menu.style.left = Math.max(8, Math.min(window.innerWidth - 290, coordinates.left)) + 'px'; menu.style.top = Math.min(window.innerHeight - 220, coordinates.bottom + 4) + 'px';
+        manual = false; insertion = null; range = {from: $from.pos - match[2].length - 1, to: $from.pos}; active = 0;
+        search.value = match[2]; positionMenu($from.pos);
         if (match[1] === '/') candidates = commands.filter(([label]) => label.toLocaleLowerCase().includes(match[2].toLocaleLowerCase()));
         else {
             try {
@@ -243,7 +274,7 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
     };
     let menuTimer = null;
     const dismissMenu = () => {
-        ++querySequence; clearTimeout(menuTimer); menuTimer = null; menu.hidden = true; range = null;
+        ++querySequence; clearTimeout(menuTimer); menuTimer = null; menu.hidden = true; range = null; manual = false; insertion = null;
     };
     editor.on('transaction', ({transaction}) => {
         if (transaction.docChanged || transaction.selectionSet) {
@@ -252,16 +283,58 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
         }
     });
     root.addEventListener('keydown', (event) => {
-        if (!event.target.closest('[data-visual-editor]')) return;
+        if (!event.target.closest('[data-visual-editor], [data-command-menu]')) return;
         if (canEdit() && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); event.stopPropagation(); q('[data-open-find]').click(); return; }
         if (event.altKey && event.shiftKey && ['ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); event.stopPropagation(); const block = selectedBlock(); if (block) moveBlock(block.index + (event.key === 'ArrowUp' ? -1 : 1)); return; }
         if (event.key === 'Escape' && (range || menuTimer !== null || !menu.hidden)) { event.preventDefault(); event.stopPropagation(); dismissMenu(); return; }
         if (menu.hidden || event.target.closest('dialog')) return;
         if (['ArrowUp', 'ArrowDown', 'Enter'].includes(event.key)) {
             event.preventDefault(); event.stopPropagation();
-            if (event.key === 'Enter') menu.children[active]?.click();
-            else { active = (active + (event.key === 'ArrowUp' ? -1 : 1) + candidates.length) % candidates.length; renderMenu(); }
+            if (event.key === 'Enter') options.querySelectorAll('button')[active]?.click();
+            else if (candidates.length) { active = (active + (event.key === 'ArrowUp' ? -1 : 1) + candidates.length) % candidates.length; renderMenu(); }
         }
     }, true);
+    search.oninput = () => { active = 0; candidates = commands.filter(([label]) => label.toLocaleLowerCase('pl').includes(search.value.toLocaleLowerCase('pl'))); renderMenu(); };
+    let hovered = null;
+    const handles = q('[data-block-tools]'); handles.hidden = true;
+    const placeHandles = pos => {
+        const coordinates = editor.view.coordsAtPos(Math.min(pos + 1, editor.state.doc.content.size));
+        const narrow = window.innerWidth < 900;
+        handles.style.left = Math.max(2, editor.view.dom.getBoundingClientRect().left - (narrow ? 0 : 102)) + 'px';
+        handles.style.top = Math.max(65, coordinates.top - (narrow ? 30 : 0)) + 'px'; handles.hidden = !canEdit() || coordinates.bottom < 65 || coordinates.top > window.innerHeight;
+        const panel = q('.block-action-menu'), above = coordinates.top > window.innerHeight - 300;
+        panel.style.top = above ? 'auto' : '100%'; panel.style.bottom = above ? '100%' : 'auto';
+    };
+    editor.on('selectionUpdate', () => {
+        const block = selectedBlock(); if (!block) { handles.hidden = true; return; }
+        hovered = block.pos; placeHandles(hovered);
+    });
+    editor.view.dom.addEventListener('pointermove', event => {
+        if (manual || q('[data-block-menu]').open) return;
+        const target = editor.view.posAtCoords({left: event.clientX, top: event.clientY}); if (!target) return;
+        const position = editor.state.doc.resolve(target.pos); hovered = position.depth ? position.before(1) : position.pos;
+        if (editor.state.doc.nodeAt(hovered)) placeHandles(hovered);
+    });
+    handles.addEventListener('mousedown', event => {
+        if (hovered !== null && canEdit()) editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, hovered)));
+        if (!event.target.closest('select,summary')) event.preventDefault();
+    });
+    q('[data-block-add]').onclick = () => {
+        const block = selectedBlock(); if (!block || !canEdit()) return;
+        manual = true; range = null; insertion = block.pos + block.node.nodeSize; search.value = ''; active = 0; candidates = commands;
+        renderMenu(); positionMenu(block.pos); search.focus();
+    };
+    q('[data-block-transform]').onchange = event => {
+        if (!canEdit()) return;
+        const type = event.target.value;
+        if (/^h[1-6]$/.test(type)) focus().setHeading({level: Number(type[1])}).run();
+        else if (type === 'paragraph') focus().setParagraph().run();
+        else if (type === 'codeBlock') q('[data-open-code]').click();
+        else if (type === 'blockquote') focus().toggleBlockquote().run();
+        event.target.value = ''; q('[data-block-menu]').open = false;
+    };
+    document.addEventListener('pointerdown', event => { if (!menu.hidden && !menu.contains(event.target) && !handles.contains(event.target)) dismissMenu(); });
+    window.addEventListener('scroll', () => { if (hovered !== null && editor.state.doc.nodeAt(hovered)) placeHandles(hovered); else handles.hidden = true; q('[data-text-context]').hidden = true; if (!menu.hidden && range) positionMenu(range.to); }, true);
+    window.addEventListener('resize', () => { handles.hidden = true; dismissMenu(); });
     return refresh;
 }

@@ -2,7 +2,8 @@ import {Editor, Extension, Node, Mark, mergeAttributes} from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import {Table, TableRow, TableCell, TableHeader} from '@tiptap/extension-table';
 import {TaskList, TaskItem} from '@tiptap/extension-list';
-import {NodeSelection, TextSelection} from '@tiptap/pm/state';
+import {NodeSelection, TextSelection, Plugin} from '@tiptap/pm/state';
+import {Decoration, DecorationSet} from '@tiptap/pm/view';
 import {documentBlocks} from './document-blocks.js';
 
 const globals = ['id', 'class', 'title', 'aria-label'];
@@ -77,10 +78,16 @@ const CompatibleTable = Table.extend({
     renderHTML({HTMLAttributes}) { return ['table', HTMLAttributes, ['tbody', 0]]; }
 });
 
+const EmptyDocument = Extension.create({name: 'emptyDocument', addProseMirrorPlugins() {
+    return [new Plugin({props: {decorations(state) {
+        return state.doc.childCount === 1 && state.doc.firstChild.type.name === 'paragraph' && !state.doc.firstChild.content.size
+            ? DecorationSet.create(state.doc, [Decoration.node(0, state.doc.firstChild.nodeSize, {class: 'empty-document', 'data-placeholder': 'Zacznij pisać lub wpisz /, aby wstawić element'})]) : null;
+    }}})];
+}});
 export function createRichEditor(element, html, sanitize, onUpdate, onSelection) {
     const editor = new Editor({
         element, content: html, injectCSS: false,
-        extensions: [DocumentNavigation, StarterKit.configure({link: {openOnClick: false, autolink: false, defaultProtocol: 'https', HTMLAttributes: {target: null, rel: null}}, codeBlock: false}),
+        extensions: [EmptyDocument, DocumentNavigation, StarterKit.configure({link: {openOnClick: false, autolink: false, defaultProtocol: 'https', HTMLAttributes: {target: null, rel: null}}, codeBlock: false}),
             // Keep code language in the same data-language attribute used by PHP revisions.
             Node.create({name: 'codeBlock', group: 'block', content: 'text*', marks: '', code: true, defining: true,
                 addAttributes() { return {language: {default: null, parseHTML: (e) => e.querySelector('code')?.getAttribute('data-language') || e.querySelector('code')?.className.replace(/^language-/, '') || null, rendered: false},
