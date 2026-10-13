@@ -90,6 +90,7 @@ $router->get('/spaces/{spaceKey}/editor-drafts', [PageDraftController::class, 'd
 $router->post('/spaces/{spaceKey}/editor-drafts', [PageDraftController::class, 'saveEditorDraft']);
 $router->post('/spaces/{spaceKey}/editor-convert', [PageDraftController::class, 'convert']);
 $router->post('/spaces/{spaceKey}/editor-preview', [PageDraftController::class, 'preview']);
+$router->get('/spaces/{spaceKey}/editor-workspace', [PageDraftController::class, 'workspace']);
 $router->get('/spaces/{spaceKey}/editor-pages', [PageDraftController::class, 'pages']);
 $router->get('/spaces/{spaceKey}/editor-users', [PageDraftController::class, 'users']);
 $router->post('/spaces/{spaceKey}/editor-files', [PageDraftController::class, 'uploadFile']);

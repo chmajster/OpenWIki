@@ -12,11 +12,12 @@ $notificationCount = $currentUser === null
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= $e($pageTitle) ?></title>
     <link rel="stylesheet" href="/assets/app.css">
+    <?php if (!empty($editorWorkspace)): ?><link rel="stylesheet" href="/assets/document-workspace.css"><?php endif; ?>
     <script src="/assets/app.js" defer></script>
     <script src="/assets/search.js" defer></script>
     <script src="/assets/document-reader.js" defer></script>
 </head>
-<body data-user-id="<?= (int) ($currentUser['id'] ?? 0) ?>">
+<body class="<?= !empty($editorWorkspace) ? 'document-workspace' : '' ?>" data-user-id="<?= (int) ($currentUser['id'] ?? 0) ?>">
 <textarea hidden data-ui-translations><?= $e(json_encode($locale === 'pl' ? \OpenWiki\Core\I18n::catalog() : new \stdClass(), JSON_THROW_ON_ERROR)) ?></textarea>
 <header class="topbar">
     <div class="topbar__inner">

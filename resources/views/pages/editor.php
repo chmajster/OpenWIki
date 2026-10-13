@@ -2,6 +2,8 @@
 $text = static fn (mixed $value): string => is_scalar($value) ? (string) $value : '';
 $e = static fn (mixed $value): string => htmlspecialchars($text($value), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $old = $old ?? [];
+$editorWorkspace = true;
+require __DIR__ . '/../partials/editor-icons.php';
 $isEdit = $page !== null;
 $field = static function (string $key, mixed $fallback = '') use ($old): mixed {
     return array_key_exists($key, $old) ? $old[$key] : $fallback;
@@ -9,8 +11,8 @@ $field = static function (string $key, mixed $fallback = '') use ($old): mixed {
 
 $titleValue = $field('title', $page['title'] ?? '');
 $slugValue = $field('slug', $page['slug'] ?? '');
-$parentValue = $field('parent_id', $page['parent_id'] ?? '');
-$statusValue = $field('status', $page['status'] ?? 'draft');
+$parentValue = $field('parent_id', $page['parent_id'] ?? $initialParentId ?? '');
+$statusValue = $field('status', $page['status'] ?? ($canPublish ? 'published' : 'draft'));
 if ((bool) $space['review_workflow'] && $statusValue === 'published') $statusValue = 'draft';
 $formatValue = $field('content_format', $page['content_format'] ?? 'visual');
 $markdownValue = $field('content_markdown', $page['content_markdown'] ?? '');
@@ -54,6 +56,8 @@ $walk(0, 0);
 $preserveParent = $isEdit && (int) $parentValue > 0
     && (string) $parentValue === (string) $page['parent_id']
     && !in_array((int) $parentValue, array_map(static fn (array $row): int => (int) $row['id'], $options), true);
+$parentTitle = null;
+foreach ($pages as $candidate) if ((int) $candidate['id'] === (int) $parentValue) $parentTitle = $candidate['title'];
 ?>
 <section
     class="editor-shell"
@@ -66,6 +70,7 @@ $preserveParent = $isEdit && (int) $parentValue > 0
     data-drafts-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-drafts"
     data-files-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-files"
     data-preview-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-preview"
+    data-workspace-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-workspace"
     data-pages-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-pages"
     data-users-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-users"
     data-convert-url="/spaces/<?= rawurlencode($space['space_key']) ?>/editor-convert"
@@ -79,28 +84,16 @@ $preserveParent = $isEdit && (int) $parentValue > 0
     <?php endif; ?>
 >
     <textarea hidden data-html-policy><?= $e(json_encode(\OpenWiki\Security\HtmlSanitizer::policy(), JSON_THROW_ON_ERROR)) ?></textarea>
+    <textarea hidden data-template-catalog><?= $e(json_encode($templates, JSON_THROW_ON_ERROR)) ?></textarea>
+    <dialog data-document-preview-dialog class="editor-dialog document-preview-dialog"><h2 data-document-preview-title>Podgląd strony</h2><p data-document-preview-status role="status"></p><div class="document-content" data-document-preview-content></div><button class="button" type="button" data-dialog-close>Zamknij podgląd</button></dialog>
+    <dialog data-template-preview-dialog class="editor-dialog"><h2 data-template-preview-title></h2><div class="document-content" data-template-preview-content></div><button class="button button--primary" type="button" data-template-preview-apply>Użyj szablonu</button><button class="button" type="button" data-dialog-close>Zamknij</button></dialog>
     <dialog data-recovery-dialog class="editor-dialog"><h2>Porównanie kopii odzyskiwania</h2><p data-recovery-comparison-info></p><div class="comparison-grid"><div><h3>Aktualny dokument</h3><pre data-recovery-current></pre></div><div><h3>Wybrana kopia</h3><pre data-recovery-copy></pre></div></div><button type="button" class="button" data-dialog-close>Zamknij</button></dialog>
     <dialog data-table-dialog class="editor-dialog"><h2>Wstaw tabelę</h2><label>Wiersze<input type="number" min="1" max="50" value="3" data-table-rows></label><label>Kolumny<input type="number" min="1" max="30" value="3" data-table-cols></label><label><input type="checkbox" checked data-table-header> Wiersz nagłówkowy</label><p role="alert" data-table-error></p><button class="button" type="button" data-table-insert>Wstaw tabelę</button><button class="button" type="button" data-dialog-close>Anuluj</button></dialog>
     <dialog data-block-dialog class="editor-dialog"><h2>Blok dokumentu</h2><label>Rodzaj<select data-block-kind><option value="disclosure">Zwijana sekcja</option><option value="columns2">Dwie kolumny</option><option value="columns3">Trzy kolumny</option></select></label><label>Tytuł sekcji<input maxlength="255" value="Szczegóły" data-block-title></label><button type="button" class="button" data-block-insert>Wstaw lub zmień blok</button><button type="button" class="button" data-dialog-close>Anuluj</button></dialog>
     <dialog data-diagram-dialog class="editor-dialog"><h2>Diagram Mermaid</h2><label>Źródło<textarea rows="8" maxlength="20000" spellcheck="false" data-diagram-source></textarea></label><button type="button" class="button" data-diagram-render>Podgląd</button><p role="status" data-diagram-status></p><div data-diagram-preview></div><button type="button" class="button" data-diagram-insert>Zapisz źródło w dokumencie</button><button type="button" class="button" data-dialog-close>Zamknij</button></dialog>
     <dialog data-find-dialog class="editor-dialog"><h2>Znajdź i zamień</h2><label>Szukaj<input data-find-text></label><label>Zamień na<input data-replace-text></label><label><input type="checkbox" data-find-case> Rozróżniaj wielkość liter</label><p role="status" data-find-status></p><button type="button" class="button" data-find-next>Następne</button><button type="button" class="button" data-replace-one>Zamień</button><button type="button" class="button" data-replace-all>Zamień wszystkie</button><button type="button" class="button" data-dialog-close>Zamknij</button></dialog>
-    <div data-command-menu class="command-menu" role="listbox" aria-label="Polecenia edytora" hidden></div>
+    <div data-command-menu class="command-menu" hidden><label class="command-search">Wstaw element<input type="search" data-command-search placeholder="Szukaj elementu…" aria-controls="editor-command-options" aria-autocomplete="list"></label><div id="editor-command-options" data-command-options role="listbox" aria-label="Polecenia edytora"></div><small>↑ ↓ wybór · Enter wstaw · Esc zamknij</small></div>
     <div data-text-context class="text-context" hidden role="toolbar" aria-label="Zaznaczony tekst"><button type="button" data-context-command="bold">Pogrubienie</button><button type="button" data-context-command="italic">Kursywa</button><button type="button" data-context-command="link">Link</button><button type="button" data-context-command="clear">Usuń format</button></div>
-    <div class="editor-heading">
-        <div>
-            <div class="breadcrumbs">
-                <a href="/spaces/<?= rawurlencode($space['space_key']) ?>"><?= $e($space['name']) ?></a>
-                <span>/</span>
-                <span data-editor-heading><?= $e($t($isEdit ? 'Edit page' : 'Create page')) ?></span>
-            </div>
-            <h1 data-editor-heading><?= $e($t($isEdit ? 'Edit page' : 'Create page')) ?></h1>
-        </div>
-        <?php if ($isEdit): ?>
-            <a class="button button--ghost" data-editor-cancel href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>"><?= $e($t('Cancel')) ?></a>
-        <?php else: ?>
-            <a class="button button--ghost" data-editor-cancel href="/spaces/<?= rawurlencode($space['space_key']) ?>"><?= $e($t('Cancel')) ?></a>
-        <?php endif; ?>
-    </div>
 
     <?php if (!empty($formError)): ?>
         <div class="alert alert--error" role="alert"><?= $e($t($formError)) ?></div>
@@ -171,16 +164,42 @@ $preserveParent = $isEdit && (int) $parentValue > 0
         <label data-macro-parameter-label><?= $e($t('Parameter')) ?><textarea maxlength="1000" data-macro-parameter></textarea></label><p data-macro-example></p><div role="alert" data-macro-error></div>
         <button type="button" class="button" data-macro-insert><?= $e($t('Insert macro')) ?></button><button type="button" class="button button--ghost" data-dialog-close><?= $e($t('Cancel')) ?></button>
     </dialog>
-    <form method="post" action="<?= $e($formAction) ?>" class="editor-form" data-editor-form>
+    <form method="post" action="<?= $e($formAction) ?>" class="editor-form workspace-form" id="page-editor" data-editor-form>
         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
         <input type="hidden" name="base_version" value="<?= $e($field('base_version', $page['version'] ?? 0)) ?>">
         <input type="hidden" name="content_format" value="<?= $e($formatValue) ?>" data-content-format>
+        <input type="hidden" name="publication_space_id" disabled value="<?= $e($field('publication_space_id', $space['id'])) ?>">
+        <input type="hidden" name="publication_parent_id" disabled value="<?= $e($field('publication_parent_id', $parentValue)) ?>">
+        <?php require __DIR__ . '/../partials/editor-header.php'; ?>
+        <dialog data-publication-dialog class="editor-dialog publication-dialog" aria-labelledby="publication-heading">
+            <h2 id="publication-heading"><?= $isEdit ? 'Zapisz zmiany' : 'Opublikuj stronę' ?></h2>
+            <p class="field-help">Sprawdź lokalizację i dostęp. Zapis szkicu pozostaje niezależny od publikacji.</p>
+            <h3 data-publication-title><?= $e($titleValue ?: 'Tytuł strony') ?></h3>
+            <label>Przestrzeń<select data-publication-space <?= $isEdit ? 'disabled' : '' ?>><?php foreach ($workspaceSpaces ?? [] as $target): ?><option value="<?= (int) $target['id'] ?>" <?= (int) $target['id'] === (int) $space['id'] ? 'selected' : '' ?>><?= $e($target['name']) ?></option><?php endforeach; ?></select></label>
+            <?php if ($isEdit): ?><p class="field-help">Przenoszenie istniejącej strony między przestrzeniami jest dostępne w działaniach strony.</p><?php endif; ?>
+            <label>Strona nadrzędna<select data-publication-parent><option value="">Główny poziom przestrzeni</option></select></label>
+            <section class="publication-access"><h3>Dostęp</h3><p data-publication-access></p><p data-publication-permission></p></section>
+            <div data-publication-metadata></div><p data-publication-error role="alert"></p>
+            <div class="form-actions"><button class="button button--primary" type="submit" data-confirm-publication>Potwierdź zapis</button><button class="button" type="button" data-dialog-close>Wróć do edycji</button></div>
+        </dialog>
+        <div class="workspace-body">
+        <aside class="workspace-tree" id="workspace-tree" data-workspace-tree aria-label="Drzewo przestrzeni">
+            <a class="workspace-brand" href="/">Open<span>Wiki</span></a><div class="workspace-space-name"><?= $editorIcon('document') ?><strong><?= $e($space['name']) ?></strong></div>
+            <div class="workspace-tree-heading"><span>Strony</span><a href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create" aria-label="Utwórz stronę w tej przestrzeni">+</a></div>
+            <p class="workspace-location" data-current-location><?= $e($parentTitle ?? 'Główny poziom') ?> → <?= $isEdit ? 'Edytowana strona' : 'Nowa strona' ?></p>
+            <?php $activePageId = $page['id'] ?? $parentValue; require __DIR__ . '/../partials/page-tree.php'; ?>
+            <details class="editor-outline" open><summary>Nagłówki dokumentu</summary><nav data-editor-outline aria-label="Nagłówki dokumentu"></nav></details>
+        </aside>
 
-        <div class="editor-main card">
+        <div class="editor-main workspace-canvas">
+            <div class="document-title-area">
+                <div class="document-decoration"><details class="emoji-menu"><summary aria-label="Dodaj emoji do tytułu">☺ <span>Ikona</span></summary><div><?php foreach (['📄', '📘', '🛠️', '💡', '✅', '🚀', '📋', '🔍'] as $emoji): ?><button type="button" data-title-emoji="<?= $e($emoji) ?>" aria-label="Dodaj <?= $e($emoji) ?> do tytułu"><?= $emoji ?></button><?php endforeach; ?></div></details><?php if ($canUploadImage): ?><button type="button" data-add-cover><?= $editorIcon('image') ?> Obraz nagłówkowy</button><?php endif; ?></div>
+                <label class="sr-only" for="page-title"><?= $e($t('Title')) ?></label>
+                <textarea id="page-title" class="title-input" name="title" required maxlength="255" rows="1" placeholder="Tytuł strony" data-document-title><?= $e($titleValue) ?></textarea>
+                <div class="document-byline"><span class="author-avatar" aria-hidden="true"><?= $e(mb_strtoupper(mb_substr($currentUser['username'], 0, 1))) ?></span><span><?= $e($currentUser['username']) ?></span><span class="document-draft-label">Szkic prywatny</span></div>
+            </div>
             <details class="editor-metadata" open data-editor-metadata><summary>Metadane strony</summary>
             <div class="editor-fields">
-                <label class="sr-only" for="page-title"><?= $e($t('Title')) ?></label>
-                <input id="page-title" class="title-input" name="title" required maxlength="255" placeholder="<?= $e($t('Page title')) ?>" value="<?= $e($titleValue) ?>">
 
                 <div class="editor-meta-grid">
                     <label><?= $e($t('Slug')) ?>
@@ -215,20 +234,6 @@ $preserveParent = $isEdit && (int) $parentValue > 0
                     <span class="field-help"><?= $e($t('Separate tags with commas. Maximum 30 tags.')) ?></span>
                 </label>
 
-                <?php if (!$isEdit && $templates !== []): ?>
-                    <label><?= $e($t('Start from template')) ?>
-                        <select data-template-selector>
-                            <option value=""><?= $e($t('Blank content')) ?></option>
-                            <?php foreach ($templates as $template): ?>
-                                <option
-                                    value="<?= (int) $template['id'] ?>"
-                                    data-html="<?= $e($template['content_html']) ?>"
-                                    data-markdown="<?= $e($template['content_markdown'] ?? '') ?>"
-                                ><?= $e($template['name']) ?> — <?= $e($template['description'] ?? '') ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </label>
-                <?php endif; ?>
             </div>
 
                         <label>Właściciel merytoryczny (ID konta)<input type="number" name="content_owner_id" min="1" required value="<?= $e($field('content_owner_id', $page['content_owner_id'] ?? $currentUser['id'])) ?>"></label>
@@ -237,35 +242,38 @@ $preserveParent = $isEdit && (int) $parentValue > 0
                 <textarea name="change_summary" rows="3" maxlength="500" placeholder="<?= $e($t('Describe this change')) ?>"><?= $e($changeSummary) ?></textarea>
             </label>
 </details>
+            <div class="editor-mode-row">
+            <?php if ($canUploadImage): ?><button type="button" class="icon-button workspace-file-button" data-attachment-picker title="Dodaj plik lub obraz"><?= $editorIcon('document') ?><span>Dodaj plik</span></button><?php endif; ?>
             <div class="editor-tabs" role="tablist" aria-label="<?= $e($t('Editor mode')) ?>">
                 <button type="button" class="editor-tab" role="tab" aria-controls="visual-pane" data-editor-mode="visual"><?= $e($t('Visual')) ?></button>
                 <button type="button" class="editor-tab" role="tab" aria-controls="markdown-pane" data-editor-mode="markdown">Markdown</button>
             </div>
+            </div>
 
             <?php if ($canUploadImage): ?>
-            <div class="upload-area"><button type="button" class="button" data-attachment-picker>Dodaj plik</button><input type="file" multiple hidden data-attachment-file><span>Obrazy i pliki można też przeciągnąć do edytora.</span><ul data-upload-list aria-live="polite"></ul></div>
+            <div class="upload-area"><input type="file" multiple hidden data-attachment-file><ul data-upload-list aria-live="polite"></ul></div>
             <?php endif; ?>
             <div class="editor-pane" id="visual-pane" data-pane="visual">
-                <div class="editor-workspace-tools" role="toolbar" aria-label="Praca z dokumentem"><button type="button" class="button" data-focus-mode aria-pressed="false">Tryb skupienia</button><button type="button" class="button" data-open-find>Znajdź i zamień</button><span data-word-count></span><span data-focus-state></span></div>
                 <div class="editor-toolbar" role="toolbar" aria-label="<?= $e($t('Formatting')) ?>">
                     <label class="sr-only" for="heading-level"><?= $e($t('Heading')) ?></label>
                     <select id="heading-level" data-heading><option value="0"><?= $e($t('Paragraph')) ?></option><?php for ($level = 1; $level <= 6; $level++): ?><option value="<?= $level ?>">H<?= $level ?></option><?php endfor; ?></select>
-                    <?php foreach (['bold' => 'Bold', 'italic' => 'Italic', 'underline' => 'Underline', 'strike' => 'Strike', 'blockquote' => 'Quote', 'bulletList' => 'Bullet list', 'orderedList' => 'Numbered list', 'taskList' => 'Checklist', 'sink' => 'Indent list', 'lift' => 'Outdent list', 'undo' => 'Undo', 'redo' => 'Redo'] as $command => $label): ?>
-                        <button type="button" data-rich-command="<?= $command ?>" title="<?= $e($t($label)) ?>"><?= $e($t($label)) ?></button>
+                    <?php foreach (['bold' => 'Bold', 'italic' => 'Italic', 'underline' => 'Underline', 'strike' => 'Strike', 'blockquote' => 'Quote', 'bulletList' => 'Bullet list', 'orderedList' => 'Numbered list', 'taskList' => 'Checklist', 'undo' => 'Undo', 'redo' => 'Redo'] as $command => $label): ?>
+                        <button type="button" data-rich-command="<?= $command ?>" aria-label="<?= $e($t($label)) ?>" title="<?= $e($t($label)) ?>"><span aria-hidden="true"><?php if (in_array($command, ['undo', 'redo'], true)) echo $editorIcon($command); elseif ($command === 'bulletList') echo $editorIcon('list'); elseif ($command === 'taskList') echo $editorIcon('check'); else echo ['bold'=>'<b>B</b>', 'italic'=>'<i>I</i>', 'underline'=>'<u>U</u>', 'strike'=>'<s>S</s>', 'blockquote'=>'❝', 'orderedList'=>'1.'][$command]; ?></span></button>
                     <?php endforeach; ?>
-                    <button type="button" data-insert-table><?= $e($t('Table')) ?></button>
-                    <button type="button" data-open-link><?= $e($t('Link')) ?></button>
-                    <button type="button" data-open-code><?= $e($t('Code block')) ?></button>
-                    <button type="button" data-open-callout><?= $e($t('Callout')) ?></button>
-                    <button type="button" data-open-macro><?= $e($t('Macro')) ?></button>
-                    <details class="format-menu"><summary>Więcej formatowania i bloków</summary><div class="format-menu-content">
+                    <button type="button" data-insert-table aria-label="<?= $e($t('Table')) ?>" title="<?= $e($t('Table')) ?>"><?= $editorIcon('table') ?></button>
+                    <button type="button" data-open-link aria-label="<?= $e($t('Link')) ?>" title="<?= $e($t('Link')) ?>"><?= $editorIcon('link') ?></button>
+                    <button type="button" data-open-code aria-label="<?= $e($t('Code block')) ?>" title="<?= $e($t('Code block')) ?>"><?= $editorIcon('code') ?></button>
+                    <button type="button" data-open-callout aria-label="<?= $e($t('Callout')) ?>" title="<?= $e($t('Callout')) ?>"><?= $editorIcon('callout') ?></button>
+                    <button type="button" data-open-macro aria-label="<?= $e($t('Macro')) ?>" title="<?= $e($t('Macro')) ?>"><?= $editorIcon('macro') ?></button>
+                    <details class="format-menu"><summary aria-label="Więcej formatowania i bloków">•••</summary><div class="format-menu-content">
+                    <button type="button" data-rich-command="sink"><?= $e($t('Indent list')) ?></button><button type="button" data-rich-command="lift"><?= $e($t('Outdent list')) ?></button>
                     <button type="button" data-advanced-command="superscript">Indeks górny</button><button type="button" data-advanced-command="subscript">Indeks dolny</button><button type="button" data-advanced-command="inlineCode">Kod w linii</button><button type="button" data-advanced-command="separator">Separator</button><button type="button" data-advanced-command="clearFormat">Usuń formatowanie</button>
                     <label>Kolor<select data-text-color><option value="">Domyślny</option><?php foreach (['red'=>'Czerwony','blue'=>'Niebieski','green'=>'Zielony','orange'=>'Pomarańczowy','purple'=>'Fioletowy','gray'=>'Szary'] as $value=>$label): ?><option value="<?= $value ?>"><?= $label ?></option><?php endforeach; ?></select></label>
                     <label>Wyróżnienie<select data-highlight><option value="">Brak</option><option value="yellow">Żółte</option><option value="green">Zielone</option><option value="blue">Niebieskie</option><option value="pink">Różowe</option></select></label>
                     <label>Wyrównanie<select data-text-align><option value="left">Do lewej</option><option value="center">Wyśrodkowane</option><option value="right">Do prawej</option><option value="justify">Wyjustowane</option></select></label>
                     <button type="button" data-open-block>Sekcja lub kolumny</button><button type="button" data-open-diagram>Diagram</button>
                     </div></details>
-                    <?php if ($canUploadImage): ?><button type="button" data-image-picker><?= $e($t('Image')) ?></button><input type="file" accept="image/png,image/jpeg,image/gif,image/webp" data-image-file hidden><?php endif; ?>
+                    <?php if ($canUploadImage): ?><button type="button" data-image-picker aria-label="<?= $e($t('Image')) ?>" title="<?= $e($t('Image')) ?>"><?= $editorIcon('image') ?></button><input type="file" accept="image/png,image/jpeg,image/gif,image/webp" data-image-file hidden><?php endif; ?>
                 </div>
                 <div class="editor-table-tools" data-table-tools hidden role="toolbar" aria-label="<?= $e($t('Table editing')) ?>">
                     <?php foreach (['addRowBefore' => 'Row before', 'addRowAfter' => 'Row after', 'deleteRow' => 'Delete row', 'addColumnBefore' => 'Column before', 'addColumnAfter' => 'Column after', 'deleteColumn' => 'Delete column', 'toggleHeaderRow' => 'Header row', 'mergeCells' => 'Merge cells', 'splitCell' => 'Split cell', 'deleteTable' => 'Delete table'] as $command => $label): ?>
@@ -276,7 +284,7 @@ $preserveParent = $isEdit && (int) $parentValue > 0
                     <label>Tło komórki<select data-cell-color><option value="">Brak</option><option value="yellow">Żółte</option><option value="green">Zielone</option><option value="blue">Niebieskie</option><option value="pink">Różowe</option><option value="gray">Szare</option></select></label><label>Szerokość kolumny<input type="number" min="40" max="1600" step="10" value="160" data-column-width></label><button type="button" data-column-width-apply>Zmień szerokość</button>
                 </div>
                 <div data-code-tools hidden role="toolbar" class="editor-table-tools" aria-label="Blok kodu"><label><input type="checkbox" data-code-numbers> Numery linii</label><label><input type="checkbox" data-code-wrap> Zawijaj kod</label><button type="button" class="button" data-code-copy>Kopiuj kod</button></div>
-                <div data-block-tools class="editor-table-tools" role="toolbar" aria-label="Operacje bloków"><button type="button" draggable="true" data-block-drag aria-label="Przeciągnij bieżący blok">↕ Blok</button><button type="button" data-block-action="copy">Kopiuj blok</button><button type="button" data-block-action="duplicate">Duplikuj blok</button><button type="button" data-block-action="up">W górę</button><button type="button" data-block-action="down">W dół</button><button type="button" data-block-action="delete">Usuń blok</button><span data-block-feedback role="status"></span></div>
+                <div data-block-tools class="block-handles" role="toolbar" aria-label="Operacje bloków"><button type="button" data-block-add aria-label="Dodaj blok poniżej">+</button><button type="button" draggable="true" data-block-drag aria-label="Przeciągnij bieżący blok">⠿</button><details data-block-menu><summary aria-label="Działania bloku">•••</summary><div class="block-action-menu"><button type="button" data-block-action="copy">Kopiuj blok</button><button type="button" data-block-action="duplicate">Duplikuj blok</button><button type="button" data-block-action="up">W górę</button><button type="button" data-block-action="down">W dół</button><button type="button" data-block-action="delete">Usuń blok</button><label>Format<select data-block-transform><option value="">Format</option><option value="paragraph">Akapit</option><option value="h1">H1</option><option value="h2">H2</option><option value="h3">H3</option><option value="h4">H4</option><option value="h5">H5</option><option value="h6">H6</option><option value="codeBlock">Kod</option><option value="blockquote">Cytat</option></select></label></div></details></div><span class="sr-only" data-block-feedback role="status"></span>
                 <div data-rich-host data-label="<?= $e($t('Page content (Visual)')) ?>"><?= $visualValue ?></div>
                 <div data-retained-html hidden class="panel">
                     <p><?= $e($t('Original HTML is retained for metadata-only editing.')) ?></p>
@@ -294,14 +302,7 @@ $preserveParent = $isEdit && (int) $parentValue > 0
             </div>
         </div>
 
-        <aside class="editor-side card">
-            <details class="editor-outline" open><summary>Nagłówki dokumentu</summary><nav data-editor-outline aria-label="Nagłówki dokumentu"></nav></details>
-            <h2><?= $e($t('Save')) ?></h2>
-            <?php if ($isEdit): ?>
-                <p class="field-help" data-version-hint><?= $e($t('Based on version')) ?> <?= (int) $field('base_version', $page['version']) ?><?= $e($t('. Concurrent changes are protected by optimistic locking.')) ?></p>
-            <?php else: ?>
-                <p class="field-help" data-version-hint><?= $e($t('The initial save creates revision 1.')) ?></p>
-            <?php endif; ?>
+        <aside class="workspace-inspector" aria-label="Właściwości obrazu">
             <?php if ($canUploadImage): ?>
                 <div class="image-inspector" data-image-inspector hidden>
                     <h3><?= $e($t('Image')) ?></h3>
@@ -324,17 +325,16 @@ $preserveParent = $isEdit && (int) $parentValue > 0
                 </div>
             <?php endif; ?>
 
-            <p class="field-help">Ctrl/Cmd+S: zapisz szkic · Ctrl/Cmd+Z: cofnij · Ctrl/Cmd+Shift+Z: ponów · Tab/Shift+Tab: poziom listy · Ctrl/Cmd+K: link · Ctrl/Cmd+Enter: wyjdź z kodu</p>
-            <button class="button button--secondary button--block" type="button" data-save-draft>Zapisz szkic teraz (Ctrl/Cmd+S)</button>
-            <button class="button button--primary button--block" type="submit" data-save-button><?= $isEdit ? 'Zastosuj zmiany do strony' : 'Utwórz stronę ze szkicu' ?></button>
-            <button class="button button--secondary" type="button" data-undo-conversion hidden><?= $e($t('Return to content before conversion')) ?></button>
-            <div class="editor-save-state" data-save-state role="status" aria-live="polite"><?= $e($t('Recovery copy enabled.')) ?></div>
-            <div class="field-help" data-local-state role="status">Autozapis włączony: po 2 s bezczynności, najpóźniej po 10 s pisania.</div>
-            <button type="button" class="button button--secondary" data-resume-save hidden>Sprawdź konto i wznów zapis</button>
-            <a href="/login" target="_blank" rel="noopener" class="field-help" data-editor-signin>Zaloguj się ponownie w osobnej karcie</a>
-            <div data-draft-conflict hidden role="alert"><p>Serwerowy szkic tego kontekstu zmienił się. Oryginalna wersja bazowa pozostaje zachowana.</p><pre data-draft-conflict-current></pre><button type="button" class="button" data-draft-fork>Zachowaj pracę jako osobny szkic</button></div>
         </aside>
+        <aside class="workspace-templates" data-workspace-templates aria-labelledby="workspace-templates-heading" <?= $isEdit ? 'hidden' : '' ?>>
+            <div class="template-panel-heading"><h2 id="workspace-templates-heading">Szablony</h2><button type="button" class="icon-button" data-close-templates aria-label="Zamknij panel szablonów"><?= $editorIcon('close') ?></button></div>
+            <p class="field-help">Zacznij od struktury i dopasuj ją do swoich potrzeb.</p><label class="sr-only" for="template-search">Szukaj szablonu</label><input id="template-search" type="search" data-template-search placeholder="Szukaj szablonu…">
+            <label>Kategoria<select data-template-category><option value="">Wszystkie</option><option>Techniczne</option><option>Wiedza</option><option>Zespół</option><option>Operacje</option><option>Własne</option></select></label>
+            <label class="template-pin"><input type="checkbox" data-pin-templates> Pozostaw panel podczas pisania</label><div data-template-list></div><p data-template-status role="status"></p>
+        </aside>
+        </div>
     </form>
 </section>
 
+<noscript><p class="alert editor-no-script">JavaScript jest wyłączony. Zapis formularza działa bez narzędzi dokumentu i autozapisu.</p></noscript>
 <script src="/assets/wiki-editor.js" defer></script>

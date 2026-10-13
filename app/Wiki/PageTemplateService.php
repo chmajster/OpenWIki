@@ -36,6 +36,32 @@ final class PageTemplateService
         ));
     }
 
+    /** Existing stored templates retain their source; missing starter structures need no data rewrite. */
+    public function catalog(): array
+    {
+        $starters = [
+            'Technical Documentation' => ['technical', 'Dokumentacja techniczna', 'Techniczne', 'Architektura, konfiguracja i utrzymanie systemu.', '<h2>Przegląd</h2><p></p><h2>Architektura</h2><p></p><h2>Konfiguracja</h2><pre><code data-language="yaml"># Konfiguracja</code></pre><h2>Utrzymanie</h2><p></p>'],
+            'Step-by-step Guide' => ['guide', 'Instrukcja krok po kroku', 'Wiedza', 'Cel, wymagania i uporządkowane kroki wykonania.', '<h2>Cel</h2><p></p><h2>Wymagania</h2><ul><li><p></p></li></ul><h2>Kroki</h2><ol><li><p>Pierwszy krok</p></li><li><p>Drugi krok</p></li></ol><h2>Weryfikacja</h2><p></p>'],
+            'Meeting Notes' => ['meeting', 'Notatka ze spotkania', 'Zespół', 'Agenda, decyzje i zadania do wykonania.', '<h2>Uczestnicy i agenda</h2><p></p><h2>Notatki</h2><p></p><h2>Decyzje</h2><p></p><h2>Zadania</h2><ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p>Ustal następny krok</p></li></ul>'],
+            'API Documentation' => ['api', 'Dokumentacja API', 'Techniczne', 'Endpointy, parametry, przykłady i odpowiedzi.', '<h2>Opis API</h2><p></p><h2>Uwierzytelnianie</h2><p></p><h2>Endpointy</h2><table><tbody><tr><th>Metoda</th><th>Ścieżka</th><th>Opis</th></tr><tr><td>GET</td><td></td><td></td></tr></tbody></table><h2>Przykład</h2><pre><code data-language="json">{}</code></pre><h2>Błędy</h2><p></p>'],
+            'Standard Operating Procedure' => ['operations', 'Procedura operacyjna', 'Operacje', 'Odpowiedzialność, kroki, kontrola i cofnięcie operacji.', '<h2>Cel i odpowiedzialność</h2><p></p><h2>Warunki wejściowe</h2><p></p><h2>Wykonanie</h2><ol><li><p></p></li></ol><h2>Kontrola wyniku</h2><p></p><h2>Wycofanie</h2><p></p>'],
+            'Knowledge Base' => ['knowledge', 'Baza wiedzy', 'Wiedza', 'Pytanie, rozwiązanie i powiązane materiały.', '<h2>Pytanie lub problem</h2><p></p><h2>Rozwiązanie</h2><p></p><h2>Powiązane materiały</h2><ul><li><p></p></li></ul>'],
+            'Project Overview' => ['project', 'Opis projektu', 'Zespół', 'Cel, zakres, kamienie milowe i decyzje.', '<h2>Cel projektu</h2><p></p><h2>Zakres</h2><p></p><h2>Kamienie milowe</h2><table><tbody><tr><th>Etap</th><th>Termin</th><th>Właściciel</th></tr><tr><td></td><td></td><td></td></tr></tbody></table><h2>Ryzyka i decyzje</h2><p></p>'],
+            'Incident Report' => ['incident', 'Raport incydentu', 'Operacje', 'Wpływ, oś czasu, przyczyna i działania naprawcze.', '<h2>Podsumowanie</h2><p></p><h2>Wpływ</h2><p></p><h2>Oś czasu</h2><table><tbody><tr><th>Czas</th><th>Zdarzenie</th></tr><tr><td></td><td></td></tr></tbody></table><h2>Przyczyna</h2><p></p><h2>Działania naprawcze</h2><ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p></p></li></ul>'],
+        ];
+        $stored = $this->all(); $systems = [];
+        foreach ($stored as $row) if ($row['is_system']) $systems[$row['name']] = $row;
+        $catalog = [];
+        foreach ($starters as $name => [$key, $label, $category, $description, $html]) {
+            $source = $systems[$name] ?? ['id' => 'builtin:' . $key, 'content_format' => 'visual', 'content_html' => $html, 'content_markdown' => null, 'is_system' => 1];
+            $catalog[] = $source + ['display_name' => $label, 'category' => $category, 'summary' => $description, 'icon' => $key];
+        }
+        foreach ($stored as $row) if (!$row['is_system'] || !isset($starters[$row['name']])) {
+            $catalog[] = $row + ['display_name' => $row['name'], 'category' => $row['is_system'] ? 'Wiedza' : 'Własne', 'summary' => $row['description'] ?? '', 'icon' => 'document'];
+        }
+        return array_map(fn (array $row): array => (new ContentService())->safeProjection($row), $catalog);
+    }
+
     public function save(?int $id, array $input, int $actorId): int
     {
         $name = trim((string) ($input['name'] ?? ''));

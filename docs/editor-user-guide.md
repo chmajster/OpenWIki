@@ -4,7 +4,13 @@
 
 Autozapis jest domyślnie włączony. Zapisuje treść i metadane po 2 sekundach bezczynności, najpóźniej po około 10 sekundach ciągłego pisania. Nie wymaga gotowego tytułu ani poprawnego docelowego slugu. Nowa strona ma stabilny identyfikator w adresie; zachowaj ten adres, aby wrócić do tego samego dokumentu.
 
-**Ctrl/Cmd+S** oraz „Zapisz szkic teraz” natychmiast utrwalają prywatną pracę. Czytelnicy nadal widzą ostatnio zastosowaną wersję strony. „Utwórz stronę ze szkicu” lub „Zastosuj zmiany do strony” zapisuje aktualny dokument jako stronę i tworzy rewizję. Wybrany stan „Opublikowana” wymaga prawa publikacji. Metadane — tytuł, adres, rodzic, stan, tagi i opis zmiany — znajdują się w zwijanym panelu.
+**Ctrl/Cmd+S** oraz „Zapisz szkic teraz” w rozwijanym stanie zapisu natychmiast utrwalają prywatną pracę. Czytelnicy nadal widzą ostatnio zastosowaną wersję strony. „Opublikuj” dla nowej strony lub przycisk zapisu istniejącej strony otwiera okno potwierdzenia. W nim wybierasz przestrzeń, rodzica, stan, adres, tagi i opis zmiany oraz sprawdzasz informację o dostępie. Dopiero potwierdzenie tworzy rewizję. Stan „Opublikowana” wymaga prawa publikacji i zgody ACL. W przestrzeni z recenzją zapis pozostaje roboczy i wymaga dalszego obiegu recenzji.
+
+Tytuł znajduje się nad dokumentem. Enter przenosi do treści. Lewy panel pokazuje dostępne strony bieżącej przestrzeni, doładowując gałęzie; przycisk „+” obok strony otwiera tworzenie jej podstrony. Ukryty rodzic nie jest ujawniany. Zamknięcie edytora utrwala kopię odzyskiwania, próbuje zapisać szkic na serwerze i pozostawia adres pozwalający wrócić do tej samej pracy.
+
+Panel po prawej pozwala wyszukać szablon, ograniczyć kategorię, zobaczyć podgląd i zastosować treść. Obejmuje pusty dokument, osiem szablonów startowych oraz szablony istniejącej instancji. Zastąpienie niepustej treści wymaga potwierdzenia; oryginał pozostaje dostępny przez „Wróć do treści sprzed konwersji” w menu dodatkowych działań. Panel znika po rozpoczęciu pisania, chyba że go przypniesz lub ponownie otworzysz ręcznie.
+
+Menu dodatkowych działań zawiera szablony, ustawienia zapisu, wyszukiwanie, tryb skupienia, szerokość dokumentu i motyw. Motyw jasny, ciemny lub systemowy oraz szerokość standardowa, szeroka lub pełna są zapamiętywane osobno dla konta i instancji. Podgląd strony korzysta z tego samego serwerowego przetwarzania Markdown i makr co odczyt zapisanej strony. Emoji jest częścią tytułu, a obraz nagłówkowy pozostaje chronionym obrazem dokumentu z dostępnymi alt, podpisem i wymiarami.
 
 W panelu zapisu rozróżniane są niezapisane zmiany, zapisywanie, potwierdzenie serwera z czasem, konflikt, brak połączenia i błąd. Osobny komunikat informuje, czy najnowsza kopia została rzeczywiście zapisana lokalnie. Stan wcześniejszego żądania nie potwierdza późniejszych zmian. Zapis zachowuje kursor, zaznaczenie i przewinięcie.
 
@@ -28,7 +34,7 @@ Kopie i nieużywane pliki szkicu mają retencję 30 dni. Serwer zachowuje 20 naj
 
 Pasek obsługuje akapity, H1–H6, podstawowe formatowanie, indeksy, kontrolowaną paletę kolorów, wyróżnienie i wyrównanie. Listy mogą być zagnieżdżone; checklisty mają edytowalny stan. Wybierz cytat, separator, blok informacji/uwagi/ostrzeżenia/sukcesu, zwijaną sekcję lub dwie/trzy kolumny. Na telefonie kolumny układają się kolejno.
 
-Wpisz `/`, aby szukać polecenia; strzałki i Enter wybierają wynik, Escape zamyka menu. `@` proponuje dostępnych użytkowników. Bez uprawnienia do katalogu użytkowników podpowiedź obejmuje tylko własne konto. Wybierak odnośników pokazuje wyłącznie dostępne strony. Makra mają formularz parametrów i korzystają z dotychczasowych kontroli dostępu przy odczycie.
+Wpisz `/`, aby szukać polecenia; `/tab` odnajduje tabelę, a `/kod` blok kodu. Strzałki i Enter wybierają wynik, Escape zamyka menu. Przycisk „+” przy bloku otwiera tę samą wyszukiwarkę, wstawiając nowy blok za wskazanym elementem. `@` proponuje dostępnych użytkowników. Bez uprawnienia do katalogu użytkowników podpowiedź obejmuje tylko własne konto. Wybierak odnośników pokazuje wyłącznie dostępne strony. Makra mają formularz parametrów i korzystają z dotychczasowych kontroli dostępu przy odczycie.
 
 Kontekstowe narzędzia zależą od zaznaczenia tekstu, tabeli, obrazu lub kodu. Uchwytem „Blok” można przeciągać bloki; przyciski i Alt+Shift+strzałka zapewniają alternatywę. Kopiowanie bloku wymaga dostępu przeglądarki do schowka. Duplikowanie, przenoszenie, usuwanie i zamiana tekstu podlegają undo/redo.
 
@@ -70,11 +76,12 @@ Konwersja stratna pokazuje porównanie i wymaga decyzji. Oryginał pozostaje w k
 | --- | --- |
 | Ctrl/Cmd+S | Zapis najnowszego szkicu |
 | Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z | Cofnięcie / ponowienie |
-| Ctrl/Cmd+K | Odnośnik |
+| Ctrl/Cmd+K | Odnośnik w Visual; wyszukiwanie dokumentacji poza Visual |
+| Enter w tytule | Przejdź do treści |
 | Ctrl/Cmd+F | Znajdź i zamień w Visual |
 | Alt+Shift+↑/↓ | Przenieś blok |
 | Tab/Shift+Tab | Poziom listy lub komórka tabeli |
 | Ctrl/Cmd+Enter | Wyjdź z bloku kodu |
 | Escape | Zamknij okno lub menu |
 
-Na telefonie drzewo jest zwijanym panelem. Pasek narzędzi zawija się, metadane można zwinąć, a tryb skupienia ogranicza otoczenie. Pola i przyciski mają widoczny fokus.
+Na telefonie drzewo i szablony otwierają się jako panele. Pasek narzędzi zawija się, a okno publikacji przewija się w obrębie ekranu. Tryb skupienia ukrywa panele. Pola i przyciski mają widoczny fokus. Bez JavaScript pozostaje zwykły formularz z walidacją PHP; narzędzia rich-text i autozapis wymagają zbudowanych zasobów.

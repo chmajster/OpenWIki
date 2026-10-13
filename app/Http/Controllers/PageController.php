@@ -35,7 +35,15 @@ final class PageController extends Controller
             return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
-        $templates = (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->all();
+        $templates = (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->catalog();
+
+        $parent = null;
+        if ($request->query('parent') !== null) {
+            $parentId = filter_var($request->query('parent'), FILTER_VALIDATE_INT);
+            $parent = $parentId === false ? null : (new PageRepository($this->app->database()))->findById($parentId);
+            if ($parent === null || (int) $parent['space_id'] !== (int) $space['id'] || !$this->pageWritePolicy($space)('page.view', $parent)
+                || !$this->pageWritePolicy($space)('page.create', $parent)) return $this->render('errors/404', ['title' => 'Page not found'], 404);
+        }
 
         return $this->render('pages/editor', [
             'title' => 'Create page',
@@ -45,6 +53,8 @@ final class PageController extends Controller
             'pages' => $this->visibleTree($space),
             'templates' => $templates,
             'tags' => [],
+            'initialParentId' => $parent['id'] ?? null,
+            'workspaceSpaces' => (new \OpenWiki\Wiki\PageWorkspaceService($this->app))->spaces(),
             'canPublish' => !(bool) $space['review_workflow'] && $this->pageWritePolicy($space)('page.publish', $page ?? null),
             'canArchive' => $this->pageWritePolicy($space)('page.archive', $page ?? null),
             'canUploadImage' => $this->app->auth()->can('attachment.upload'),
@@ -77,13 +87,23 @@ final class PageController extends Controller
             if ($request->input('editor_user_id') !== null && (int) $request->input('editor_user_id') !== (int) $user['id']) {
                 throw new \DomainException('The signed-in account changed. Reopen the editor for this account.');
             }
+            $input = (array) $request->input();
+            $destination = $space;
+            if (($input['publication_space_id'] ?? '') !== '') {
+                $targetId = filter_var($input['publication_space_id'], FILTER_VALIDATE_INT);
+                if ($targetId === false || $targetId < 1) throw new \InvalidArgumentException('Nieprawidłowa przestrzeń docelowa.');
+                $destination = $this->app->database()->fetchOne('SELECT * FROM spaces WHERE id = ? AND deleted_at IS NULL', [$targetId]);
+                if ($destination === null || !$access->canEdit($destination)) throw new \DomainException('Nie masz prawa tworzyć stron w wybranej przestrzeni.');
+                $input['parent_id'] = $input['publication_parent_id'] ?? '';
+            }
+            $input['draft_space_id'] = (int) $space['id'];
             $saved = (new \OpenWiki\Wiki\PageWriteService($this->app->database(), $this->app->basePath()))->save(
-                $space, null, (array) $request->input(), (int) $user['id'], $request,
-                $this->pageWritePolicy($space), $this->app->auth()->can('attachment.upload')
+                $destination, null, $input, (int) $user['id'], $request,
+                $this->pageWritePolicy($destination), $this->app->auth()->can('attachment.upload')
             );
-            $url = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($saved['slug']) . ((bool) $space['review_workflow'] || ($saved['published_revision'] !== null && $saved['workflow_state'] !== 'published') ? '/review' : '');
+            $url = '/spaces/' . rawurlencode($destination['space_key']) . '/pages/' . rawurlencode($saved['slug']) . ((bool) $destination['review_workflow'] || ($saved['published_revision'] !== null && $saved['workflow_state'] !== 'published') ? '/review' : '');
             if ($request->expectsJson()) {
-                return Response::json(['data' => ['page' => $saved, 'url' => $url, 'user_id' => (int) $user['id']]]);
+                return Response::json(['data' => ['page' => $saved + ['space_key' => $destination['space_key']], 'url' => $url, 'user_id' => (int) $user['id']]]);
             }
             Session::flash('success', 'Page saved.');
             return Response::redirect($url);
@@ -221,7 +241,8 @@ final class PageController extends Controller
             'page' => $page,
             'serverDraft' => null,
             'pages' => $this->visibleTree($space),
-            'templates' => [],
+            'templates' => (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->catalog(),
+            'workspaceSpaces' => (new \OpenWiki\Wiki\PageWorkspaceService($this->app))->spaces($page),
             'tags' => isset($page['tags']) ? array_map(static fn (string $name): array => ['name' => $name], $page['tags']) : (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
             'canPublish' => !(bool) $space['review_workflow'] && $this->pageWritePolicy($space)('page.publish', $page ?? null),
             'canArchive' => $this->pageWritePolicy($space)('page.archive', $page ?? null),
@@ -272,7 +293,7 @@ final class PageController extends Controller
             );
             $url = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($saved['slug']) . ((bool) $space['review_workflow'] || ($saved['published_revision'] !== null && $saved['workflow_state'] !== 'published') ? '/review' : '');
             if ($request->expectsJson()) {
-                return Response::json(['data' => ['page' => $saved, 'url' => $url, 'user_id' => (int) $user['id']]]);
+                return Response::json(['data' => ['page' => $saved + ['space_key' => $space['space_key']], 'url' => $url, 'user_id' => (int) $user['id']]]);
             }
             Session::flash('success', 'Page saved.');
             return Response::redirect($url);
@@ -469,9 +490,8 @@ final class PageController extends Controller
             'page' => $page,
             'serverDraft' => null,
             'pages' => $this->visibleTree($space),
-            'templates' => $page === null
-                ? (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->all()
-                : [],
+            'templates' => (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->catalog(),
+            'workspaceSpaces' => (new \OpenWiki\Wiki\PageWorkspaceService($this->app))->spaces($page),
             'tags' => $page === null
                 ? []
                 : (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),

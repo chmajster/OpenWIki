@@ -20,21 +20,27 @@ document.querySelectorAll('[data-documentation-tree]').forEach(tree => {
                 const item = document.createElement('li'); item.role = 'treeitem'; item.tabIndex = -1; item.dataset.pageId = page.id; item.dataset.page = JSON.stringify(page);
                 const row = document.createElement('div'); row.className = 'tree-row';
                 const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'tree-toggle'; toggle.textContent = page.has_children ? '▸' : '·'; toggle.disabled = !page.has_children || Boolean(search.value.trim()); toggle.setAttribute('aria-label', `Rozwiń: ${page.title}`);
-                const link = document.createElement('a'); link.className = 'page-tree__link'; link.href = page.url; link.textContent = page.title; link.tabIndex = -1;
+                const link = document.createElement('a'); link.className = 'page-tree__link'; link.href = page.url; link.textContent = page.title; link.title = page.title; link.tabIndex = -1;
                 if (String(page.id) === tree.dataset.activePage) { link.classList.add('is-active'); link.setAttribute('aria-current', 'page'); }
                 row.append(toggle, link); item.append(row); group.append(item);
+                if (page.can_create && tree.closest('[data-wiki-editor]')) {
+                    const create = document.createElement('a'); create.className = 'tree-create'; create.href = tree.dataset.url.replace(/\/tree$/, '/pages/create') + '?parent=' + page.id;
+                    create.textContent = '+'; create.setAttribute('aria-label', 'Utwórz podstronę: ' + page.title); row.append(create);
+                }
                 if (page.has_children) {
                     const children = document.createElement('ul'); children.role = 'group'; children.className = 'page-tree'; children.hidden = true; item.append(children); item.setAttribute('aria-expanded', 'false');
                     toggle.addEventListener('click', event => { event.stopPropagation(); expand(item); });
                     if (!search.value.trim() && expanded.has(String(page.id))) await expand(item, true, current);
                 }
-                if (page.can_move || page.can_copy) {
+                if ((page.can_move || page.can_copy) && !tree.closest('[data-wiki-editor]')) {
                     const operations = document.createElement('button'); operations.type = 'button'; operations.textContent = '⋯'; operations.className = 'tree-operation'; operations.setAttribute('aria-label', `Przenieś lub kopiuj: ${page.title}`);
                     operations.addEventListener('click', () => document.dispatchEvent(new CustomEvent('wiki:structure', {detail: {page, tree}}))); row.append(operations);
                     row.draggable = true; row.addEventListener('dragstart', event => { event.dataTransfer.setData('application/openwiki-page', JSON.stringify({page, space: tree.dataset.spaceId})); });
                 }
-                row.addEventListener('dragover', event => { if (event.dataTransfer.types.includes('application/openwiki-page')) event.preventDefault(); });
-                row.addEventListener('drop', event => { event.preventDefault(); try { const source = JSON.parse(event.dataTransfer.getData('application/openwiki-page')); document.dispatchEvent(new CustomEvent('wiki:structure', {detail: {page: source.page, tree, parent: page}})); } catch {} });
+                if (!tree.closest('[data-wiki-editor]')) {
+                    row.addEventListener('dragover', event => { if (event.dataTransfer.types.includes('application/openwiki-page')) event.preventDefault(); });
+                    row.addEventListener('drop', event => { event.preventDefault(); try { const source = JSON.parse(event.dataTransfer.getData('application/openwiki-page')); document.dispatchEvent(new CustomEvent('wiki:structure', {detail: {page: source.page, tree, parent: page}})); } catch {} });
+                }
             }
             if (body.data.next_offset !== null) {
                 const more = document.createElement('li'); more.className = 'tree-more'; more.role = 'none'; const button = document.createElement('button'); button.type = 'button'; button.className = 'button button--ghost'; button.textContent = 'Wczytaj kolejne strony';

@@ -1,3 +1,4 @@
+const {publish, editMetadata} = require('./workspace-helpers.cjs');
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs');
 test.describe.configure({timeout: 240000});
@@ -54,9 +55,9 @@ test('real author, reviewer, publisher and reader forms preserve N until an appr
         await author.page.goto(url + '/edit');
         await expect(author.page.locator('[name=status]')).toHaveValue('draft');
         await author.page.locator('[name=title]').fill('Private title N+1');
-        await author.page.locator('[name=tags]').fill('private');
+        await editMetadata(author.page, '[name=tags]', 'fill', 'private');
         await author.page.locator('[data-visual-editor]').fill('Private N+1');
-        await author.page.locator('[data-save-button]').click();
+        await publish(author.page);
         await expect(author.page.locator('[data-review-content]')).toContainText('Private N+1', {timeout: 20000});
         await reader.page.goto(url);
         await expect(reader.page.locator('[data-document-content]')).toContainText('Published N');
@@ -72,7 +73,7 @@ test('real author, reviewer, publisher and reader forms preserve N until an appr
         // Keep the publisher's revision 2 form while the author creates revision 3.
         await author.page.goto(url + '/edit');
         await author.page.locator('[data-visual-editor]').fill('Private N+2');
-        await author.page.locator('[data-save-button]').click();
+        await publish(author.page);
         await expect(author.page.locator('[data-review-content]')).toContainText('Private N+2', {timeout: 20000});
         await publisher.page.getByRole('button', {name: 'Opublikuj rewizję 2'}).click();
         await expect(publisher.page.locator('[role=alert]')).toContainText('Rewizja zmieniła się');

@@ -1,3 +1,4 @@
+const {publish} = require('./workspace-helpers.cjs');
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs'), os = require('node:os');
 test('100k-character document with table, syntax and protected image remains responsive and saves exactly', async ({page, request, browser}) => {
@@ -29,7 +30,7 @@ test('100k-character document with table, syntax and protected image remains res
     expect(await page.evaluate(() => ({anchor: getSelection().anchorOffset, focus: getSelection().focusOffset, scroll: scrollY}))).toEqual(before);
     const paint = await page.evaluate(() => inputPaints); expect(paint.length).toBeGreaterThan(0);
     await page.screenshot({path: 'storage/temp/editor-100k-saved.png'});
-    const saveStart = performance.now(); await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content]')).toContainText('benchmark'); const publishMs = performance.now() - saveStart;
+    const saveStart = performance.now(); await publish(page); await expect(page.locator('[data-document-content]')).toContainText('benchmark'); const publishMs = performance.now() - saveStart;
     const savedResponse = await request.get('/api/v1/pages/' + doc.id, {headers: {Authorization: 'Bearer ' + fixture.token}}); const saved = (await savedResponse.json()).data;
     expect(saved.content_html).toContain('/attachments/'); expect(saved.content_html).toContain('data-language="php"'); expect(saved.content_html).toContain('<table>'); expect(saved.content_html.length).toBeGreaterThan(100000);
     expect(saved.document.source).toBe(saved.content_html); expect(saved.version).toBe(2); expect(errors).toEqual([]);

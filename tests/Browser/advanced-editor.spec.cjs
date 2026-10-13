@@ -1,3 +1,4 @@
+const {publish, clickTool} = require('./workspace-helpers.cjs');
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs');
 const fixture = () => JSON.parse(fs.readFileSync('storage/temp/editor-browser.json', 'utf8'));
@@ -37,7 +38,7 @@ test('controlled formatting, code whitespace and advanced blocks round trip with
     await editor(page).locator('code').click(); await expect(page.locator('[data-code-tools]')).toBeVisible();
     await expect(page.locator('input[data-code-wrap]')).toBeChecked(); await page.locator('input[data-code-wrap]').uncheck();
     await expect(editor(page).locator('pre')).toHaveAttribute('data-code-wrap', 'false');
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content]')).toContainText('Gotowe');
+    await publish(page); await expect(page.locator('[data-document-content]')).toContainText('Gotowe');
     const saved = await api(request, 'get', 'pages/' + doc.id); expect(saved.content_html).toContain('data-code-wrap="false"'); expect(saved.content_html).toContain('\t$var');
     expect(saved.document.source).toBe(saved.content_html);
     await page.goto(path(doc) + '/edit'); await expect(page.locator('[data-model-review]')).toBeHidden();
@@ -58,7 +59,7 @@ test('table operations retain merged content, widths and pasted spreadsheet cell
     await editor(page).locator('td').first().click(); await page.keyboard.press('Tab'); await page.keyboard.type(' navigation');
     await editor(page).press('ControlOrMeta+End'); await page.keyboard.press('Enter'); await paste(page, 'Nazwa\tWynik\nTest\tOK');
     await expect(editor(page).locator('table')).toHaveCount(2); await expect(editor(page).locator('table').nth(1)).toContainText('OK');
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content] table')).toHaveCount(2);
+    await publish(page); await expect(page.locator('[data-document-content] table')).toHaveCount(2);
     await page.goto(path(doc) + '/edit'); await expect(page.locator('[data-model-review]')).toBeHidden();
     await expect(editor(page).locator('[data-cell-color=blue]')).toHaveAttribute('colwidth', '240');
     await expect(editor(page).locator('table').nth(1).locator('tr')).toHaveCount(2);
@@ -73,11 +74,11 @@ test('Mermaid preview rejects active input, keeps invalid source and displays sa
     await page.locator('[data-diagram-source]').fill('broken diagram source'); await page.locator('[data-diagram-render]').click();
     await expect(page.locator('[data-diagram-status]')).toHaveAttribute('data-valid', 'false'); await page.locator('[data-diagram-insert]').click();
     await expect(editor(page).locator('[data-diagram]')).toHaveText('broken diagram source');
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content] [data-diagram] code')).toHaveText('broken diagram source');
+    await publish(page); await expect(page.locator('[data-document-content] [data-diagram] code')).toHaveText('broken diagram source');
     await expect(page.locator('[data-document-content] .diagram-status')).toContainText('Błąd');
     await page.goto(path(doc) + '/edit'); await editor(page).locator('[data-diagram]').click(); await page.locator('.format-menu summary').click(); await page.locator('[data-open-diagram]').click();
     await expect(page.locator('[data-diagram-source]')).toHaveValue('broken diagram source');
-    await page.locator('[data-diagram-source]').fill('flowchart LR\n A --> B'); await page.locator('[data-diagram-insert]').click(); await page.locator('[data-save-button]').click();
+    await page.locator('[data-diagram-source]').fill('flowchart LR\n A --> B'); await page.locator('[data-diagram-insert]').click(); await publish(page);
     await expect(page.locator('[data-document-content] .diagram-status')).toHaveAttribute('data-valid', 'true', {timeout: 15000});
     await expect(page.locator('[data-document-content] iframe')).toHaveAttribute('sandbox', 'allow-scripts');
 });
@@ -89,15 +90,15 @@ test('slash, mentions, block operations, find and focus work through the keyboar
     await editor(page).press('ControlOrMeta+f'); await page.locator('[data-find-text]').fill('alpha'); await page.locator('[data-replace-text]').fill('beta'); await page.locator('[data-replace-all]').click();
     await expect(editor(page)).toContainText('beta beta'); await page.locator('[data-find-dialog] [data-dialog-close]').click();
     await editor(page).press('ControlOrMeta+z'); await expect(editor(page)).toContainText('alpha alpha'); await editor(page).press('ControlOrMeta+Shift+z');
-    await page.locator('[data-block-action=duplicate]').click(); await expect(editor(page)).toContainText('beta betabeta beta');
-    await editor(page).press('Alt+Shift+ArrowUp'); await page.locator('[data-block-action=delete]').click();
+    await clickTool(page, '[data-block-action=duplicate]'); await expect(editor(page)).toContainText('beta betabeta beta');
+    await editor(page).press('Alt+Shift+ArrowUp'); await clickTool(page, '[data-block-action=delete]');
     await editor(page).press('ControlOrMeta+End'); await editor(page).press('Enter'); await page.keyboard.type('@' + fixture().users[0].username.slice(0, 18));
     await expect(page.locator('[data-command-menu]')).toContainText('@' + fixture().users[0].username); await editor(page).press('Enter');
     await expect(editor(page)).toContainText('@' + fixture().users[0].username);
-    await page.locator('[data-focus-mode]').click(); await expect(page.locator('[data-wiki-editor]')).toHaveClass(/is-focused/);
+    await clickTool(page, '[data-focus-mode]'); await expect(page.locator('[data-wiki-editor]')).toHaveAttribute('data-workspace-focus', 'true');
     await editor(page).press('ControlOrMeta+s'); await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server');
-    await expect(page.locator('[data-focus-state]')).toContainText('Zapisano'); await page.locator('[data-focus-mode]').click();
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content]')).toContainText('@' + fixture().users[0].username);
+    await expect(page.locator('[data-save-summary]')).toHaveText('Zapisano'); await clickTool(page, '[data-focus-mode]');
+    await publish(page); await expect(page.locator('[data-document-content]')).toContainText('@' + fixture().users[0].username);
 });
 
 test('table size picker, cell merging, disclosure and column insertion have functioning model commands', async ({page, request}) => {
@@ -108,7 +109,7 @@ test('table size picker, cell merging, disclosure and column insertion have func
     await expect(editor(page).locator('td[colspan="2"]')).toContainText('Left'); await expect(editor(page).locator('td[colspan="2"]')).toContainText('Right');
     await editor(page).press('ControlOrMeta+End'); await editor(page).press('ArrowDown'); await page.locator('.format-menu summary').click(); await page.locator('[data-open-block]').click(); await page.locator('[data-block-title]').fill('Nowa sekcja'); await page.locator('[data-block-insert]').click();
     await expect(editor(page).locator('summary')).toHaveText('Nowa sekcja'); await page.locator('[data-open-block]').click(); await page.locator('[data-block-kind]').selectOption('columns2'); await page.locator('[data-block-insert]').click(); await expect(editor(page).locator('[data-columns]')).toHaveAttribute('data-columns', '2');
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content] td[colspan="2"]')).toContainText('Right');
+    await publish(page); await expect(page.locator('[data-document-content] td[colspan="2"]')).toContainText('Right');
     await page.goto(path(doc) + '/edit'); await expect(page.locator('[data-model-review]')).toBeHidden(); await expect(editor(page).locator('summary')).toHaveText('Nowa sekcja'); await expect(editor(page).locator('td[colspan="2"]')).toContainText('Left');
 });
 
@@ -127,7 +128,7 @@ for (const width of [360, 768, 1440]) test('workspace, wide tables and keyboard 
     await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server');
     await page.evaluate(() => scrollTo(0, 0));
     await page.screenshot({path: 'storage/temp/editor-' + width + '-saved.png', fullPage: true});
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content]')).toContainText('Najnowsza treść ' + width);
+    await publish(page); await expect(page.locator('[data-document-content]')).toContainText('Najnowsza treść ' + width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
     await page.screenshot({path: 'storage/temp/document-' + width + '.png', fullPage: true});
 });

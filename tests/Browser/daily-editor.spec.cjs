@@ -1,3 +1,4 @@
+const {publish, editMetadata, clickTool} = require('./workspace-helpers.cjs');
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs');
 const fixture = () => JSON.parse(fs.readFileSync('storage/temp/editor-browser.json', 'utf8'));
@@ -47,12 +48,12 @@ for (const width of [360, 1440]) test('link labels, editing, removal and keyboar
     await expect(editor(page).locator('a')).toHaveText('Updated label');
     await page.locator('[data-link-url]').fill('https://example.test/final'); await page.locator('[data-link-insert]').click();
     await expect(editor(page).locator('a')).toHaveCount(1); await expect(editor(page).locator('a')).toHaveText('Final label');
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content] a[href="https://example.test/final"]')).toHaveText('Final label');
+    await publish(page); await expect(page.locator('[data-document-content] a[href="https://example.test/final"]')).toHaveText('Final label');
     await page.goto(path(doc) + '/edit'); await editor(page).press('ControlOrMeta+Home'); await editor(page).press('ArrowRight');
     await editor(page).press('ControlOrMeta+k'); await page.locator('[data-link-dialog] [data-dialog-close]').click();
     await expect(editor(page)).toBeFocused(); await editor(page).press('ControlOrMeta+k'); await page.locator('[data-link-remove]').click();
     await expect(editor(page).locator('a')).toHaveCount(0); await expect(editor(page)).toContainText('Final label');
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content]')).toContainText('Final label');
+    await publish(page); await expect(page.locator('[data-document-content]')).toContainText('Final label');
     await page.goto(path(doc) + '/edit');
     await expect(editor(page).locator('a')).toHaveCount(0); await expect(editor(page)).toContainText('Keep this paragraph');
     expect((await api(request, 'get', 'pages/' + doc.id)).content_html).toContain('Final label');
@@ -60,13 +61,13 @@ for (const width of [360, 1440]) test('link labels, editing, removal and keyboar
 
 test('changing a link destination keeps existing inline formatting and draft metadata', async ({page, request}) => {
     const doc = await create(request, '<p><a href="https://example.test/old"><strong>Bold label</strong></a> after</p>');
-    await page.goto(path(doc) + '/edit'); await page.locator('[name=change_summary]').fill('Updated destination');
+    await page.goto(path(doc) + '/edit'); await editMetadata(page, '[name=change_summary]', 'fill', 'Updated destination');
     await editor(page).press('ControlOrMeta+Home'); await editor(page).press('ArrowRight'); await editor(page).press('ControlOrMeta+k');
     await expect(page.locator('[data-link-text]')).toHaveValue('Bold label');
     await page.locator('[data-link-url]').fill('https://example.test/new'); await page.locator('[data-link-insert]').click();
     await expect(editor(page).locator('a')).toHaveCount(1); await expect(editor(page).locator('a strong')).toHaveText('Bold label');
     await editor(page).press('ControlOrMeta+s'); await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server');
-    await page.locator('[data-save-button]').click(); const saved = await api(request, 'get', 'pages/' + doc.id);
+    await publish(page); const saved = await api(request, 'get', 'pages/' + doc.id);
     expect(saved.content_html).toContain('href="https://example.test/new"'); expect(saved.content_html).toContain('<strong>Bold label</strong>');
     await page.goto(path(doc) + '/edit'); await expect(editor(page).locator('a strong')).toHaveText('Bold label');
 });
@@ -83,7 +84,7 @@ test('renaming an uploaded file link preserves protected attachment metadata thr
     await page.locator('[data-link-text]').fill('Protected runbook');
     await page.locator('[data-link-insert]').click(); await expect(link).toHaveText('Protected runbook');
     await expect(link).toHaveAttribute('data-file-size', size); await expect(link).toHaveAttribute('data-file-type', type);
-    await page.locator('[data-save-button]').click(); const savedLink = page.locator('[data-document-content] a[data-attachment-id]');
+    await publish(page); const savedLink = page.locator('[data-document-content] a[data-attachment-id]');
     await expect(savedLink).toHaveText('Protected runbook'); const href = await savedLink.getAttribute('href');
     expect((await page.request.get(href)).status()).toBe(200); expect((await request.get(href, {maxRedirects: 0})).status()).toBe(404);
     await page.goto(path(doc) + '/edit'); const reopened = editor(page).locator('a[data-attachment-id]');
@@ -105,11 +106,13 @@ test('editor shortcuts respect metadata fields and the active Markdown source', 
     const doc = await create(request, '<p>Visual source</p>'); await page.goto(path(doc) + '/edit');
     await page.locator('[name=title]').focus(); await page.keyboard.press('ControlOrMeta+k');
     await expect(page.locator('[data-link-dialog]')).not.toBeVisible(); await expect(page.locator('#global-search')).toBeFocused();
+    await page.keyboard.press('Escape');
     await page.getByRole('tab', {name: 'Markdown', exact: true}).click(); await page.locator('[data-markdown-editor]').fill('## Current Markdown');
     await page.locator('[data-markdown-editor]').press('ControlOrMeta+k');
     await expect(page.locator('[data-link-dialog]')).not.toBeVisible(); await expect(page.locator('#global-search')).toBeFocused();
+    await page.keyboard.press('Escape');
     await expect(page.locator('[data-markdown-editor]')).toHaveValue('## Current Markdown');
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content] h2')).toHaveText('Current Markdown');
+    await publish(page); await expect(page.locator('[data-document-content] h2')).toHaveText('Current Markdown');
 });
 
 test('a late mention response cannot reopen a dismissed menu or use an old selection', async ({page, request}) => {
@@ -133,7 +136,7 @@ test('a late mention response cannot reopen a dismissed menu or use an old selec
     const secondReturned = page.waitForResponse(response => response.url().includes('/editor-users?'));
     release(); await secondReturned; await page.unroute('**/editor-users?*');
     await expect(page.locator('[data-command-menu]')).toBeHidden();
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content]')).toContainText('New start Keep the document');
+    await publish(page); await expect(page.locator('[data-document-content]')).toContainText('New start Keep the document');
 });
 
 test('list indentation tools show when the selected list item can actually move', async ({page, request}) => {
@@ -142,8 +145,8 @@ test('list indentation tools show when the selected list item can actually move'
     await expect(page.locator('[data-rich-command=sink]')).toBeDisabled(); await expect(page.locator('[data-rich-command=lift]')).toBeDisabled();
     await editor(page).locator('li').first().click(); await expect(page.locator('[data-rich-command=sink]')).toBeDisabled();
     await editor(page).locator('li').nth(1).click(); await expect(page.locator('[data-rich-command=sink]')).toBeEnabled();
-    await page.locator('[data-rich-command=sink]').click(); await expect(editor(page).locator('ul ul li')).toHaveText('Second item');
-    await expect(page.locator('[data-rich-command=lift]')).toBeEnabled(); await page.locator('[data-rich-command=lift]').click();
-    await expect(editor(page).locator('ul ul')).toHaveCount(0); await page.locator('[data-save-button]').click();
+    await clickTool(page, '[data-rich-command=sink]'); await expect(editor(page).locator('ul ul li')).toHaveText('Second item');
+    await expect(page.locator('[data-rich-command=lift]')).toBeEnabled(); await clickTool(page, '[data-rich-command=lift]');
+    await expect(editor(page).locator('ul ul')).toHaveCount(0); await publish(page);
     await expect(page.locator('[data-document-content] li')).toHaveCount(2);
 });

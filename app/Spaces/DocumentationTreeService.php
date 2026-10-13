@@ -40,6 +40,7 @@ final class DocumentationTreeService
                 $item['url'] = self::url($space, $item);
                 $item['can_move'] = $userId !== null && $acl->canFor($rows[$id], $space, 'page.move', $userId, $super, $movePermission);
                 $item['can_copy'] = $userId !== null && $copyPermission;
+                $item['can_create'] = $userId !== null && $acl->canFor($rows[$id], $space, 'page.create', $userId, $super, $copyPermission);
             }
             unset($item);
             return ['items' => $items, 'next_offset' => $more ? $offset + 50 : null];

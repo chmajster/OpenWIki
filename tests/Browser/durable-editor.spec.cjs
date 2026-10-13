@@ -1,3 +1,4 @@
+const {publish, clickTool} = require('./workspace-helpers.cjs');
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs');
 const fixture = () => JSON.parse(fs.readFileSync('storage/temp/editor-browser.json', 'utf8'));
@@ -54,15 +55,16 @@ test('offline work persists in IndexedDB, reconnects, and does not modify the re
 });
 
 test('a lost autosave response is retried with the same operation before newer changes', async ({page}) => {
-    await page.goto(createUrl()); let first = null; const requests = []; let lost = false;
+    await page.goto(createUrl()); let first = null; const requests = []; let lost = false, allowRetry = false;
     await page.route('**/editor-drafts', async (route) => {
         if (route.request().method() !== 'POST') { await route.continue(); return; }
         const body = route.request().postDataJSON(); requests.push(body);
         if (!lost) { first = body; lost = true; await route.fetch(); await route.abort('failed'); }
-        else await route.continue();
+        else if (allowRetry) await route.continue(); else await route.abort('failed');
     });
     await editor(page).fill('First durable state'); await editor(page).press('ControlOrMeta+S');
     await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'error');
+    allowRetry = true;
     await editor(page).fill('Later durable state'); await editor(page).press('ControlOrMeta+S');
     await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server');
     expect(requests[1].operation_id).toBe(first.operation_id); expect(requests[1].draft_sequence).toBe(first.draft_sequence);
@@ -100,7 +102,7 @@ test('private draft files are uploaded before first publication and become ACL-p
     const other = await context.browser().newContext({baseURL: 'http://127.0.0.1:8765'}); const tab = await other.newPage();
     await tab.goto('/login'); await tab.locator('[name=identifier]').fill(fixture().users[1].username); await tab.locator('[name=password]').fill(fixture().users[1].password); await tab.locator('form[action="/login"] button[type=submit]').click();
     expect((await other.request.get(href)).status()).toBe(404);
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content]')).toContainText('private-notes.txt');
+    await publish(page); await expect(page.locator('[data-document-content]')).toContainText('private-notes.txt');
     const download = page.locator('[data-document-content] a'); expect(await download.getAttribute('href')).toMatch(/^\/attachments\/\d+\/download$/);
     expect((await anonymous.request.get(await download.getAttribute('href'))).status()).toBe(404);
     await anonymous.close(); await other.close();
@@ -129,8 +131,8 @@ test('an ambiguous publication is reconciled before explicitly saving the latest
         operations.push(route.request().postDataJSON().operation_id);
         if (!ambiguous) { ambiguous = true; await route.fetch(); await route.abort('failed'); } else await route.continue();
     });
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'error');
-    await editor(page).fill('Latest visible state'); await page.locator('[data-save-button]').click();
+    await publish(page); await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'error');
+    await editor(page).fill('Latest visible state'); await publish(page);
     await expect(page.locator('[data-document-content]')).toHaveText('Latest visible state');
     expect(operations[0]).toBe(operations[1]);
     const documents = await api(request, 'get', 'pages?space=' + fixture().spaceKey); const doc = documents.find(row => row.title === name);
@@ -148,7 +150,7 @@ for (const status of [401, 403, 422, 500]) test('draft HTTP ' + status + ' prese
     await expect(editor(page)).toHaveText('Protected document ' + status);
     if (status === 403) { await page.evaluate(() => scrollTo(0, 0)); await page.screenshot({path: 'storage/temp/editor-permission-error.png', fullPage: true}); }
     blocked = false;
-    if ([401, 403].includes(status)) await page.locator('[data-resume-save]').click(); else await page.keyboard.press('ControlOrMeta+s');
+    if ([401, 403].includes(status)) await clickTool(page, '[data-resume-save]'); else await page.keyboard.press('ControlOrMeta+s');
     await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server');
     await page.reload(); await page.locator('[data-restore-recovery]').click(); await expect(editor(page)).toHaveText('Protected document ' + status);
 });
@@ -171,16 +173,16 @@ test('two actual users resolve a second intervening version and retain the separ
     await page.goto(path + '/edit'); await editor(page).fill('Local work');
     const secondContext = await context.browser().newContext({baseURL: 'http://127.0.0.1:8765'}); const second = await secondContext.newPage(); second.on('dialog', dialog => dialog.accept());
     await second.goto('/login'); await second.locator('[name=identifier]').fill(fixture().users[1].username); await second.locator('[name=password]').fill(fixture().users[1].password); await second.locator('form[action="/login"] button[type=submit]').click();
-    await second.goto(path + '/edit'); await editor(second).fill('Second user version'); await second.locator('[data-save-button]').click(); await expect(second.locator('[data-document-content]')).toHaveText('Second user version');
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-conflict-panel]')).toBeVisible(); await expect(page.locator('[name=base_version]')).toHaveValue('1');
+    await second.goto(path + '/edit'); await editor(second).fill('Second user version'); await publish(second); await expect(second.locator('[data-document-content]')).toHaveText('Second user version');
+    await publish(page); await expect(page.locator('[data-conflict-panel]')).toBeVisible(); await expect(page.locator('[name=base_version]')).toHaveValue('1');
     await page.locator('[data-conflict-fork]').click(); await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server'); await expect(page.locator('[name=base_version]')).toHaveValue('1');
     await page.locator('[data-resolve-conflict]').click(); await expect(page.locator('[name=base_version]')).toHaveValue('2'); await editor(page).fill('Prepared merge');
-    await second.goto(path + '/edit'); await editor(second).fill('Third intervening version'); await second.locator('[data-save-button]').click(); await expect(second.locator('[data-document-content]')).toHaveText('Third intervening version');
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-conflict-server]')).toContainText('Third intervening version'); await expect(page.locator('[name=base_version]')).toHaveValue('2');
+    await second.goto(path + '/edit'); await editor(second).fill('Third intervening version'); await publish(second); await expect(second.locator('[data-document-content]')).toHaveText('Third intervening version');
+    await publish(page); await expect(page.locator('[data-conflict-server]')).toContainText('Third intervening version'); await expect(page.locator('[name=base_version]')).toHaveValue('2');
     await page.locator('[data-use-server-version]').click(); await expect(editor(page)).toHaveText('Third intervening version'); await expect(page.locator('[name=base_version]')).toHaveValue('3');
     await page.locator('[data-compare-recovery]').click(); await expect(page.locator('[data-recovery-copy]')).toContainText(/Local work|Prepared merge/);
     await page.screenshot({path: 'storage/temp/editor-recovery-comparison.png', fullPage: true}); await page.locator('[data-recovery-dialog] [data-dialog-close]').click();
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content]')).toHaveText('Third intervening version'); await secondContext.close();
+    await publish(page); await expect(page.locator('[data-document-content]')).toHaveText('Third intervening version'); await secondContext.close();
 });
 
 test('publishing while typing replaces private file URLs before saving the next draft', async ({page, request}) => {
@@ -192,7 +194,7 @@ test('publishing while typing replaces private file URLs before saving the next 
     let release; const blocked = new Promise(resolve => release = resolve); let entered;
     const started = new Promise(resolve => entered = resolve);
     await page.route('**/spaces/*/pages', async route => { if (route.request().method() === 'POST') { const response = await route.fetch(); entered(); await blocked; await route.fulfill({response}); } else await route.continue(); });
-    await page.locator('[data-save-button]').click(); await started; await expect(page.locator('[data-attachment-picker]')).toBeDisabled(); await editor(page).press('ControlOrMeta+End'); await editor(page).press('Enter'); await page.keyboard.type('Later state'); release();
+    await publish(page); await started; await expect(page.locator('[data-attachment-picker]')).toBeDisabled(); await editor(page).press('ControlOrMeta+End'); await editor(page).press('Enter'); await page.keyboard.type('Later state'); release();
     await expect(page).toHaveURL(/\/edit$/); await expect(editor(page).locator('a')).toHaveAttribute('href', /^\/attachments\//); await page.unroute('**/spaces/*/pages');
     await page.keyboard.press('ControlOrMeta+s'); await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server');
     expect((await page.request.get(originalHref, {maxRedirects: 0})).status()).toBe(302);
@@ -202,7 +204,7 @@ test('publishing while typing replaces private file URLs before saving the next 
     while (undos-- > 0) await editor(page).press('ControlOrMeta+Shift+z');
     await expect(editor(page).locator('a')).toHaveCount(1);
     await editor(page).press('ControlOrMeta+s'); await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server');
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content]')).toContainText('Later state');
+    await publish(page); await expect(page.locator('[data-document-content]')).toContainText('Later state');
 });
 
 test('the user directory picker checks its own permission on the server', async ({context, request}) => {
@@ -225,14 +227,14 @@ test('a private image kept only in conversion recovery remains restorable after 
     let entered; const started = new Promise(resolve => entered = resolve);
     let release; const blocked = new Promise(resolve => release = resolve);
     await page.route('**/spaces/*/pages', async route => { if (route.request().method() === 'POST') { const response = await route.fetch(); entered(); await blocked; await route.fulfill({response}); } else await route.continue(); });
-    await page.locator('[data-save-button]').click(); await started;
+    await publish(page); await started;
     await page.locator('[data-markdown-editor]').press('ControlOrMeta+End'); await page.keyboard.type(' with later changes'); release();
     await expect(page).toHaveURL(/\/edit$/); await page.unroute('**/spaces/*/pages');
-    await page.locator('[data-undo-conversion]').click();
+    await clickTool(page, '[data-undo-conversion]');
     await expect(editor(page).locator('img')).toHaveAttribute('src', /^\/attachments\//);
     await expect(editor(page)).toContainText('Original image');
     await editor(page).press('ControlOrMeta+s'); await expect(page.locator('[data-save-state]')).toHaveAttribute('data-state', 'server');
-    await page.locator('[data-save-button]').click(); await expect(page.locator('[data-document-content] img')).toBeVisible();
+    await publish(page); await expect(page.locator('[data-document-content] img')).toBeVisible();
     expect((await page.request.get(await page.locator('[data-document-content] img').getAttribute('src'))).status()).toBe(200);
 });
 

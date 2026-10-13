@@ -62,6 +62,23 @@ final class PageDraftController extends Controller
         return $this->saveEditorDraft($request, $spaceKey);
     }
 
+    public function workspace(Request $request, string $spaceKey): Response
+    {
+        $context = $this->draftContext($request, $spaceKey, (string) $request->query('document_key', ''));
+        if ($context instanceof Response) return $context;
+        try {
+            $space = filter_var($request->query('space_id', $context['space']['id']), FILTER_VALIDATE_INT);
+            $parentValue = $request->query('parent_id', '');
+            $parent = $parentValue === '' ? null : filter_var($parentValue, FILTER_VALIDATE_INT);
+            if ($space === false || $space < 1 || $parent === false || ($parent !== null && $parent < 1)) throw new \InvalidArgumentException('Nieprawidłowa lokalizacja.');
+            return Response::json(['data' => (new \OpenWiki\Wiki\PageWorkspaceService($this->app))->context($space, $context['page'], $parent)]);
+        } catch (\DomainException $error) {
+            return Response::json(['error' => ['message' => $error->getMessage()]], 403);
+        } catch (\InvalidArgumentException $error) {
+            return Response::json(['error' => ['message' => $error->getMessage()]], 422);
+        }
+    }
+
     public function drafts(Request $request, string $spaceKey): Response
     {
         $context = $this->draftContext($request, $spaceKey, (string) $request->query('document_key', ''));
@@ -120,7 +137,7 @@ final class PageDraftController extends Controller
                 (int) $context['space']['id'], (int) $this->app->auth()->user()['id'], $context['document_key']);
             $payload = ['format' => $content['format'], 'html' => $content['html'],
                 'markdown' => $content['markdown'] ?? '', 'document' => $content['document'], 'baseVersion' => $base];
-            foreach (['title' => 255, 'slug' => 255, 'parent_id' => 20, 'status' => 20, 'tags' => 4000, 'change_summary' => 500, 'content_owner_id' => 20, 'review_due_at' => 10] as $field => $limit) {
+            foreach (['title' => 255, 'slug' => 255, 'parent_id' => 20, 'status' => 20, 'tags' => 4000, 'change_summary' => 500, 'content_owner_id' => 20, 'review_due_at' => 10, 'publication_space_id' => 20, 'publication_parent_id' => 20] as $field => $limit) {
                 $value = $request->input($field, '');
                 if (!is_string($value) || mb_strlen($value) > $limit) throw new \InvalidArgumentException('Invalid draft field: ' . $field);
                 $key = ['parent_id' => 'parentId', 'change_summary' => 'changeSummary'][$field] ?? $field;
@@ -205,8 +222,30 @@ final class PageDraftController extends Controller
         if (($failure = $this->verifyCsrf($request)) !== null) return $failure;
         try {
             $this->validateContentFields($request);
-            $content = (new ContentService())->normalize('markdown', '', (string) $request->input('content_markdown', ''));
+            $content = (new ContentService())->normalize($request->input('document_preview') === true ? (string) $request->input('content_format', 'markdown') : 'markdown', (string) $request->input('content_html', ''), (string) $request->input('content_markdown', ''));
+            if ($request->input('document_preview') === true) {
+                $previewSpace = $context['space'];
+                $destination = $request->input('publication_space_id', '');
+                if ($destination !== '') {
+                    $spaceId = filter_var($destination, FILTER_VALIDATE_INT);
+                    if ($spaceId === false || $spaceId < 1) throw new \InvalidArgumentException('Nieprawidłowa lokalizacja podglądu.');
+                    if ($spaceId !== (int) $previewSpace['id']) {
+                        // A new draft keeps its private identity while macros use the selected destination.
+                        (new \OpenWiki\Wiki\PageWorkspaceService($this->app))->context($spaceId, $context['page']);
+                        $previewSpace = $this->app->database()->fetchOne('SELECT * FROM spaces WHERE id = ? AND deleted_at IS NULL', [$spaceId]);
+                        if ($previewSpace === null) throw new \DomainException('Przestrzeń podglądu jest niedostępna.');
+                    }
+                }
+                $status = $request->input('status', $context['page']['status'] ?? 'draft');
+                if (!is_string($status) || !in_array($status, ['draft', 'published', 'archived'], true)) throw new \InvalidArgumentException('Nieprawidłowy stan podglądu.');
+                $page = array_replace($context['page'] ?? ['id' => 0, 'author_id' => $this->app->auth()->user()['id'], 'version' => 0, 'updated_at' => '', 'status' => 'draft'],
+                    ['space_id' => (int) $previewSpace['id'], 'status' => $status, 'content_format' => $content['format'], 'content_html' => $content['html'], 'content_markdown' => $content['markdown'] ?? '', 'document_json' => json_encode($content['document'], JSON_THROW_ON_ERROR)]);
+                unset($page['published_revision']);
+                $content['html'] = (new \OpenWiki\Wiki\MacroService($this->app))->renderPage($page, $previewSpace)['html'];
+            }
             return Response::json(['data' => ['html' => $content['html'], 'renderer' => 'commonmark-2', 'user_id' => (int) $this->app->auth()->user()['id']]]);
+        } catch (\DomainException $exception) {
+            return Response::json(['error' => ['message' => $exception->getMessage()]], 403);
         } catch (\InvalidArgumentException $exception) {
             return Response::json(['error' => ['message' => $exception->getMessage()]], 422);
         }

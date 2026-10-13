@@ -217,6 +217,7 @@ textarea { resize: vertical; }
 }
 .document code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: .9em; }
 .document :not(pre) > code { background: var(--surface-3); padding: 2px 5px; border-radius: 4px; }
+.document-content figure.page-cover img { width:100%; max-height:300px; object-fit:cover; }
 .code-copy { position: absolute; top: 8px; right: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); color: var(--text); padding: 5px 8px; cursor: pointer; }
 
 .editor-shell { max-width: 1680px; margin: 0 auto; padding: 26px 28px 60px; }
