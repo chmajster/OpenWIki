@@ -44,6 +44,9 @@ przestrzeni nie zmienia źródłowej tożsamości odzyskiwania ani prywatnych pl
 Zapis serializuje obie przestrzenie i sprawdza ACL ponownie, zachowując receipt
 operacji i potwierdzając tylko wysłaną generację. Późniejsze zmiany nadal
 wymagają zapisu. Podgląd makr używa autoryzowanego kontekstu wybranej przestrzeni.
+Lista lokalizacji publikacji pobiera reguły edycji zbiorczo, a wspólna polityka
+przestrzeni rozstrzyga allow/deny, role, grupy, własność i archiwum. Liczba zapytań
+ACL tego wybieraka nie rośnie z liczbą przestrzeni. Zapis ponownie sprawdza dostęp.
 
 W checkout źródłowym uruchom `npm ci && npm run build`. Paczka wydania zawiera
 zbudowane bundle i CSS workspace. PHP 8.2+ obsługuje wszystkie żądania bez procesu
@@ -68,8 +71,8 @@ zawijany toolbar i przewijane okno potwierdzenia bez poziomego przewijania stron
 adopcję plików i dokładne potwierdzanie szkiców. Nowe scenariusze w
 `PageSavingTest` sprawdzają publikację między przestrzeniami, podgląd makr,
 zachowanie źródeł szablonów, ukrytych rodziców i odmowę sfałszowanej lokalizacji.
-Na Windows pełny przebieg ma 153 testy zaliczone i dwa pominięte testy systemowe
-(kontrola PID na Linux oraz tworzenie symlinku); PHPUnit kończy się kodem 0.
+Na Windows dwa testy systemowe są pomijane (kontrola PID na Linux oraz tworzenie
+symlinku); aktualny pełny wynik PHPUnit jest zapisany w PR i jego checks.
 Końcowe trzy scenariusze podglądu/zapisu dodatkowo zaliczają 36 asercji.
 Linuxowe testy instalacji, aktualizacji MySQL/MariaDB i runtime są osobnymi
 zadaniami CI.
@@ -84,6 +87,10 @@ backlinks, tabele, kod, makra, pliki, recenzję, ACL i telefon. Po zmianie UI
 testy otwierają i zatwierdzają okno publikacji zamiast omijać go skryptem DOM.
 Ślady sieci i zrzuty są artefaktami CI. Wynik końcowego przebiegu jest zapisany
 w [PR #17](https://github.com/chmajster/OpenWIki/pull/17) i jego checks.
+
+Przeciąganie uchwytu jest sprawdzane rzeczywistymi zdarzeniami myszy, z kontrolą
+undo/redo i kolejności po publikacji. Zaznaczenie całego bloku nie uruchamia
+paska tekstowego zasłaniającego jego menu.
 
 Pomiar `editor-performance.spec.cjs` na Windows 11, Ryzen 7 7800X3D,
 Node 24.21.0 i Chromium 156.0.8078.4 dotyczył źródła 107 054 znaków z tabelą,

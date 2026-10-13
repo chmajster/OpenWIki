@@ -16,11 +16,26 @@ final class PageWorkspaceService
     public function spaces(?array $page = null): array
     {
         $auth = $this->app->auth(); $user = $auth->user();
-        if ($user === null) return [];
-        $access = new SpaceAccessService($this->app);
-        return array_values(array_map(static fn (array $space): array => array_intersect_key($space, array_flip(['id', 'name', 'space_key'])),
-            array_filter((new SpaceRepository($this->app->database()))->visibleFor((int) $user['id'], $auth->can('*')),
-                fn (array $space): bool => $access->canEdit($space) && ($page === null ? $auth->can('page.create') : (int) $space['id'] === (int) $page['space_id']))));
+        if ($user === null || ($page === null && !$auth->can('page.create'))) return [];
+        $id = (int) $user['id']; $super = $auth->can('*'); $db = $this->app->database();
+        return $db->transaction(function () use ($db, $id, $super, $page): array {
+            // Batch the current actor's edit rules; the picker must not query once per space.
+            $rules = [];
+            if (!$super) foreach ($db->fetchAll('SELECT a.space_id, a.effect FROM space_acl a WHERE a.permission = "space.edit" AND (
+                (a.principal_type = "user" AND a.principal_id = ?) OR
+                (a.principal_type = "group" AND EXISTS (SELECT 1 FROM group_users gu WHERE gu.group_id = a.principal_id AND gu.user_id = ?)) OR
+                (a.principal_type = "role" AND EXISTS (SELECT 1 FROM user_roles ur WHERE ur.role_id = a.principal_id AND ur.user_id = ?)))', [$id, $id, $id]) as $rule) {
+                $rules[(int) $rule['space_id']][] = $rule;
+            }
+            $result = [];
+            foreach ((new SpaceRepository($db))->visibleFor($id, $super) as $space) {
+                if ($space['status'] !== 'active' || ($page !== null && (int) $space['id'] !== (int) $page['space_id'])) continue;
+                if (SpaceAccessService::evaluate($space, $id, 'space.edit', $super, true, $rules[(int) $space['id']] ?? [])['allowed']) {
+                    $result[] = array_intersect_key($space, array_flip(['id', 'name', 'space_key']));
+                }
+            }
+            return $result;
+        });
     }
 
     public function context(int $spaceId, ?array $page = null, ?int $parentId = null): array

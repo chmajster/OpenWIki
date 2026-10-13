@@ -624,6 +624,34 @@ final class PageSavingTest extends TestCase
         self::assertSame(0, (int) $db->fetchOne('SELECT COUNT(*) AS total FROM pages WHERE space_id = ?', [$destination])['total']);
     }
 
+    public function testWorkspaceSpacePickerHonorsGroupRoleDenyPrivateAndArchivedAccess(): void
+    {
+        $db = $this->app->database();
+        $this->limitActor(['page.view', 'page.edit', 'page.create']);
+        $role = (int) $db->fetchOne('SELECT role_id FROM user_roles WHERE user_id = ?', [$this->userId])['role_id'];
+        $group = $db->insert('INSERT INTO user_groups (name, slug) VALUES (?, ?)', ['Workspace group', 'workspace-' . bin2hex(random_bytes(5))]);
+        $db->execute('INSERT INTO group_users (group_id, user_id) VALUES (?, ?)', [$group, $this->userId]);
+        $spaces = [];
+        foreach (['group' => 'restricted', 'role' => 'public', 'private' => 'private', 'archived' => 'public', 'no-edit' => 'public'] as $name => $visibility) {
+            $spaces[$name] = (new SpaceRepository($db))->create(['name' => 'Workspace ' . $name, 'space_key' => 'PICK-' . strtoupper(bin2hex(random_bytes(4))),
+                'description' => null, 'owner_id' => $name === 'archived' ? $this->userId : $this->otherUserId, 'visibility' => $visibility]);
+        }
+        foreach (['space.view', 'space.edit'] as $permission) $db->execute('INSERT INTO space_acl (space_id, principal_type, principal_id, permission, effect) VALUES (?, "group", ?, ?, "allow")', [$spaces['group'], $group, $permission]);
+        $db->execute('INSERT INTO space_acl (space_id, principal_type, principal_id, permission, effect) VALUES (?, "role", ?, "space.edit", "allow")', [$spaces['role'], $role]);
+        $db->execute('INSERT INTO space_acl (space_id, principal_type, principal_id, permission, effect) VALUES (?, "user", ?, "space.edit", "deny")', [$spaces['role'], $this->userId]);
+        $db->execute('INSERT INTO space_acl (space_id, principal_type, principal_id, permission, effect) VALUES (?, "user", ?, "space.edit", "allow")', [$spaces['private'], $this->userId]);
+        $db->execute('UPDATE spaces SET status = "archived" WHERE id = ?', [$spaces['archived']]);
+        $workspace = new \OpenWiki\Wiki\PageWorkspaceService($this->app);
+        $visible = array_map('intval', array_column($workspace->spaces(), 'id'));
+        self::assertContains((int) $this->space['id'], $visible);
+        self::assertContains($spaces['group'], $visible);
+        foreach (['role', 'private', 'archived', 'no-edit'] as $name) self::assertNotContains($spaces[$name], $visible);
+        $db->execute('DELETE FROM space_acl WHERE space_id = ? AND effect = "deny"', [$spaces['role']]);
+        self::assertContains($spaces['role'], array_map('intval', array_column($workspace->spaces(), 'id')));
+        foreach ($workspace->spaces() as $space) self::assertSame(['id', 'name', 'space_key'], array_keys($space));
+        self::assertSame([], $workspace->spaces(['space_id' => $spaces['private']]));
+    }
+
     private function lifecyclePolicy(): callable
     {
         $acl = new \OpenWiki\Permissions\PageAclService($this->app);
