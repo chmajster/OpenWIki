@@ -97,40 +97,47 @@ final class PageEngagementService
         string $title,
         string $targetUrl,
         bool $working = false,
-        array $additionalRecipients = []
+        array $additionalRecipients = [],
+        array $options = []
     ): void {
-        $watchers = $this->database->fetchAll(
+        $watchers = ($options['include_watchers'] ?? true) ? $this->database->fetchAll(
             'SELECT DISTINCT user_id
              FROM watches
              WHERE (watchable_type = "page" AND watchable_id = :page_id)
                 OR (watchable_type = "space" AND watchable_id = :space_id)',
             ['page_id' => $pageId, 'space_id' => $spaceId]
-        );
+        ) : [];
 
         $page = (new \OpenWiki\Repositories\PageRepository($this->database))->findById($pageId);
         $space = $this->database->fetchOne('SELECT * FROM spaces WHERE id = ?', [$spaceId]);
         if ($page === null || $space === null) return;
         $recipients = array_unique([...array_column($watchers, 'user_id'), ...$additionalRecipients]);
-        $acl = new \OpenWiki\Permissions\PageAclService($this->database);
-        foreach ($recipients as $recipient) {
-            $userId = (int) $recipient;
+        $revision = $options['revision_number'] ?? null;
+        $source = $revision === null ? null : (new \OpenWiki\Repositories\PageRepository($this->database))->revision($pageId, (int) $revision);
+        if ($revision !== null && $source === null) return;
+        $eligible = (new CollaborationAudience($this->database))->eligible(['page' => $page, 'space' => $space, 'source' => $source], $revision === null ? null : (int) $revision, $working, '', $recipients);
+        foreach ($eligible as $recipient) {
+            $userId = (int) $recipient['id'];
             if ($userId === $actorUserId) {
                 continue;
             }
 
-            try { $actor = new \OpenWiki\Spaces\SpaceActor($this->database, $userId, null, false); }
-            catch (\DomainException) { continue; }
-            if (!$acl->canViewFor($page, $space, $userId, $actor->can('*'), $actor->can('page.view')) || ($working && !$acl->canReadWorkingFor($page, $space, $userId, $actor->can('*')))) continue;
-
             $this->database->execute(
                 'INSERT INTO notifications
-                 (user_id, event_type, title, body, target_url, read_at, created_at)
-                 VALUES (:user_id, :event_type, :title, NULL, :target_url, NULL, UTC_TIMESTAMP())',
+                 (user_id, event_type, title, body, target_url, read_at, created_at, page_id, revision_number, resource_type, resource_id, working, event_key)
+                 VALUES (:user_id, :event_type, :title, NULL, :target_url, NULL, UTC_TIMESTAMP(), :page_id, :revision, :resource_type, :resource_id, :working, :event_key)
+                 ON DUPLICATE KEY UPDATE id=id',
                 [
                     'user_id' => $userId,
                     'event_type' => $eventType,
                     'title' => $title,
                     'target_url' => $targetUrl,
+                    'page_id' => $pageId,
+                    'revision' => $options['revision_number'] ?? null,
+                    'resource_type' => $options['resource_type'] ?? null,
+                    'resource_id' => $options['resource_id'] ?? null,
+                    'working' => (int) $working,
+                    'event_key' => $options['event_key'] ?? null,
                 ]
             );
         }
@@ -140,28 +147,18 @@ final class PageEngagementService
     {
         $limit = max(1, min($limit, 200));
 
-        return $this->database->fetchAll(
-            'SELECT id, event_type, title, body, target_url, read_at, created_at
-             FROM notifications
-             WHERE user_id = ?
-             ORDER BY created_at DESC, id DESC
-             LIMIT ' . $limit,
-            [$userId]
-        );
+        return $this->scanNotifications($userId, false, $limit);
     }
 
     public function unreadCount(int $userId): int
     {
-        $row = $this->database->fetchOne(
-            'SELECT COUNT(*) AS total FROM notifications WHERE user_id = :user_id AND read_at IS NULL',
-            ['user_id' => $userId]
-        );
-
-        return (int) ($row['total'] ?? 0);
+        return (int) $this->scanNotifications($userId, true);
     }
 
     public function markRead(int $userId, int $notificationId): bool
     {
+        $row = $this->database->fetchOne('SELECT * FROM notifications WHERE id=? AND user_id=?', [$notificationId, $userId]);
+        if ($row === null || (new NotificationAccess($this->database))->visible([$row], $userId) === []) return false;
         return $this->database->execute(
             'UPDATE notifications
              SET read_at = COALESCE(read_at, UTC_TIMESTAMP())
@@ -177,5 +174,20 @@ final class PageEngagementService
              WHERE user_id = :user_id AND read_at IS NULL',
             ['user_id' => $userId]
         );
+    }
+
+    private function scanNotifications(int $user, bool $count, int $limit = 200): array|int
+    {
+        $cursor = PHP_INT_MAX; $data = []; $total = 0;
+        $access = new NotificationAccess($this->database);
+        do {
+            $rows = $this->database->fetchAll('SELECT * FROM notifications WHERE user_id=? AND id<?' . ($count ? ' AND read_at IS NULL' : '') . ' ORDER BY id DESC LIMIT 200', [$user, $cursor]);
+            if ($rows === []) break;
+            $visible = $access->visible($rows, $user);
+            $total += count($visible);
+            if (!$count) $data = [...$data, ...$visible];
+            $cursor = (int) $rows[count($rows)-1]['id'];
+        } while (count($rows) === 200 && ($count || count($data) < $limit));
+        return $count ? $total : array_slice($data, 0, $limit);
     }
 }

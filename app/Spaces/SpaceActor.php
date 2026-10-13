@@ -20,4 +20,5 @@ final class SpaceActor
     }
 
     public function can(string $permission): bool { return in_array('*', $this->permissions, true) || in_array($permission, $this->permissions, true); }
+    public function permissions(): array { return $this->permissions; }
 }

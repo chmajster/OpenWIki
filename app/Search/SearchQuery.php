@@ -65,6 +65,8 @@ final class SearchQuery
             $extra = ', u.username,u.first_name,u.last_name,u.status,u.auth_source';
         } elseif ($type === 'comment') {
             $from .= ' INNER JOIN comments c ON c.page_id = p.id INNER JOIN users u ON u.id = c.author_id';
+            $from .= ' LEFT JOIN page_revisions cr ON cr.page_id=c.page_id AND cr.revision_number=c.revision_number LEFT JOIN comments root ON root.id=c.thread_id';
+            $where[] = 'c.visibility<>"working" AND (c.revision_number IS NULL OR cr.was_published=1) AND (root.anchor_json IS NULL OR root.deleted_at IS NULL)';
             $where[] = 'c.deleted_at IS NULL'; $id = 'c.id'; $title = 'p.title'; $body = 'c.body_html'; $date = 'c.updated_at'; $created = 'c.created_at';
             $match = 'c.body_html LIKE ? ESCAPE \'!\''; $matchParams = [$like]; $extra = ', p.slug, u.username AS author';
         } elseif ($type === 'attachment') {

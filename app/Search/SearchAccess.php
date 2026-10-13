@@ -14,7 +14,7 @@ final class SearchAccess
     private array $visible = [];
     private array $working = [];
 
-    public function __construct(Database $db, array $spaceIds, array $pageIds, array $workingIds, private readonly ?int $user, private readonly array $permissions)
+    public function __construct(Database $db, array $spaceIds, array $pageIds, array $workingIds, private readonly ?int $user, private readonly array $permissions, bool $strictWorking = false)
     {
         if ($spaceIds === []) return;
         $spaceIds = array_values(array_unique(array_map('intval', $spaceIds)));
@@ -58,7 +58,7 @@ final class SearchAccess
                 // Working content is a separate resource even if the public projection remains readable.
                 if ($this->visible[(int) $page['id']] && isset($workingNeeded[(int) $page['id']])) {
                     $this->working[(int) $page['id']] = $acl->canReadWorkingFor($page, $space, $user, $this->can('*'), $permissions)
-                        || (!(bool) $space['review_workflow'] && $page['published_revision'] === null && $page['status'] !== 'published');
+                        || (!$strictWorking && !(bool) $space['review_workflow'] && $page['published_revision'] === null && $page['status'] !== 'published');
                 }
             }
         }

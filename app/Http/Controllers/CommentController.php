@@ -13,7 +13,6 @@ use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Wiki\CommentService;
-use OpenWiki\Webhooks\WebhookService;
 
 final class CommentController extends Controller
 {
@@ -49,20 +48,8 @@ final class CommentController extends Controller
                 (string) $request->input('body', ''),
                 $parentId === null ? null : (int) $parentId,
                 (string) $page['title'],
-                $this->pageUrl($space, $page)
+                $this->pageUrl($space, $page), [], null, $request
             );
-
-            try {
-                (new WebhookService($this->app->database()))->queue('comment.created', [
-                    'id' => $commentId,
-                    'page_id' => (int) $page['id'],
-                    'space_id' => (int) $space['id'],
-                    'author_id' => (int) $user['id'],
-                    'parent_id' => $parentId === null ? null : (int) $parentId,
-                ]);
-            } catch (\Throwable $webhookError) {
-                error_log('[OpenWiki webhook queue] ' . $webhookError->getMessage());
-            }
 
             Session::flash('success', $parentId === null ? 'Comment added.' : 'Reply added.');
         } catch (\InvalidArgumentException $exception) {
@@ -99,7 +86,7 @@ final class CommentController extends Controller
             if (!(new CommentService($this->app->database()))->update(
                 (int) $commentId,
                 (int) $user['id'],
-                (string) $request->input('body', '')
+                (string) $request->input('body', ''), (int) $page['id'], null, (array) $request->input(), $request
             )) {
                 return $this->render('errors/404', ['title' => 'Comment not found'], 404);
             }
@@ -141,7 +128,7 @@ final class CommentController extends Controller
             $deleted = (new CommentService($this->app->database()))->delete(
                 (int) $commentId,
                 (int) $user['id'],
-                $this->app->auth()->can('comment.delete')
+                $this->app->auth()->can('comment.delete'), (int) $page['id'], null, $request
             );
 
             if (!$deleted) {
