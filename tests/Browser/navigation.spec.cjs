@@ -54,8 +54,11 @@ test('home views follow real visits and favorites, and the desktop sidebar survi
     await page.getByRole('button', {name: 'Apply filters', exact: true}).click();
     await expect(page).toHaveURL(/view=work.*type=task/);
     await expect(sidebar(page).getByRole('link', {name: 'Your work', exact: true})).toHaveAttribute('aria-current', 'page');
-    await page.goto('/?attention=1'); await page.getByRole('link', {name: 'Reset', exact: true}).click();
-    await expect(page).toHaveURL('/?view=work&attention=1'); await expect(page.locator('[data-work-center]')).toBeVisible();
+    await page.goto('/?attention=1&space=' + space.id); await page.getByRole('link', {name: 'Reset', exact: true}).click();
+    await expect(page).toHaveURL('/?view=work&attention=1&space=' + space.id); await expect(page.locator('[data-work-center]')).toBeVisible();
+    const invalid = await page.goto('/?attention=1'); expect(invalid.status()).toBe(422);
+    await expect(page.getByRole('alert')).toContainText('Wybierz przestrzeń');
+    await page.getByRole('link', {name: 'Reset filters', exact: true}).click(); await expect(page.locator('[data-work-center]')).toBeVisible();
 });
 
 for (const width of [390, 768]) test('navigation traps focus, closes safely, and fits ' + width + ' pixels', async ({page, request}) => {

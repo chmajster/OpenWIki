@@ -19,6 +19,7 @@ return [
     'Save a page with Favorite in its actions menu to find it here.' => 'Oznacz stronę gwiazdką, aby szybko wrócić do niej w tym miejscu.',
     'Tasks, drafts, and reviews in one place' => 'Zadania, szkice i przeglądy w jednym miejscu',
     'Content health' => 'Aktualność i obieg dokumentu',
+    'Invalid filters' => 'Nieprawidłowe filtry', 'Check the filters and try again.' => 'Sprawdź filtry i spróbuj ponownie.',
     'Connection failed. Your input has been kept.' => 'Połączenie nie powiodło się. Wpisane dane są zachowane.',
     'Server returned an unreadable response. Your input has been kept.' => 'Serwer zwrócił nieprawidłową odpowiedź. Wpisane dane są zachowane.',
     'Session expired. Sign in in another tab and retry.' => 'Sesja wygasła. Zaloguj się w drugiej karcie i ponów zapis.',

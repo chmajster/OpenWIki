@@ -23,7 +23,9 @@ final class DashboardController extends Controller
         }
         if ($user === null && in_array($view, ['recent', 'favorites', 'work'], true)) return Response::redirect('/login');
         try { $workCenter = $user === null || !in_array($view, ['home', 'work'], true) ? null : (new \OpenWiki\Wiki\WorkCenterService($this->app->database()))->items((array)$request->query(),(int)$user['id']); }
-        catch (\InvalidArgumentException $error) { return $this->render('errors/404',['title'=>$error->getMessage()],422); }
+        catch (\InvalidArgumentException $error) {
+            return $this->render('errors/422', ['title' => 'Invalid filters', 'message' => $error->getMessage(), 'dashboardView' => 'work'], 422);
+        }
         $spaceRepository = new SpaceRepository($this->app->database());
         $pageRepository = new PageRepository($this->app->database());
         $pageAccess = new PageAclService($this->app);
