@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import socket
 import subprocess
@@ -90,18 +91,26 @@ def main():
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     creationflags=subprocess.CREATE_NO_WINDOW if WINDOWS else 0, env=ENV)
             def stop():
+                child_handle = None
+                if WINDOWS:
+                    import ctypes
+                    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+                    kernel.OpenProcess.restype = ctypes.c_void_p
+                    kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+                    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+                    children = re.findall(r'Parent: Created child process (\d+)', (work / 'apache-error.log').read_text(errors='replace'))
+                    if children:
+                        child_handle = kernel.OpenProcess(0x00100000, False, int(children[-1]))
                 # Signal only the Popen handle we own. On Unix Apache handles SIGTERM;
                 # on Windows its child notices the parent's exit and closes its listener.
                 process.terminate()
                 process.wait(timeout=15)
-                if WINDOWS:
-                    for _ in range(100):
-                        with socket.socket() as listener:
-                            listener.settimeout(.1)
-                            if listener.connect_ex(('127.0.0.1', port)) != 0:
-                                break
-                        time.sleep(.1)
-                    time.sleep(.5)
+                if child_handle:
+                    try:
+                        if kernel.WaitForSingleObject(child_handle, 15000) != 0:
+                            raise RuntimeError('The owned Apache child did not finish shutting down.')
+                    finally:
+                        kernel.CloseHandle(child_handle)
             def ready():
                 for _ in range(100):
                     if process.poll() is not None:
