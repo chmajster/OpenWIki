@@ -495,4 +495,11 @@ return [
     'Enabled' => 'Włączone',
     'Disabled' => 'Wyłączone',
     'Breadcrumbs' => 'Ścieżka nawigacji',
+    'Recipient' => 'Adresat',
+    'Page ACL rule saved.' => 'Reguła uprawnień została zapisana.',
+    'Page ACL rule deleted.' => 'Reguła uprawnień została usunięta.',
+    'Parent page ACL inheritance enabled.' => 'Włączono dziedziczenie uprawnień ze stron nadrzędnych.',
+    'Parent page ACL inheritance disabled.' => 'Wyłączono dziedziczenie uprawnień ze stron nadrzędnych.',
+    'Select a valid user, group or role.' => 'Wybierz istniejącego użytkownika, grupę lub rolę.',
+    'Unable to save page ACL rule.' => 'Nie udało się zapisać reguły uprawnień.',
 ];

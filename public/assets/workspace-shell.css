@@ -334,7 +334,7 @@
 /* Page access settings share the application shell and remain native forms. */
 .page-permissions { max-width: 1440px; }
 .permissions-breadcrumbs { flex-wrap: wrap; overflow-wrap: anywhere; margin-bottom: 20px; font-size: 12px; }
-.permissions-breadcrumbs a { min-width: 0; }
+.permissions-breadcrumbs a { display: block; min-width: 0; max-width: min(100%, 480px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .permissions-heading { margin-bottom: 24px; }
 .permissions-heading > div { min-width: 0; }
 .permissions-heading h1 { font-size: 28px; }
@@ -374,6 +374,7 @@
 .permissions-principal small { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; }
 .permissions-badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; color: var(--muted); background: var(--surface-2); }
 .permissions-badge .ui-icon { width: 13px; height: 13px; }
+.permissions-rule > .permissions-badge { justify-self: end; }
 .permissions-badge--allow, .permissions-badge--enabled { color: var(--success-text); background: var(--success-soft); }
 .permissions-badge--deny { color: var(--danger-text); background: var(--danger-soft); }
 .permissions-rule-detail { display: grid; gap: 4px; font-size: 12px; min-width: 0; overflow-wrap: anywhere; }

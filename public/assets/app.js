@@ -33,7 +33,7 @@ if (pagePermissions) {
             }
             form.elements.effect.value = button.dataset.effect;
             form.elements.inherit_to_children.checked = button.dataset.children === '1';
-            heading.textContent = t('Edit rule'); status.textContent = t('Principal') + ': ' + button.dataset.principalName;
+            heading.textContent = t('Edit rule'); status.textContent = t('Recipient') + ': ' + button.dataset.principalName;
             status.hidden = false; cancel.hidden = false; button.closest('[data-permission-rule]').classList.add('is-editing');
             form.scrollIntoView({block: 'start'}); form.elements.effect.focus({preventScroll: true});
         });

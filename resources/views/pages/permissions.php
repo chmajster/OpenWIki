@@ -15,7 +15,7 @@ $inherits = !empty($page['inherit_acl']);
 <section class="content-container page-permissions" data-page-permissions>
     <nav class="breadcrumbs permissions-breadcrumbs" aria-label="<?= $e($t('Breadcrumbs')) ?>">
         <a href="<?= $e($spaceUrl) ?>"><?= $e($space['name']) ?></a><span aria-hidden="true">/</span>
-        <a href="<?= $e($pageUrl) ?>"><?= $e($page['title']) ?></a><span aria-hidden="true">/</span>
+        <a href="<?= $e($pageUrl) ?>" title="<?= $e($page['title']) ?>"><?= $e($page['title']) ?></a><span aria-hidden="true">/</span>
         <span aria-current="page"><?= $e($t('Permissions')) ?></span>
     </nav>
     <div class="page-heading permissions-heading">
@@ -103,7 +103,7 @@ $inherits = !empty($page['inherit_acl']);
                 <p class="permissions-form-help"><?= $e($t('Saving the same recipient and permission updates the existing rule.')) ?></p>
             </div>
             <p class="permissions-editing" data-rule-editing hidden></p>
-            <label><?= $e($t('Principal')) ?>
+            <label><?= $e($t('Recipient')) ?>
                 <select name="principal" required>
                     <option value=""><?= $e($t('Select user, group or role')) ?></option>
                     <optgroup label="<?= $e($t('Users')) ?>">
@@ -119,7 +119,7 @@ $inherits = !empty($page['inherit_acl']);
             </label>
             <label><?= $e($t('Permission')) ?>
                 <select name="permission" required>
-                    <?php foreach ($permissions as $permission): ?><option value="<?= $e($permission['name']) ?>"><?= $e($t($permissionLabels[$permission['name']] ?? $permission['name'])) ?> · <?= $e($permission['name']) ?></option><?php endforeach; ?>
+                    <?php foreach ($permissions as $permission): ?><option value="<?= $e($permission['name']) ?>" <?= $permission['name'] === 'page.view' ? 'selected' : '' ?>><?= $e($t($permissionLabels[$permission['name']] ?? $permission['name'])) ?> · <?= $e($permission['name']) ?></option><?php endforeach; ?>
                 </select>
             </label>
             <label><?= $e($t('Effect')) ?>
