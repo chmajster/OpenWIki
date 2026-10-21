@@ -39,7 +39,7 @@ $notificationCount = $currentUser === null
             <form class="top-search search-combobox" method="get" action="/search" role="search" data-search-form>
                 <label class="sr-only" for="global-search"><?= $e($t('Search')) ?></label>
                 <span class="search-icon"><?= $uiIcon('search') ?></span>
-                <input id="global-search" name="q" type="search" placeholder="<?= $e($t('Search documentation…')) ?>" value="<?= $e(is_scalar($_GET['q'] ?? '') ? ($_GET['q'] ?? '') : '') ?>" autocomplete="off" data-search-query aria-autocomplete="list" aria-controls="global-search-suggestions" aria-expanded="false">
+                <input id="global-search" name="q" type="search" placeholder="<?= $e($t('Search documentation…')) ?>" value="<?= $e($template === 'search/index' ? ($data['query'] ?? '') : '') ?>" autocomplete="off" data-search-query aria-autocomplete="list" aria-controls="global-search-suggestions" aria-expanded="false">
                 <ul id="global-search-suggestions" class="search-suggestions" role="listbox" aria-label="Podpowiedzi wyszukiwania" hidden></ul>
                 <span class="sr-only" data-search-suggestion-status role="status" aria-live="polite"></span>
                 <span class="shortcut">Ctrl K</span>

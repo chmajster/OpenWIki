@@ -26,6 +26,7 @@ test('directory filters, display modes, sorting, and pages survive reload with r
     await api(request, 'put', 'spaces/' + created[13].id, {status: 'archived'});
     await login(page); await page.goto('/?view=spaces');
     await form(page).locator('[name=q]').fill(prefix); await form(page).getByRole('button', {name: 'Apply filters', exact: true}).click();
+    await expect(page.locator('#global-search')).toHaveValue('');
     await expect(page.locator('[data-listing-total]')).toHaveAttribute('data-listing-total', '13');
     await expect(page.locator('.home-space-card')).toHaveCount(12);
     await page.getByRole('link', {name: 'Next', exact: true}).click(); await expect(page.locator('.home-space-card')).toHaveCount(1);
@@ -63,6 +64,8 @@ test('space content links, filters, counts, and navigation use exactly the selec
     for (let i = 0; i < 13; i++) await document(request, target, 'Guide ' + String(i).padStart(2, '0'));
     await document(request, other, 'Guide outsider');
     await login(page); await page.goto('/spaces/' + target.key);
+    await page.locator('.space-action-menu > summary').click(); await page.getByRole('button', {name: 'Watch space', exact: true}).click();
+    await page.locator('.space-action-menu > summary').click(); await expect(page.getByRole('button', {name: 'Stop watching', exact: true})).toBeVisible(); await page.keyboard.press('Escape');
     await page.locator('.workspace-tabs').getByRole('link', {name: 'Content', exact: true}).click();
     await expect(page.locator('[data-listing-total]')).toHaveAttribute('data-listing-total', '13'); await expect(page.locator('[data-content-page]')).toHaveCount(12);
     await expect(page.locator('[data-space-content]')).not.toContainText('Guide outsider');

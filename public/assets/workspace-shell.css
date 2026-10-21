@@ -154,6 +154,10 @@
 .space-overview .page-heading .page-actions { margin-top: 24px; flex-wrap: wrap; }
 .space-overview .page-heading h1 { font-size: 32px; }
 .space-overview .lead { font-size: 14px; }
+.space-action-menu { position: relative; }
+.space-action-menu > summary { list-style: none; cursor: pointer; }
+.space-action-menu > summary::-webkit-details-marker { display: none; }
+.workspace-shell .space-heading--content h1 { margin-top: 18px; }
 .space-welcome { margin-top: 32px; padding: 32px !important; }
 .space-welcome-icon { display: flex; color: var(--accent); margin-bottom: 22px; }
 .space-welcome-icon .ui-icon { width: 32px; height: 32px; }
