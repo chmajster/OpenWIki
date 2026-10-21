@@ -36,10 +36,10 @@ $pageUrl = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlen
                     </div>
                 </details>
                 <a class="button button--ghost" href="<?= $e($pageUrl) ?>/history"><?= $e($t('History')) ?></a>
+                <details class="page-menu" data-close-on-escape><summary class="button button--ghost" aria-label="<?= $e($t('More actions')) ?>" title="<?= $e($t('More actions')) ?>"><span aria-hidden="true">•••</span></summary><div class="menu-items">
                 <?php if (!empty($canManagePermissions)): ?>
                     <a class="button button--ghost" href="<?= $e($pageUrl) ?>/permissions"><?= $e($t('Permissions')) ?></a>
                 <?php endif; ?>
-                <details class="page-menu" data-close-on-escape><summary class="button button--ghost" aria-label="<?= $e($t('More actions')) ?>" title="<?= $e($t('More actions')) ?>"><span aria-hidden="true">•••</span></summary><div class="menu-items">
                 <?php if ($canMove || $canCopy): ?><button type="button" class="button button--ghost" data-structure-page="<?= $e(json_encode(['id' => (int) $page['id'], 'title' => $page['title'], 'version' => $headVersion, 'parent_id' => $visibleParentId, 'space_id' => (int) $space['id'], 'can_move' => $canMove, 'can_copy' => $canCopy], JSON_THROW_ON_ERROR)) ?>">Przenieś lub kopiuj</button><?php endif; ?>
                 <?php if ($currentUser !== null): ?>
 
