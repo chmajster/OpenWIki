@@ -103,7 +103,8 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
     const confirmation = form?.elements.namedItem('admin_password_confirmation');
     const validatePassword = () => {
         confirmation?.setCustomValidity(confirmation.value !== password?.value ? t('Administrator passwords do not match.') : '');
-        password?.setCustomValidity(new TextEncoder().encode(password.value).length > 72 ? t('Administrator password must contain 12-72 bytes and no null characters.') : '');
+        password?.setCustomValidity(Array.from(password.value).length < 12 || new TextEncoder().encode(password.value).length > 72
+            ? t('Administrator password must contain at least 12 characters, at most 72 bytes and no null characters.') : '');
     };
     password?.addEventListener('input', validatePassword);
     confirmation?.addEventListener('input', validatePassword);

@@ -402,7 +402,7 @@ return [
     'Confirm administrator password' => 'Powtórz hasło administratora',
     'Use a unique password containing at least 12 characters (up to 72 bytes).' => 'Użyj unikalnego hasła o długości co najmniej 12 znaków (do 72 bajtów).',
     'Administrator passwords do not match.' => 'Hasła administratora nie są zgodne.',
-    'Administrator password must contain 12-72 bytes and no null characters.' => 'Hasło administratora musi mieć od 12 do 72 bajtów i nie może zawierać znaku null.',
+    'Administrator password must contain at least 12 characters, at most 72 bytes and no null characters.' => 'Hasło administratora musi mieć co najmniej 12 znaków, najwyżej 72 bajty i nie może zawierać znaku null.',
     'Administrator email is invalid.' => 'Adres e-mail administratora jest nieprawidłowy.',
     'Administrator username must contain 3-100 safe characters.' => 'Login administratora musi mieć od 3 do 100 znaków: liter, cyfr, kropek, myślników lub podkreśleń.',
     'Installing OpenWiki. Keep this page open until setup finishes.' => 'Trwa instalacja OpenWiki. Pozostaw tę stronę otwartą do zakończenia instalacji.',

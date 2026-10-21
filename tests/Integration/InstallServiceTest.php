@@ -159,7 +159,7 @@ final class InstallServiceTest extends TestCase
     public function testInvalidInputIsRejectedBeforeDatabaseChanges(): void
     {
         $service = new InstallService($this->basePath);
-        foreach ([['db_host' => 'localhost;dbname=other'], ['admin_password' => 'admin'], ['admin_password' => str_repeat('x', 73)],
+        foreach ([['db_host' => 'localhost;dbname=other'], ['admin_password' => 'admin'], ['admin_password' => str_repeat('x', 73)], ['admin_password' => str_repeat('🙂', 6)],
             ['admin_email' => 'invalid'], ['app_url' => 'https://example.test/subdirectory'], ['db_database' => str_repeat('x', 65)], ['app_name' => ['invalid']]] as $invalid) {
             try { $service->install(array_replace($this->input(), $invalid)); self::fail('Invalid input accepted.'); }
             catch (\InvalidArgumentException) { self::assertSame([], $this->database()->fetchAll('SHOW TABLES')); }

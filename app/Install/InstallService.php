@@ -258,9 +258,9 @@ final class InstallService
             throw new \InvalidArgumentException('Administrator email is invalid.');
         }
 
-        if (strlen($password) < 12 || strlen($password) > 72 || str_contains($password, "\0")) {
+        if (mb_strlen($password, 'UTF-8') < 12 || strlen($password) > 72 || str_contains($password, "\0")) {
             throw new \InvalidArgumentException(
-                'Administrator password must contain 12-72 bytes and no null characters.'
+                'Administrator password must contain at least 12 characters, at most 72 bytes and no null characters.'
             );
         }
         foreach (['admin_first_name', 'admin_last_name'] as $name) {
