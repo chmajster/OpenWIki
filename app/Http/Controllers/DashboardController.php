@@ -8,7 +8,6 @@ use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Http\Controller;
 use OpenWiki\Permissions\PageAclService;
-use OpenWiki\Permissions\SpaceAccessService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Wiki\PageEngagementService;
@@ -18,11 +17,17 @@ final class DashboardController extends Controller
     public function index(Request $request): Response
     {
         $user = $this->app->auth()->user();
-        try { $workCenter = $user === null ? null : (new \OpenWiki\Wiki\WorkCenterService($this->app->database()))->items((array)$request->query(),(int)$user['id']); }
-        catch (\InvalidArgumentException $error) { return $this->render('errors/404',['title'=>$error->getMessage()],422); }
+        $view = $request->query('view', array_intersect(array_keys((array) $request->query()), ['attention', 'type', 'status', 'deadline', 'sort', 'space', 'page']) !== [] ? 'work' : 'home');
+        if (!is_string($view) || !in_array($view, ['home', 'recent', 'favorites', 'work', 'spaces'], true)) {
+            return $this->render('errors/404', ['title' => 'Page not found'], 404);
+        }
+        if ($user === null && in_array($view, ['recent', 'favorites', 'work'], true)) return Response::redirect('/login');
+        try { $workCenter = $user === null || !in_array($view, ['home', 'work'], true) ? null : (new \OpenWiki\Wiki\WorkCenterService($this->app->database()))->items((array)$request->query(),(int)$user['id']); }
+        catch (\InvalidArgumentException $error) {
+            return $this->render('errors/422', ['title' => 'Invalid filters', 'message' => $error->getMessage(), 'dashboardView' => 'work'], 422);
+        }
         $spaceRepository = new SpaceRepository($this->app->database());
         $pageRepository = new PageRepository($this->app->database());
-        $access = new SpaceAccessService($this->app);
         $pageAccess = new PageAclService($this->app);
 
         $spaces = $spaceRepository->visibleFor(
@@ -31,7 +36,7 @@ final class DashboardController extends Controller
         );
 
         $recentUpdated = [];
-        foreach ($pageRepository->recentUpdated(30) as $page) {
+        foreach ($view === 'home' ? $pageRepository->recentUpdated(30) : [] as $page) {
             $space = [
                 'id' => (int) $page['space_id'],
                 'owner_id' => (int) $page['space_owner_id'],
@@ -64,14 +69,15 @@ final class DashboardController extends Controller
         };
 
         return $this->render('dashboard/index', [
-            'title' => $user === null ? 'Dashboard' : 'Work center',
+            'title' => ['home' => 'Home', 'recent' => 'Recently viewed', 'favorites' => 'Favorites', 'work' => 'Your work', 'spaces' => 'Spaces'][$view],
+            'dashboardView' => $view,
             'workCenter' => $workCenter,
             'spaces' => $spaces,
             'recentUpdated' => $recentUpdated,
-            'recentViewed' => $user === null ? [] : $filterAccessible(
+            'recentViewed' => $user === null || !in_array($view, ['home', 'recent'], true) ? [] : $filterAccessible(
                 $pageRepository->recentForUser((int) $user['id'], 20)
             ),
-            'favorites' => $user === null ? [] : $filterAccessible(
+            'favorites' => $user === null || $view !== 'favorites' ? [] : $filterAccessible(
                 (new PageEngagementService($this->app->database()))->favoritesForUser((int) $user['id'], 20)
             ),
             'canCreateSpace' => $this->app->auth()->can('space.create'),

@@ -179,7 +179,7 @@ test('real fragment discussion, reply, resolve, reopen and assigned task survive
     await dialog.locator('[data-task-history-section] summary').click();await expect(dialog.locator('[data-task-history]')).toContainText('Version 2');
     const tasks=await api(request,'get','pages/'+document.id+'/tasks');expect(tasks).toHaveLength(1);expect(Number(tasks[0].thread_id)).toBeGreaterThan(0);
     const assigneeContext=await browser.newContext();const assigneePage=await assigneeContext.newPage();
-    try{await login(assigneePage,1);await expect(assigneePage.locator('[data-work-center]')).toContainText('Validate recovery');
+    try{await login(assigneePage,1);await assigneePage.goto('/?view=work');await expect(assigneePage.locator('[data-work-center]')).toContainText('Validate recovery');
         await assigneePage.locator('[data-work-center] [name=type]').selectOption('task');await assigneePage.getByRole('button',{name:'Apply filters'}).click();
         await expect(assigneePage).toHaveURL(/type=task/);await expect(assigneePage.locator('[data-work-center]')).toContainText('Validate recovery');
         await assigneePage.screenshot({path:'storage/temp/collaboration-work-center.png'});

@@ -1,63 +1,36 @@
 <?php
+require __DIR__ . '/../partials/ui-icons.php';
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 ?>
-<section class="wiki-layout">
-    <details class="wiki-sidebar" data-page-panel open>
-        <summary class="sidebar-toggle"><?= $e($t('Pages')) ?></summary>
-        <div class="sidebar-body">
-        <div class="sidebar-heading">
-            <a href="/spaces/<?= rawurlencode($space['space_key']) ?>">
-                <span class="space-key"><?= $e($space['space_key']) ?></span>
-                <strong><?= $e($space['name']) ?></strong>
-            </a>
-        </div>
-        <nav aria-label="<?= $e($t('Pages')) ?>">
-            <?php $activePageId = (int) $page['id']; require __DIR__ . '/../partials/page-tree.php'; ?>
-        </nav>
-        </div>
-    </details>
-
+<section class="wiki-layout reader-layout">
     <article class="wiki-content">
-        <div class="page-heading page-heading--compact">
-            <div>
+        <div class="reader-toolbar">
                 <div class="breadcrumbs">
                     <a href="/spaces/<?= rawurlencode($space['space_key']) ?>"><?= $e($space['name']) ?></a>
                     <?php foreach ($breadcrumbs as $crumb): ?><span>/</span><?php if ($crumb['url'] === null): ?><span><?= $e($crumb['title']) ?></span><?php else: ?><a href="<?= $e($crumb['url']) ?>"><?= $e($crumb['title']) ?></a><?php endif; ?><?php endforeach; ?>
                     <span>/</span>
                     <span><?= $e($page['title']) ?></span>
                 </div>
-                <h1><?= $e($page['title']) ?></h1>
-                <div class="page-meta">
-                    <span class="status-pill status-pill--<?= $e($page['status']) ?>"><?= $e($t($page['status'])) ?></span>
-                    <span><?= $e($t('Version')) ?> <?= (int) $page['version'] ?></span>
-                    <span><?= $e($t('Created by')) ?> <?= $e($page['author_username']) ?></span>
-                    <span><?= $e($t('Updated')) ?> <?= $e($page['updated_at']) ?></span>
-                </div>
-                <?php if ($tags !== []): ?>
-                    <div class="tag-list" aria-label="<?= $e($t('Tags')) ?>">
-                        <?php foreach ($tags as $tag): ?>
-                            <a class="tag-chip" href="/tags/<?= rawurlencode($tag['slug']) ?>">#<?= $e($tag['name']) ?></a>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-            </div>
             <div class="page-actions">
+                <?php if ($currentUser !== null): ?>
+                    <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/favorite">
+                        <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                        <input type="hidden" name="enabled" value="<?= $isFavorite ? '0' : '1' ?>">
+                        <button class="shell-icon-button favorite-action" type="submit" aria-pressed="<?= $isFavorite ? 'true' : 'false' ?>" aria-label="<?= $e($t($isFavorite ? 'Unfavorite' : 'Favorite')) ?>"><?= $uiIcon('star') ?><span class="sr-only"><?= $e($t($isFavorite ? 'Unfavorite' : 'Favorite')) ?></span></button>
+                    </form>
+                <?php endif; ?>
                 <?php if ($canEdit): ?>
-                    <a class="button button--primary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit"><?= $e($t('Edit')) ?></a>
+                    <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit"><?= $uiIcon('edit') ?><?= $e($t('Edit')) ?></a>
                 <?php endif; ?>
 
                 <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/history"><?= $e($t('History')) ?></a>
                 <?php if (!empty($canManagePermissions)): ?>
                     <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/permissions"><?= $e($t('Permissions')) ?></a>
                 <?php endif; ?>
-                <details class="page-menu" data-close-on-escape><summary class="button button--ghost"><?= $e($t('More actions')) ?></summary><div class="menu-items">
+                <details class="page-menu" data-close-on-escape><summary class="button button--ghost" aria-label="<?= $e($t('More actions')) ?>" title="<?= $e($t('More actions')) ?>"><span aria-hidden="true">•••</span></summary><div class="menu-items">
                 <?php if ($canMove || $canCopy): ?><button type="button" class="button button--ghost" data-structure-page="<?= $e(json_encode(['id' => (int) $page['id'], 'title' => $page['title'], 'version' => $headVersion, 'parent_id' => $visibleParentId, 'space_id' => (int) $space['id'], 'can_move' => $canMove, 'can_copy' => $canCopy], JSON_THROW_ON_ERROR)) ?>">Przenieś lub kopiuj</button><?php endif; ?>
                 <?php if ($currentUser !== null): ?>
-                    <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/favorite">
-                        <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                        <input type="hidden" name="enabled" value="<?= $isFavorite ? '0' : '1' ?>">
-                        <button class="button button--ghost" type="submit"><?= $e($t($isFavorite ? 'Unfavorite' : 'Favorite')) ?></button>
-                    </form>
+
                     <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/watch">
                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                         <input type="hidden" name="enabled" value="<?= $isWatching ? '0' : '1' ?>">
@@ -81,10 +54,26 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                 </div></details>
             </div>
         </div>
+        <header class="reader-heading">
+                <h1><?= $e($page['title']) ?></h1>
+                <div class="page-meta">
+                    <span class="status-pill status-pill--<?= $e($page['status']) ?>"><?= $e($t($page['status'])) ?></span>
+                    <span><?= $e($t('Version')) ?> <?= (int) $page['version'] ?></span>
+                    <span><?= $e($t('Created by')) ?> <?= $e($page['author_username']) ?></span>
+                    <span><?= $e($t('Updated')) ?> <?= $e($page['updated_at']) ?></span>
+                </div>
+                <?php if ($tags !== []): ?>
+                    <div class="tag-list" aria-label="<?= $e($t('Tags')) ?>">
+                        <?php foreach ($tags as $tag): ?>
+                            <a class="tag-chip" href="/tags/<?= rawurlencode($tag['slug']) ?>">#<?= $e($tag['name']) ?></a>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+        </header>
 
-        <div class="card panel" data-knowledge-status><p>Właściciel merytoryczny: <?= $e($contentOwnerName) ?>. Termin przeglądu: <?= $e($page['review_due_at'] ?? 'Nie wyznaczono') ?>. <?= $page['review_due_at'] !== null && $page['review_due_at'] < gmdate('Y-m-d') ? 'Dokument wymaga przeglądu.' : '' ?> Potwierdzenie aktualności: <?= (int) ($page['verified_revision'] ?? 0) === (int) $page['version'] ? $e($page['verified_at']) : 'Brak dla tej rewizji' ?>.</p>
+        <details class="knowledge-status" data-knowledge-status><summary><?= $e($t('Content health')) ?></summary><div><p>Właściciel merytoryczny: <?= $e($contentOwnerName) ?>. Termin przeglądu: <?= $e($page['review_due_at'] ?? 'Nie wyznaczono') ?>. <?= $page['review_due_at'] !== null && $page['review_due_at'] < gmdate('Y-m-d') ? 'Dokument wymaga przeglądu.' : '' ?> Potwierdzenie aktualności: <?= (int) ($page['verified_revision'] ?? 0) === (int) $page['version'] ? $e($page['verified_at']) : 'Brak dla tej rewizji' ?>.</p>
         <?php if (!empty($canReadWorking)): ?><a class="button" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/review">Obieg i aktualność · robocza rewizja <?= (int) $headVersion ?></a><?php endif; ?>
-        <a href="/knowledge/overdue">Dokumenty po terminie przeglądu</a></div>
+        <a href="/knowledge/overdue">Dokumenty po terminie przeglądu</a></div></details>
         <div class="document-layout <?= !empty($tableOfContents) ? 'document-layout--with-toc' : '' ?>">
             <div class="document card document-content" data-document-content>
                 <?= $renderedContent ?>

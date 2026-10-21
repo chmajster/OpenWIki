@@ -20,11 +20,12 @@ final class SpaceRepository
         );
     }
 
-    public function visibleFor(?int $userId, bool $superAdmin): array
+    public function visibleFor(?int $userId, bool $superAdmin, ?int $limit = null): array
     {
+        $limitSql = $limit === null ? '' : ' LIMIT ' . max(1, min(1000, $limit));
         if ($superAdmin) {
             return $this->database->fetchAll(
-                'SELECT * FROM spaces WHERE deleted_at IS NULL ORDER BY status, name ASC'
+                'SELECT * FROM spaces WHERE deleted_at IS NULL ORDER BY status, name ASC' . $limitSql
             );
         }
 
@@ -32,7 +33,7 @@ final class SpaceRepository
             return $this->database->fetchAll(
                 'SELECT * FROM spaces
                  WHERE deleted_at IS NULL AND visibility = "public"
-                 ORDER BY name ASC'
+                 ORDER BY name ASC' . $limitSql
             );
         }
 
@@ -80,7 +81,7 @@ final class SpaceRepository
                           ))
                       )
                ))
-             ORDER BY s.name ASC',
+             ORDER BY s.name ASC' . $limitSql,
             [$userId, $userId, $userId, $userId, $userId, $userId, $userId, $userId]
         );
     }

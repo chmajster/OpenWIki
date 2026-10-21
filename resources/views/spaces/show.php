@@ -1,30 +1,14 @@
 <?php
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+require __DIR__ . '/../partials/ui-icons.php';
 ?>
-<section class="wiki-layout">
-    <details class="wiki-sidebar" data-page-panel open>
-        <summary class="sidebar-toggle"><?= $e($t('Pages')) ?></summary>
-        <div class="sidebar-body">
-        <div class="sidebar-heading">
-            <a href="/spaces/<?= rawurlencode($space['space_key']) ?>">
-                <span class="space-key"><?= $e($space['space_key']) ?></span>
-                <strong><?= $e($space['name']) ?></strong>
-            </a>
-        </div>
-        <nav aria-label="<?= $e($t('Pages')) ?>">
-            <?php $activePageId = null; require __DIR__ . '/../partials/page-tree.php'; ?>
-        </nav>
-        <?php if ($canCreatePage): ?>
-            <a class="button button--secondary button--block" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create"><?= $e($t('Create page')) ?></a>
-        <?php endif; ?>
-        </div>
-    </details>
-
+<section class="wiki-layout space-overview">
     <article class="wiki-content">
         <div class="page-heading">
             <div>
-                <div class="eyebrow"><?= $e(['public' => 'Publiczna', 'private' => 'Prywatna', 'restricted' => 'Ograniczona'][$space['visibility']]) ?> przestrzeń · <?= $space['status'] === 'archived' ? 'Archiwum' : 'Aktywna' ?></div>
-                <h1><?= $e($space['icon'] ?? '') ?> <?= $e($space['name']) ?></h1>
+                <div class="breadcrumbs"><a href="/?view=spaces"><?= $e($t('Spaces')) ?></a><span>/</span><span><?= $e($space['space_key']) ?></span></div>
+                <div class="space-overview-badge"><span class="space-avatar space-avatar--large" aria-hidden="true"><?= $e($space['icon'] ?: mb_substr($space['name'], 0, 1)) ?></span><span class="status-pill"><?= $e($t(ucfirst($space['visibility']))) ?> · <?= $e($t($space['status'] === 'archived' ? 'Archived' : 'Active')) ?></span></div>
+                <h1><?= $e($space['name']) ?></h1>
                 <?php if ($space['description']): ?>
                     <p class="lead"><?= nl2br($e($space['description'])) ?></p>
                 <?php endif; ?>
@@ -47,9 +31,12 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             </div>
         </div>
 
-        <div class="card panel">
+        <nav class="workspace-tabs" aria-label="<?= $e($t('Space navigation')) ?>"><a href="/spaces/<?= rawurlencode($space['space_key']) ?>" aria-current="page"><?= $e($t('Overview')) ?></a><a href="/search?space=<?= rawurlencode($space['space_key']) ?>&amp;type=page"><?= $e($t('Search')) ?></a></nav>
+        <div class="space-welcome card panel">
+            <span class="space-welcome-icon" aria-hidden="true"><?= $uiIcon('book') ?></span>
             <?php if ($homePage !== null): ?><h2>Strona startowa</h2><a href="<?= $e(\OpenWiki\Spaces\DocumentationTreeService::url($space, $homePage)) ?>"><?= $e($homePage['title']) ?></a><?php else: ?><h2>Dokumentacja</h2><p>Wybierz stronę z drzewa lub wyszukaj ją w tej przestrzeni. Strzałki rozwijają gałęzie; F2 otwiera operacje strony.</p><?php endif; ?>
             <?php if ($space['status'] === 'archived'): ?><p role="status">Archiwum jest dostępne do odczytu zgodnie z dotychczasowymi uprawnieniami. Aby edytować dokumenty, przywróć przestrzeń w ustawieniach.</p><?php endif; ?>
+            <div class="collaboration-actions"><button class="button button--secondary" type="button" data-navigation-open hidden><?= $uiIcon('panel') ?><?= $e($t('Browse pages')) ?></button><a class="button button--ghost" href="/search?space=<?= rawurlencode($space['space_key']) ?>&amp;type=page"><?= $uiIcon('search') ?><?= $e($t('Search this space')) ?></a><?php if ($canCreatePage): ?><a class="button button--primary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create"><?= $uiIcon('plus') ?><?= $e($t('Create page')) ?></a><?php endif; ?></div>
         </div>
     </article>
 </section>

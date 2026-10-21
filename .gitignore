@@ -1,4 +1,5 @@
 /.env
+/.env.tmp-*
 /vendor/
 /.openwiki/
 /current
@@ -18,6 +19,8 @@
 /.phpunit.cache/
 .phpunit.result.cache
 /storage/installed.lock
+/storage/installation.*
+/storage/installed.lock.tmp-*
 /public/assets/wiki-editor.js
 /public/assets/diagram.js
 /public/assets/document-reader.js

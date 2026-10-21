@@ -85,7 +85,7 @@ test('phone tree, copy dialog and cross-space access preview preserve document r
     expect(upload.ok(), await upload.text()).toBeTruthy(); const attachment = (await upload.json()).data;
     await api(request, 'patch', `pages/${root.id}`, {base_version: root.version, content_html: `<p>Dokumentacja</p><figure><img src="/attachments/${attachment.id}/preview" data-attachment-id="${attachment.id}" alt="Schemat" width="96" height="96"><figcaption>Podpis schematu</figcaption></figure>`});
     await page.context().clearCookies(); await login(page, 1);
-    await page.goto(`/spaces/${source.key}`); const panel = page.locator('[data-page-panel]'); await expect(panel).not.toHaveAttribute('open', ''); await panel.locator('summary').click(); await expect(node(page, root.id)).toBeVisible();
+    await page.goto(`/spaces/${source.key}`); const panel = page.locator('[data-page-panel]'); await expect(panel).toBeHidden(); await page.locator('[data-navigation-toggle]').click(); await expect(node(page, root.id)).toBeVisible();
     await node(page, root.id).locator('.tree-operation').click(); await expect(dialog(page)).toBeVisible(); await expect(dialog(page).locator('[name=action]')).toBeEnabled();
     await dialog(page).locator('[name=action]').selectOption('copy'); await dialog(page).locator('[name=destination_space_id]').selectOption(String(target.id)); await dialog(page).locator('[name=title]').fill('Phone copied'); await prepare(page);
     await expect(dialog(page).locator('[data-structure-effects]')).toContainText('Gość'); await page.screenshot({path: 'storage/temp/space-operation-phone.png'}); await commit(page);
