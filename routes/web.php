@@ -66,6 +66,7 @@ $router->get('/spaces/{spaceKey}/access', [SpaceController::class, 'access']);
 $router->post('/spaces/{spaceKey}/access', [SpaceController::class, 'access']);
 $router->get('/spaces/{spaceKey}/principals', [SpaceController::class, 'principals']);
 
+$router->get('/spaces/{spaceKey}/templates', [PageController::class, 'templates']);
 $router->get('/spaces/{spaceKey}/pages/create', [PageController::class, 'create']);
 $router->post('/spaces/{spaceKey}/pages', [PageController::class, 'store']);
 $router->get('/spaces/{spaceKey}/pages/{slug}', [PageController::class, 'show']);

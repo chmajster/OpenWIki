@@ -16,11 +16,12 @@ use OpenWiki\Repositories\SpaceRepository;
 use OpenWiki\Wiki\CommentService;
 use OpenWiki\Wiki\MacroService;
 use OpenWiki\Wiki\PageEngagementService;
+use OpenWiki\Wiki\TemplateGallery;
 use OpenWiki\Wiki\WikiMetadataService;
 
 final class PageController extends Controller
 {
-    public function create(Request $request, string $spaceKey): Response
+    private function creationContext(Request $request, string $spaceKey): array|Response
     {
         if (($failure = $this->authorize($request, 'page.create')) !== null) {
             return $failure;
@@ -39,10 +40,44 @@ final class PageController extends Controller
 
         $parent = null;
         if ($request->query('parent') !== null) {
-            $parentId = filter_var($request->query('parent'), FILTER_VALIDATE_INT);
+            $value = $request->query('parent');
+            $parentId = is_string($value) || is_int($value) ? filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) : false;
             $parent = $parentId === false ? null : (new PageRepository($this->app->database()))->findById($parentId);
             if ($parent === null || (int) $parent['space_id'] !== (int) $space['id'] || !$this->pageWritePolicy($space)('page.view', $parent)
                 || !$this->pageWritePolicy($space)('page.create', $parent)) return $this->render('errors/404', ['title' => 'Page not found'], 404);
+        }
+
+        return ['space' => $space, 'templates' => $templates, 'parent' => $parent];
+    }
+
+    public function templates(Request $request, string $spaceKey): Response
+    {
+        $context = $this->creationContext($request, $spaceKey);
+        if ($context instanceof Response) return $context;
+        $base = '/spaces/' . rawurlencode($context['space']['space_key']) . '/templates';
+        $resetUrl = $base . ($context['parent'] === null ? '' : '?parent=' . (int) $context['parent']['id']);
+        try {
+            $listing = TemplateGallery::browse($context['templates'], (array) $request->query());
+        } catch (\InvalidArgumentException $exception) {
+            return $this->render('errors/422', ['title' => 'Invalid filters', 'message' => $exception->getMessage(), 'resetUrl' => $resetUrl], 422);
+        }
+        $preview = null;
+        if ($request->query('preview') !== null) {
+            $preview = TemplateGallery::select($context['templates'], $request->query('preview'));
+            if ($preview === null) return $this->render('errors/404', ['title' => 'Template not found.'], 404);
+        }
+        return $this->render('pages/templates', $context + ['title' => 'Templates', 'spaceTab' => 'templates', 'canCreatePage' => true, 'listing' => $listing, 'preview' => $preview]);
+    }
+
+    public function create(Request $request, string $spaceKey): Response
+    {
+        $context = $this->creationContext($request, $spaceKey);
+        if ($context instanceof Response) return $context;
+        ['space' => $space, 'templates' => $templates, 'parent' => $parent] = $context;
+        $initialTemplate = null;
+        if ($request->query('template') !== null) {
+            $initialTemplate = TemplateGallery::select($templates, $request->query('template'));
+            if ($initialTemplate === null) return $this->render('errors/404', ['title' => 'Template not found.'], 404);
         }
 
         return $this->render('pages/editor', [
@@ -52,6 +87,7 @@ final class PageController extends Controller
             'serverDraft' => null,
             'pages' => $this->visibleTree($space),
             'templates' => $templates,
+            'initialTemplate' => $initialTemplate,
             'tags' => [],
             'initialParentId' => $parent['id'] ?? null,
             'workspaceSpaces' => (new \OpenWiki\Wiki\PageWorkspaceService($this->app))->spaces(),

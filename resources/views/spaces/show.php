@@ -33,7 +33,7 @@ require __DIR__ . '/../partials/ui-icons.php';
             </div>
         </div>
 
-        <nav class="workspace-tabs" aria-label="<?= $e($t('Space navigation')) ?>"><a href="/spaces/<?= rawurlencode($space['space_key']) ?>"<?= $spaceTab === 'overview' ? ' aria-current="page"' : '' ?>><?= $e($t('Overview')) ?></a><a href="/spaces/<?= rawurlencode($space['space_key']) ?>?tab=content"<?= $spaceTab === 'content' ? ' aria-current="page"' : '' ?>><?= $e($t('Content')) ?></a><a href="/search?space=<?= rawurlencode($space['space_key']) ?>&amp;type=page"><?= $e($t('Search')) ?></a></nav>
+        <?php require __DIR__ . '/../partials/space-tabs.php'; ?>
         <?php if ($spaceTab === 'content'): require __DIR__ . '/../partials/space-content.php'; else: ?>
         <div class="space-welcome card panel">
             <span class="space-welcome-icon" aria-hidden="true"><?= $uiIcon('book') ?></span>

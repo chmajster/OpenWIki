@@ -216,6 +216,49 @@
 .browse-current { background: var(--accent-soft); color: var(--accent-label); border: 1px solid transparent; }
 .browse-pagination [aria-disabled=true] { opacity: .45; cursor: default; }
 .content-document-list .status-pill { font-size: 10px; flex-shrink: 0; }
+.template-gallery .page-heading { align-items: flex-start; }
+.template-gallery .page-heading h1 { margin-top: 16px; }
+.template-gallery .page-heading > .button { flex-shrink: 0; }
+.template-parent { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.template-gallery-filters .browse-query { flex-basis: 280px; }
+.template-gallery-filters label:not(.browse-query) { max-width: 220px; }
+.template-gallery-layout { min-width: 0; }
+.template-gallery-layout--preview { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(300px, 1fr); align-items: start; gap: 24px; }
+.template-gallery-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.template-gallery-layout--preview .template-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.template-gallery-card { min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.template-gallery-card:hover, .template-gallery-card.is-selected { border-color: var(--accent); }
+.template-gallery-card.is-selected { box-shadow: 0 0 0 1px var(--accent); }
+.template-gallery-thumbnail { display: flex; align-items: flex-start; gap: 14px; height: 165px; padding: 20px 18px 0; overflow: hidden; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.template-gallery-thumbnail > .ui-icon { margin-top: 8px; color: var(--accent); width: 26px; height: 26px; }
+.template-category--team { background: var(--success-soft); }
+.template-category--operations { background: var(--warning-soft); }
+.template-category--custom { background: var(--accent-soft); }
+.template-miniature { flex: 1; min-width: 0; min-height: 180px; padding: 15px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px 4px 0 0; box-shadow: 0 6px 14px #0001; }
+.template-miniature strong { display: block; font-size: 10px; margin-bottom: 14px; overflow-wrap: anywhere; }
+.template-miniature span { display: block; color: var(--muted); font-size: 8px; margin-top: 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.template-miniature i { display: block; height: 3px; margin-top: 6px; max-width: 85%; background: var(--border); border-radius: 2px; }
+.template-gallery-description { padding: 18px 18px 4px; flex: 1; }
+.template-gallery-category { color: var(--muted); font-size: 10px; font-weight: 500; }
+.template-gallery-card h2 { font-size: 15px; line-height: 1.4; margin: 8px 0; overflow-wrap: anywhere; }
+.template-gallery-card p { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 8px 0; overflow-wrap: anywhere; }
+.template-gallery-actions { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; padding: 10px 14px 16px; }
+.template-gallery-actions .button { font-size: 12px; padding: 6px 8px; }
+.template-full-preview { min-width: 0; padding: 24px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); scroll-margin-top: calc(var(--header-height) + 20px); }
+.template-full-preview > header { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.template-full-preview h2 { font-size: 20px; margin: 8px 0 0; overflow-wrap: anywhere; }
+.template-full-preview > p { font-size: 12px; line-height: 1.7; }
+.template-preview-document { border-top: 1px solid var(--border) !important; margin-top: 24px; padding-top: 24px !important; font-size: 13px !important; }
+@media (max-width: 1199px) {
+    .template-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .template-gallery-layout--preview { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+    .template-gallery .page-heading { flex-direction: column; gap: 12px; }
+    .template-gallery-grid, .template-gallery-layout--preview .template-gallery-grid { grid-template-columns: minmax(0, 1fr); }
+    .template-gallery-filters label:not(.browse-query) { max-width: none; }
+    .template-full-preview { padding: 18px; }
+}
 @media (max-width: 1199px) {
     .workspace-shell .brand { margin-right: 10px; }
     .workspace-shell .document-layout--with-toc { grid-template-columns: minmax(0, 1fr); }

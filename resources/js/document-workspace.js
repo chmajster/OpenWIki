@@ -48,7 +48,7 @@ export function setupDocumentWorkspace({root, editor, form, requestJson, snapsho
     mobile.addEventListener('change', () => showTree(!mobile.matches && preferences.tree !== false));
     let manualTemplates = false;
     const showTemplates = value => { templates.hidden = !value; root.dataset.templatesOpen = String(value); };
-    showTemplates(root.dataset.isEdit !== '1' && !mobile.matches);
+    showTemplates(root.dataset.isEdit !== '1' && !root.dataset.initialTemplate && !mobile.matches);
     q('[data-toggle-templates]').onclick = () => { manualTemplates = true; showTemplates(templates.hidden); closeMenus(); };
     q('[data-close-templates]').onclick = () => { manualTemplates = false; showTemplates(false); };
     editor.on('update', () => {
