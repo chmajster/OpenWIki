@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/../partials/ui-icons.php';
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$pageUrl = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($page['slug']);
 ?>
 <section class="wiki-layout reader-layout">
     <article class="wiki-content">
@@ -13,19 +14,30 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                 </div>
             <div class="page-actions">
                 <?php if ($currentUser !== null): ?>
-                    <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/favorite">
+                    <form class="inline-form" method="post" action="<?= $e($pageUrl) ?>/favorite">
                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                         <input type="hidden" name="enabled" value="<?= $isFavorite ? '0' : '1' ?>">
                         <button class="shell-icon-button favorite-action" type="submit" aria-pressed="<?= $isFavorite ? 'true' : 'false' ?>" aria-label="<?= $e($t($isFavorite ? 'Unfavorite' : 'Favorite')) ?>"><?= $uiIcon('star') ?><span class="sr-only"><?= $e($t($isFavorite ? 'Unfavorite' : 'Favorite')) ?></span></button>
                     </form>
                 <?php endif; ?>
                 <?php if ($canEdit): ?>
-                    <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/edit"><?= $uiIcon('edit') ?><?= $e($t('Edit')) ?></a>
+                    <a class="button button--ghost" href="<?= $e($pageUrl) ?>/edit"><?= $uiIcon('edit') ?><?= $e($t('Edit')) ?></a>
                 <?php endif; ?>
 
-                <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/history"><?= $e($t('History')) ?></a>
+                <details class="reader-share" data-reader-share data-close-on-escape>
+                    <summary class="button button--ghost"><?= $uiIcon('link') ?><?= $e($t('Share')) ?></summary>
+                    <div class="reader-share-panel">
+                        <strong><?= $e($t('Share this page')) ?></strong>
+                        <p><?= $e($t('People need access to this page to open the link.')) ?></p>
+                        <label data-reader-share-field hidden><?= $e($t('Page link')) ?><input type="url" data-reader-share-url readonly></label>
+                        <button class="button button--primary" type="button" data-reader-copy hidden><?= $e($t('Copy link')) ?></button>
+                        <a href="<?= $e($pageUrl) ?>" data-reader-page-link><?= $e($t('Open page link')) ?></a>
+                        <span class="reader-share-feedback" data-reader-copy-status role="status" aria-live="polite"></span>
+                    </div>
+                </details>
+                <a class="button button--ghost" href="<?= $e($pageUrl) ?>/history"><?= $e($t('History')) ?></a>
                 <?php if (!empty($canManagePermissions)): ?>
-                    <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/permissions"><?= $e($t('Permissions')) ?></a>
+                    <a class="button button--ghost" href="<?= $e($pageUrl) ?>/permissions"><?= $e($t('Permissions')) ?></a>
                 <?php endif; ?>
                 <details class="page-menu" data-close-on-escape><summary class="button button--ghost" aria-label="<?= $e($t('More actions')) ?>" title="<?= $e($t('More actions')) ?>"><span aria-hidden="true">•••</span></summary><div class="menu-items">
                 <?php if ($canMove || $canCopy): ?><button type="button" class="button button--ghost" data-structure-page="<?= $e(json_encode(['id' => (int) $page['id'], 'title' => $page['title'], 'version' => $headVersion, 'parent_id' => $visibleParentId, 'space_id' => (int) $space['id'], 'can_move' => $canMove, 'can_copy' => $canCopy], JSON_THROW_ON_ERROR)) ?>">Przenieś lub kopiuj</button><?php endif; ?>
@@ -57,10 +69,13 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
         <header class="reader-heading">
                 <h1><?= $e($page['title']) ?></h1>
                 <div class="page-meta">
+                    <span class="reader-author-avatar" aria-hidden="true"><?= $e(mb_substr($page['author_username'], 0, 1)) ?></span>
+                    <span><?= $e($t('Created by')) ?> <strong><?= $e($page['author_username']) ?></strong></span>
+                    <span class="reader-meta-separator" aria-hidden="true">·</span>
+                    <span><?= $e($t('Updated')) ?> <time datetime="<?= $e(str_replace(' ', 'T', $page['updated_at'])) ?>Z"><?= $e($page['updated_at']) ?></time></span>
+                    <span class="reader-meta-separator" aria-hidden="true">·</span>
                     <span class="status-pill status-pill--<?= $e($page['status']) ?>"><?= $e($t($page['status'])) ?></span>
                     <span><?= $e($t('Version')) ?> <?= (int) $page['version'] ?></span>
-                    <span><?= $e($t('Created by')) ?> <?= $e($page['author_username']) ?></span>
-                    <span><?= $e($t('Updated')) ?> <?= $e($page['updated_at']) ?></span>
                 </div>
                 <?php if ($tags !== []): ?>
                     <div class="tag-list" aria-label="<?= $e($t('Tags')) ?>">
@@ -74,15 +89,23 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
         <details class="knowledge-status" data-knowledge-status><summary><?= $e($t('Content health')) ?></summary><div><p>Właściciel merytoryczny: <?= $e($contentOwnerName) ?>. Termin przeglądu: <?= $e($page['review_due_at'] ?? 'Nie wyznaczono') ?>. <?= $page['review_due_at'] !== null && $page['review_due_at'] < gmdate('Y-m-d') ? 'Dokument wymaga przeglądu.' : '' ?> Potwierdzenie aktualności: <?= (int) ($page['verified_revision'] ?? 0) === (int) $page['version'] ? $e($page['verified_at']) : 'Brak dla tej rewizji' ?>.</p>
         <?php if (!empty($canReadWorking)): ?><a class="button" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/review">Obieg i aktualność · robocza rewizja <?= (int) $headVersion ?></a><?php endif; ?>
         <a href="/knowledge/overdue">Dokumenty po terminie przeglądu</a></div></details>
-        <div class="document-layout <?= !empty($tableOfContents) ? 'document-layout--with-toc' : '' ?>">
+        <div class="document-layout document-layout--with-toc">
             <div class="document card document-content" data-document-content>
                 <?= $renderedContent ?>
             </div>
-            <?php if (!empty($tableOfContents)): ?>
-                <aside class="page-toc card">
-                    <?= $tableOfContents ?>
-                </aside>
-            <?php endif; ?>
+            <aside class="page-toc card" aria-label="<?= $e($t('Page navigation')) ?>">
+                <details class="reader-outline" data-reader-outline open>
+                    <summary><?= $e($t('On this page')) ?></summary>
+                    <div class="reader-outline-links">
+                        <?= $tableOfContents ?>
+                        <nav class="reader-section-links" aria-label="<?= $e($t('Page sections')) ?>">
+                            <?php if ($backlinks !== []): ?><a href="#backlinks"><?= $e($t('Referenced by')) ?></a><?php endif; ?>
+                            <a href="#attachments"><?= $e($t('Attachments')) ?></a>
+                            <a href="#comments"><?= $e($t('Comments')) ?></a>
+                        </nav>
+                    </div>
+                </details>
+            </aside>
         </div>
 
         <?php if ($currentUser !== null): $collaborationSource = $page; $collaborationSelector = '[data-document-content]'; require __DIR__ . '/../partials/document-collaboration.php'; endif; ?>
