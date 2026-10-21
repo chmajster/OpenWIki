@@ -97,7 +97,7 @@ test('content hides denied ancestors and working pages and remains usable withou
     } finally { await context.close(); }
 });
 
-for (const width of [390, 768, 1440]) test('directory and content fit ' + width + ' pixels in both themes', async ({page, request}) => {
+for (const width of [390, 768, 1024, 1440]) test('directory and content fit ' + width + ' pixels in both themes', async ({page, request}) => {
     const target = await space(request, unique('Responsive knowledge') + ' ' + 'W'.repeat(120)); await document(request, target, 'Page'.repeat(50));
     await page.setViewportSize({width, height: 900}); await login(page);
     for (const theme of ['light', 'dark']) {
