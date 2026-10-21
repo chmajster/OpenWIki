@@ -75,6 +75,7 @@ def main():
                 version = Path(php_module).stem.removeprefix('libphp')
                 php_ini = os.getenv('PHPRC', '/etc/php/' + version + '/apache2')
             lines += [f'LoadModule php_module "{Path(php_module).as_posix()}"', f'PHPINIDir "{Path(php_ini).as_posix()}"',
+                      f'TypesConfig "{(MODULES.parent / "conf/mime.types").as_posix() if WINDOWS else "/etc/mime.types"}"',
                       'AddType application/javascript .js', 'AddType text/css .css', 'AddType text/html .html',
                       '<FilesMatch "\\.php$">', 'SetHandler application/x-httpd-php', '</FilesMatch>',
                       '<Directory />', 'AllowOverride None', 'Require all denied', '</Directory>',
@@ -89,8 +90,8 @@ def main():
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     creationflags=subprocess.CREATE_NO_WINDOW if WINDOWS else 0, env=ENV)
             def stop():
-                subprocess.run([APACHE, '-f', str(config), '-k', 'shutdown'], cwd=work, env=ENV,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                arguments = ['taskkill', '/PID', str(process.pid), '/T', '/F'] if WINDOWS else [APACHE, '-f', str(config), '-k', 'shutdown']
+                subprocess.run(arguments, cwd=work, env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     creationflags=subprocess.CREATE_NO_WINDOW if WINDOWS else 0, timeout=15)
                 process.wait(timeout=15)
                 # Windows releases the child process' current directory asynchronously.
