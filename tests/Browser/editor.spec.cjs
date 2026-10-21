@@ -81,7 +81,7 @@ test('lossy conversion previews changes, supports cancellation and keeps reversi
     await page.getByRole('button', {name: 'Convert and keep recovery copy', exact: true}).click();
     await expect(page.locator('[data-markdown-editor]')).toHaveValue('Underline survives recovery');
     await page.reload();
-    await page.getByRole('button', {name: 'Restore recovered content', exact: true}).click();
+    await page.locator('[data-restore-recovery]').click();
     await clickTool(page, '[data-undo-conversion]');
     await expect(editor(page).locator('u')).toHaveText('Underline survives recovery');
     await publish(page);
@@ -103,7 +103,7 @@ test('conflicts retain the base through retry and recovery until an explicit res
     await page.locator('[data-editor-form]').evaluate((form) => form.requestSubmit());
     expect((await api(request, 'get', 'pages/' + document.id)).version).toBe(2);
     await page.reload();
-    await page.getByRole('button', {name: 'Restore recovered content', exact: true}).click();
+    await page.locator('[data-restore-recovery]').click();
     await expect(page.locator('[name=base_version]')).toHaveValue('1');
     await publish(page);
     await expect(page.locator('[data-conflict-panel]')).toBeVisible();
@@ -144,7 +144,7 @@ for (const failure of ['network', '403', '422', '500']) {
         expect((await api(request, 'get', 'pages/' + document.id)).version).toBe(1);
         await page.unroute(endpoint);
         await page.reload();
-        await page.getByRole('button', {name: 'Restore recovered content', exact: true}).click();
+        await page.locator('[data-restore-recovery]').click();
         await expect(editor(page).locator('b,strong')).toHaveText('Recoverable rich document');
         await expect(page.locator('[name=change_summary]')).toHaveValue('Recoverable summary');
         await editMetadata(page, '[name=tags]', 'fill', 'recoverable');
@@ -189,7 +189,7 @@ test('typing during an actual autosave keeps later content and metadata pending'
     expect(draft.changeSummary).toBe('Later summary');
     expect(draft.baseVersion).toBe(1);
     await page.reload();
-    await page.getByRole('button', {name: 'Restore recovered content', exact: true}).click();
+    await page.locator('[data-restore-recovery]').click();
     await expect(editor(page)).toHaveText('Later content stays');
     await expect(page.locator('[name=tags]')).toHaveValue('later-tag');
 });
@@ -213,7 +213,7 @@ test('tabs keep independent drafts, another account gets none, and new documents
     expect((await (await second.request.get(draftUrl)).json()).data.drafts).toHaveLength(1);
     await second.reload();
     await second.locator('[data-recovery-select]').selectOption({label: (await second.locator('[data-recovery-select] option').allTextContents()).find((label) => label.startsWith('Second tab draft'))});
-    await second.getByRole('button', {name: 'Restore recovered content', exact: true}).click();
+    await second.locator('[data-restore-recovery]').click();
     await expect(editor(second)).toHaveText('Second tab content');
     await expect(second.locator('[name=base_version]')).toHaveValue('1');
 
@@ -261,7 +261,7 @@ test('a session expiring during editing retains the document through sign-in and
     await expect(page.locator('[name=base_version]')).toHaveValue('1');
     await login(page);
     await page.goto(pathFor(document) + '/edit');
-    await page.getByRole('button', {name: 'Restore recovered content', exact: true}).click();
+    await page.locator('[data-restore-recovery]').click();
     await expect(editor(page)).toHaveText('Content before session expiry');
     await expect(page.locator('[name=change_summary]')).toHaveValue('Expired session recovery');
     await publish(page);
@@ -318,7 +318,7 @@ test('a new-page server draft restores all metadata after local storage is clear
     await page.goto(originalUrl);
     await expect(page).toHaveURL(originalUrl);
     expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('openwiki:draft:v2:')))).toEqual([]);
-    await page.getByRole('button', {name: 'Restore recovered content', exact: true}).click();
+    await page.locator('[data-restore-recovery]').click();
     await expect(page.locator('[name=title]')).toHaveValue(title);
     await expect(page.locator('[name=parent_id]')).toHaveValue(String(parent.id));
     await expect(page.locator('[name=tags]')).toHaveValue('new-draft-tag');
@@ -389,7 +389,7 @@ test('recovering another tab cannot delete that tab’s later recovery copy', as
     const second = await context.newPage();
     second.on('dialog', (dialog) => dialog.accept());
     await second.goto(pathFor(document) + '/edit');
-    await second.getByRole('button', {name: 'Restore recovered content', exact: true}).click();
+    await second.locator('[data-restore-recovery]').click();
     await expect(editor(second)).toHaveText('Recovery snapshot from tab one');
     await editor(page).fill('Newer work in tab one');
     await expect(state(page)).toHaveAttribute('data-state', 'server');
