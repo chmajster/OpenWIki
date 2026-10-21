@@ -160,6 +160,7 @@ jobs:
         run: |
           composer install --no-dev --prefer-dist --no-interaction
           node scripts/package-release.cjs "$RUNNER_TEMP/openwiki.tar.gz"
+          node scripts/package-release.cjs "$RUNNER_TEMP/openwiki.zip"
           mkdir "$RUNNER_TEMP/openwiki-runtime"
           tar -xzf "$RUNNER_TEMP/openwiki.tar.gz" -C "$RUNNER_TEMP/openwiki-runtime"
           for asset in wiki-editor.js diagram.js document-reader.js diagram.html document-workspace.css theme.js; do test -s "$RUNNER_TEMP/openwiki-runtime/public/assets/$asset"; done
@@ -170,6 +171,66 @@ jobs:
           php scripts/local-runtime.php assets-ready
           php -r 'require "bootstrap/autoload.php"; $c = new OpenWiki\Wiki\ContentService(); if ($c->normalize("markdown", "", "# Release")["html"] !== "<h1>Release</h1>") exit(1);'
 
+      - name: Upload ready-to-install server package
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwiki-server-package
+          path: |
+            ${{ runner.temp }}/openwiki.zip
+            ${{ runner.temp }}/openwiki.zip.sha256
+            ${{ runner.temp }}/openwiki.tar.gz
+            ${{ runner.temp }}/openwiki.tar.gz.sha256
+          if-no-files-found: error
+
+
+  web-installer-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        database: ['mysql:8.0', 'mariadb:11.4']
+    services:
+      database:
+        image: ${{ matrix.database }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot || mariadb-admin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      OPENWIKI_TEST_DB_HOST: 127.0.0.1
+      OPENWIKI_TEST_DB_PORT: 3306
+      OPENWIKI_TEST_DB_USERNAME: root
+      OPENWIKI_TEST_DB_PASSWORD: root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Prepare Apache PHP hosting and distribution
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apache2 libapache2-mod-php php-cli php-mysql php-mbstring php-xml php-curl php-ldap php-zip php-gd composer
+          npm ci
+          npm run build
+          npx playwright install --with-deps chromium
+          composer install --no-dev --prefer-dist --no-interaction
+          node scripts/package-release.cjs storage/temp/openwiki.zip
+      - name: Install extracted ZIP through real Apache and browser
+        run: python3 tests/Install/runtime.py
+      - name: Installer screenshots and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-installer-${{ strategy.job-index }}
+          path: storage/temp/install-*
 
   upgrade-e2e:
     runs-on: ubuntu-latest

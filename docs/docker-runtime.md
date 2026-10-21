@@ -15,7 +15,7 @@ Domyślny adres to `http://127.0.0.1:8080`; wskazany port daje
 `http://127.0.0.1:8090`. Host może być IPv4, IPv6 lub `localhost`, port 1–65535.
 Pierwszy start udostępnia `/install`. Kreator ma gotowy host `db`, port 3306,
 bazę i konto aplikacji. Hasło pochodzi z konfiguracji serwera, nie z formularza.
-Standardowe konto startowe `admin/admin` wymaga zmiany hasła po zalogowaniu.
+W ostatnim kroku kreatora ustaw własny login, e-mail i hasło administratora. Nie ma domyślnego hasła.
 
 | Polecenie | Działanie |
 |---|---|
