@@ -652,12 +652,12 @@ test('Polish interface, mobile tree, account menu and keyboard form work togethe
     await page.setViewportSize({width: 390, height: 844});
     await page.goto(pathFor(document));
     const panel = page.locator('[data-page-panel]');
-    await expect(panel).not.toHaveAttribute('open', '');
-    await panel.locator('summary').focus();
+    await expect(panel).toBeHidden();
+    await page.locator('[data-navigation-toggle]').focus();
     await page.keyboard.press('Enter');
-    await expect(panel.locator('nav')).toBeVisible();
+    await expect(panel).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(panel.locator('nav')).toBeHidden();
+    await expect(panel).toBeHidden();
     await page.locator('.account-menu summary').focus();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('link', {name: 'Sesje', exact: true})).toBeVisible();
