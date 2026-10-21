@@ -90,6 +90,9 @@ final class Response
     public function send(): never
     {
         http_response_code($this->status);
+        // Apache's PHP module needs an explicit reason phrase for this nonstandard
+        // session-expired status; otherwise it sends 500 despite the correct body.
+        if ($this->status === 419) header('HTTP/1.1 419 Page Expired', true, 419);
         foreach ($this->headers as $name => $value) {
             header($name . ': ' . $value, true);
         }

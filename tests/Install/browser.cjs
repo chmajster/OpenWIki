@@ -57,7 +57,7 @@ const screenshot = name => path.resolve('storage/temp/install-' + name + '.png')
             await page.locator('[data-database-next]').click();
             const token = await page.locator('[name=_token]').inputValue();
             const csrf = await page.request.post(url + '/install', {form: {...settings, _token: 'invalid'}});
-            expect(csrf.status()).toBe(419);
+            expect(csrf.status(), await csrf.text()).toBe(419);
             const weak = await page.request.post(url + '/install', {form: {...settings, _token: token, admin_password: 'admin', admin_password_confirmation: 'admin'}});
             expect(weak.status()).toBe(422);
             expect(await weak.text()).not.toContain('SQLSTATE');
