@@ -43,8 +43,7 @@ const screenshot = name => path.resolve('storage/temp/install-' + name + '.png')
                 await page.locator('[data-database-test-button]').click();
                 await expect(page.locator('[data-database-test-status]')).toHaveClass(/is-error/);
                 await expect(page.locator('[data-database-next]')).toBeDisabled();
-                await context.close();
-                continue;
+                await page.locator('[name=db_host]').fill(settings.db_host);
             }
             await page.locator('[data-database-test-button]').click();
             await expect(page.locator('[data-database-next]')).toBeEnabled({timeout: 20000});
@@ -55,7 +54,17 @@ const screenshot = name => path.resolve('storage/temp/install-' + name + '.png')
             await page.locator('[data-database-test-button]').click();
             await expect(page.locator('[data-database-next]')).toBeEnabled({timeout: 20000});
             await page.locator('[data-database-next]').click();
+            if (width === 390) {
+                await expect(page.locator('[name=admin_password]')).toBeVisible();
+                expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+                await page.screenshot({path: screenshot('administrator-mobile')});
+                await context.close();
+                continue;
+            }
             const token = await page.locator('[name=_token]').inputValue();
+            const failedDatabase = await page.request.post(url + '/install/test-database', {headers: {Accept: 'application/json'}, form: {...settings, _token: token, db_password: 'Do-not-expose-this-password!'}});
+            expect(failedDatabase.status()).toBe(422);
+            expect(await failedDatabase.text()).not.toMatch(/SQLSTATE|Do-not-expose-this-password/);
             const csrf = await page.request.post(url + '/install', {form: {...settings, _token: 'invalid'}});
             expect(csrf.status(), await csrf.text()).toBe(419);
             const weak = await page.request.post(url + '/install', {form: {...settings, _token: token, admin_password: 'admin', admin_password_confirmation: 'admin'}});
@@ -99,7 +108,7 @@ const screenshot = name => path.resolve('storage/temp/install-' + name + '.png')
         await page.goto(url + '/login');
         await page.locator('[name=identifier]').fill(settings.admin_username);
         await page.locator('[name=password]').fill(settings.admin_password);
-        await page.locator('button[type=submit]').click();
+        await page.locator('form[action="/login"] button[type=submit]').click();
         await expect(page).toHaveURL(url + '/');
         await page.goto(url + '/spaces/INSTALL/pages/installed-page');
         await expect(page.locator('[data-document-content]')).toContainText('Content saved after browser installation.');
