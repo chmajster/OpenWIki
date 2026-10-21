@@ -31,12 +31,14 @@ require __DIR__ . '/../partials/ui-icons.php';
             </div>
         </div>
 
-        <nav class="workspace-tabs" aria-label="<?= $e($t('Space navigation')) ?>"><a href="/spaces/<?= rawurlencode($space['space_key']) ?>" aria-current="page"><?= $e($t('Overview')) ?></a><a href="/search?space=<?= rawurlencode($space['space_key']) ?>&amp;type=page"><?= $e($t('Search')) ?></a></nav>
+        <nav class="workspace-tabs" aria-label="<?= $e($t('Space navigation')) ?>"><a href="/spaces/<?= rawurlencode($space['space_key']) ?>"<?= $spaceTab === 'overview' ? ' aria-current="page"' : '' ?>><?= $e($t('Overview')) ?></a><a href="/spaces/<?= rawurlencode($space['space_key']) ?>?tab=content"<?= $spaceTab === 'content' ? ' aria-current="page"' : '' ?>><?= $e($t('Content')) ?></a><a href="/search?space=<?= rawurlencode($space['space_key']) ?>&amp;type=page"><?= $e($t('Search')) ?></a></nav>
+        <?php if ($spaceTab === 'content'): require __DIR__ . '/../partials/space-content.php'; else: ?>
         <div class="space-welcome card panel">
             <span class="space-welcome-icon" aria-hidden="true"><?= $uiIcon('book') ?></span>
             <?php if ($homePage !== null): ?><h2>Strona startowa</h2><a href="<?= $e(\OpenWiki\Spaces\DocumentationTreeService::url($space, $homePage)) ?>"><?= $e($homePage['title']) ?></a><?php else: ?><h2>Dokumentacja</h2><p>Wybierz stronę z drzewa lub wyszukaj ją w tej przestrzeni. Strzałki rozwijają gałęzie; F2 otwiera operacje strony.</p><?php endif; ?>
             <?php if ($space['status'] === 'archived'): ?><p role="status">Archiwum jest dostępne do odczytu zgodnie z dotychczasowymi uprawnieniami. Aby edytować dokumenty, przywróć przestrzeń w ustawieniach.</p><?php endif; ?>
-            <div class="collaboration-actions"><button class="button button--secondary" type="button" data-navigation-open hidden><?= $uiIcon('panel') ?><?= $e($t('Browse pages')) ?></button><a class="button button--ghost" href="/search?space=<?= rawurlencode($space['space_key']) ?>&amp;type=page"><?= $uiIcon('search') ?><?= $e($t('Search this space')) ?></a><?php if ($canCreatePage): ?><a class="button button--primary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create"><?= $uiIcon('plus') ?><?= $e($t('Create page')) ?></a><?php endif; ?></div>
+            <div class="collaboration-actions"><button class="button button--secondary" type="button" data-navigation-open hidden><?= $uiIcon('panel') ?><?= $e($t('Browse pages')) ?></button><a class="button button--secondary" href="/spaces/<?= rawurlencode($space['space_key']) ?>?tab=content"><?= $uiIcon('document') ?><?= $e($t('All pages')) ?></a><a class="button button--ghost" href="/search?space=<?= rawurlencode($space['space_key']) ?>&amp;type=page"><?= $uiIcon('search') ?><?= $e($t('Search this space')) ?></a><?php if ($canCreatePage): ?><a class="button button--primary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create"><?= $uiIcon('plus') ?><?= $e($t('Create page')) ?></a><?php endif; ?></div>
         </div>
+        <?php endif; ?>
     </article>
 </section>

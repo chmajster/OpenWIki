@@ -32,6 +32,8 @@ test('home views follow real visits and favorites, and the desktop sidebar survi
     await page.screenshot({path: 'storage/temp/confluence-home-desktop.png', fullPage: true});
     await sidebar(page).getByRole('link', {name: 'Spaces', exact: true}).click();
     await expect(page.locator('[data-home-view]')).toHaveAttribute('data-home-view', 'spaces');
+    await page.locator('[data-browse-filters] [name=q]').fill(space.name);
+    await page.locator('[data-browse-filters]').getByRole('button', {name: 'Apply filters', exact: true}).click();
     await page.locator('.home-space-card').filter({hasText: space.name}).click();
     await expect(sidebar(page).locator('[data-documentation-tree]')).toHaveCount(1);
     await sidebar(page).locator(`[data-page-id="${document.id}"] .page-tree__link`).click();

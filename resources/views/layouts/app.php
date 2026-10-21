@@ -5,7 +5,7 @@ $workspaceShell = $app->installed() && empty($editorWorkspace) && !in_array($tem
 $navigationSpace = $data['space'] ?? null;
 $navigationPageId = isset($data['page']['id']) ? (int) $data['page']['id'] : null;
 $navigationSpaces = $workspaceShell && $navigationSpace === null
-    ? ($template === 'dashboard/index' ? $data['spaces'] : (new \OpenWiki\Repositories\SpaceRepository($app->database()))->visibleFor($currentUser === null ? null : (int) $currentUser['id'], $app->auth()->can('*'), 12))
+    ? ($data['navigationSpaces'] ?? (new \OpenWiki\Repositories\SpaceRepository($app->database()))->visibleFor($currentUser === null ? null : (int) $currentUser['id'], $app->auth()->can('*'), 12))
     : [];
 $navigationCanCreate = $workspaceShell && $navigationSpace !== null && $app->auth()->can('page.create') && (new \OpenWiki\Permissions\SpaceAccessService($app))->canEdit($navigationSpace);
 $pageTitle = isset($title) ? $title . ' · ' . $app->name() : $app->name();

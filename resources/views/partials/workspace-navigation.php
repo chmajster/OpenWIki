@@ -12,7 +12,8 @@ $navigationView = $data['dashboardView'] ?? null;
     <?php if ($navigationSpace !== null): $space = $navigationSpace; ?>
         <section class="navigation-space">
             <a class="navigation-space-heading" href="/spaces/<?= rawurlencode($space['space_key']) ?>"><span class="space-avatar" aria-hidden="true"><?= $e($space['icon'] ?: mb_substr($space['name'], 0, 1)) ?></span><span><strong><?= $e($space['name']) ?></strong><small><?= $e($space['space_key']) ?></small></span></a>
-            <a class="navigation-link<?= $template === 'spaces/show' ? ' is-active' : '' ?>" href="/spaces/<?= rawurlencode($space['space_key']) ?>"<?= $template === 'spaces/show' ? ' aria-current="page"' : '' ?>><?= $uiIcon('home') ?><span><?= $e($t('Overview')) ?></span></a>
+            <a class="navigation-link<?= $template === 'spaces/show' && ($spaceTab ?? '') === 'overview' ? ' is-active' : '' ?>" href="/spaces/<?= rawurlencode($space['space_key']) ?>"<?= $template === 'spaces/show' && ($spaceTab ?? '') === 'overview' ? ' aria-current="page"' : '' ?>><?= $uiIcon('home') ?><span><?= $e($t('Overview')) ?></span></a>
+            <a class="navigation-link<?= $template === 'spaces/show' && ($spaceTab ?? '') === 'content' ? ' is-active' : '' ?>" href="/spaces/<?= rawurlencode($space['space_key']) ?>?tab=content"<?= $template === 'spaces/show' && ($spaceTab ?? '') === 'content' ? ' aria-current="page"' : '' ?>><?= $uiIcon('document') ?><span><?= $e($t('All pages')) ?></span></a>
             <div class="navigation-section-heading"><h2><?= $e($t('Content')) ?></h2><?php if ($navigationCanCreate): ?><a class="shell-icon-button" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create" aria-label="<?= $e($t('Create page')) ?>"><?= $uiIcon('plus') ?></a><?php endif; ?></div>
             <nav aria-label="<?= $e($t('Pages')) ?>">
                 <?php $activePageId = $navigationPageId; require __DIR__ . '/page-tree.php'; ?>

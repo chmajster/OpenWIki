@@ -53,6 +53,16 @@ final class SpaceController extends Controller
         }
 
         $canEdit = $access->canEdit($space);
+        $tab = $request->query('tab', 'overview');
+        if (!is_string($tab) || !in_array($tab, ['overview', 'content'], true)) return $this->render('errors/404', ['title' => 'Page not found'], 404);
+        $contentListing = null;
+        if ($tab === 'content') {
+            try {
+                $permissions = array_values(array_filter(['*', 'page.view', 'page.edit', 'page.review', 'page.publish'], fn (string $permission): bool => $this->app->auth()->can($permission)));
+                $contentListing = (new \OpenWiki\Spaces\SpaceContentService($this->app->database()))->browse((int) $space['id'], \OpenWiki\Spaces\BrowseInput::content((array) $request->query()), $this->app->auth()->user()['id'] ?? null, $permissions);
+            } catch (\InvalidArgumentException $error) { return $this->render('errors/422', ['title' => 'Invalid filters', 'message' => $error->getMessage(), 'resetUrl' => '/spaces/' . rawurlencode($space['space_key']) . '?tab=content', 'space' => $space], 422); }
+            catch (\OutOfBoundsException) { return $this->render('errors/404', ['title' => 'Space not found'], 404); }
+        }
         $pageAccess = new PageAclService($this->app);
         $homePage = $space['home_page_id'] === null ? null : (new PageRepository($this->app->database()))->findById((int) $space['home_page_id']);
         if ($homePage !== null && !$pageAccess->canView($homePage, $space)) $homePage = null;
@@ -62,6 +72,8 @@ final class SpaceController extends Controller
             'structureEnabled' => true,
             'space' => $space,
             'pages' => [],
+            'spaceTab' => $tab,
+            'contentListing' => $contentListing,
             'canCreatePage' => $canEdit && $this->app->auth()->can('page.create'),
             'canSettings' => $this->app->auth()->check() && $this->settingsAllowed($space),
             'homePage' => $homePage,
