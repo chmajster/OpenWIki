@@ -2,6 +2,23 @@
 
 // Only interface messages are translated; document titles, content and metadata stay intact.
 return [
+    'Home' => 'Strona główna', 'For you' => 'Dla Ciebie', 'Workspace' => 'Obszar pracy',
+    'Workspace navigation' => 'Nawigacja obszaru pracy', 'Toggle navigation' => 'Zwiń lub rozwiń nawigację',
+    'Close navigation' => 'Zamknij nawigację', 'Skip to content' => 'Przejdź do treści',
+    'Overview' => 'Przegląd', 'Content' => 'Treść',
+    'Home views' => 'Widoki strony głównej', 'Space navigation' => 'Nawigacja przestrzeni',
+    'Browse all spaces' => 'Przeglądaj przestrzenie', 'View all spaces' => 'Wszystkie przestrzenie',
+    'Browse pages' => 'Przeglądaj strony', 'Search this space' => 'Szukaj w tej przestrzeni',
+    'A shared place for knowledge' => 'Wspólne miejsce dla wiedzy',
+    'Your knowledge workspace' => 'Twój obszar wiedzy',
+    'Find a space for your team, project, or next idea.' => 'Znajdź przestrzeń dla zespołu, projektu lub nowego pomysłu.',
+    'Pick up where you left off and keep your team moving.' => 'Wróć do swoich dokumentów i działaj dalej z zespołem.',
+    'Your knowledge starts here' => 'Tutaj zaczyna się wspólna wiedza',
+    'Keep useful pages close' => 'Miej ważne strony pod ręką',
+    'Make room for your next idea' => 'Miejsce na Twój kolejny pomysł',
+    'Save a page with Favorite in its actions menu to find it here.' => 'Oznacz stronę gwiazdką, aby szybko wrócić do niej w tym miejscu.',
+    'Tasks, drafts, and reviews in one place' => 'Zadania, szkice i przeglądy w jednym miejscu',
+    'Content health' => 'Aktualność i obieg dokumentu',
     'Connection failed. Your input has been kept.' => 'Połączenie nie powiodło się. Wpisane dane są zachowane.',
     'Server returned an unreadable response. Your input has been kept.' => 'Serwer zwrócił nieprawidłową odpowiedź. Wpisane dane są zachowane.',
     'Session expired. Sign in in another tab and retry.' => 'Sesja wygasła. Zaloguj się w drugiej karcie i ponów zapis.',

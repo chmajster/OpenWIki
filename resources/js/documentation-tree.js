@@ -3,6 +3,7 @@ document.querySelectorAll('[data-documentation-tree]').forEach(tree => {
     const key = `openwiki.tree.${tree.dataset.userId}.${tree.dataset.spaceId}`;
     let expanded = new Set(), searchTimer, generation = 0;
     try { expanded = new Set(JSON.parse(localStorage.getItem(key) || '[]')); } catch {}
+    const activePath = new Set(JSON.parse(tree.dataset.activePath || '[]'));
     const remember = () => { try { localStorage.setItem(key, JSON.stringify([...expanded])); } catch {} };
     const visible = () => [...tree.querySelectorAll('[role=treeitem]')].filter(item => !item.closest('ul[hidden]'));
     const focus = item => { tree.querySelectorAll('[role=treeitem]').forEach(node => node.tabIndex = -1); if (item) { item.tabIndex = 0; item.focus(); } };
@@ -30,7 +31,6 @@ document.querySelectorAll('[data-documentation-tree]').forEach(tree => {
                 if (page.has_children) {
                     const children = document.createElement('ul'); children.role = 'group'; children.className = 'page-tree'; children.hidden = true; item.append(children); item.setAttribute('aria-expanded', 'false');
                     toggle.addEventListener('click', event => { event.stopPropagation(); expand(item); });
-                    if (!search.value.trim() && expanded.has(String(page.id))) await expand(item, true, current);
                 }
                 if ((page.can_move || page.can_copy) && !tree.closest('[data-wiki-editor]')) {
                     const operations = document.createElement('button'); operations.type = 'button'; operations.textContent = '⋯'; operations.className = 'tree-operation'; operations.setAttribute('aria-label', `Przenieś lub kopiuj: ${page.title}`);
@@ -41,6 +41,7 @@ document.querySelectorAll('[data-documentation-tree]').forEach(tree => {
                     row.addEventListener('dragover', event => { if (event.dataTransfer.types.includes('application/openwiki-page')) event.preventDefault(); });
                     row.addEventListener('drop', event => { event.preventDefault(); try { const source = JSON.parse(event.dataTransfer.getData('application/openwiki-page')); document.dispatchEvent(new CustomEvent('wiki:structure', {detail: {page: source.page, tree, parent: page}})); } catch {} });
                 }
+                if (page.has_children && !search.value.trim() && (expanded.has(String(page.id)) || activePath.has(page.url))) await expand(item, true, current);
             }
             if (body.data.next_offset !== null) {
                 const more = document.createElement('li'); more.className = 'tree-more'; more.role = 'none'; const button = document.createElement('button'); button.type = 'button'; button.className = 'button button--ghost'; button.textContent = 'Wczytaj kolejne strony';

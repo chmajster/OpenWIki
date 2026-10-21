@@ -6,16 +6,10 @@ const t = window.wikiTranslate;
 document.querySelectorAll('form[data-confirm]').forEach((form) => form.addEventListener('submit', (event) => {
     if (!window.confirm(t(form.dataset.confirm))) event.preventDefault();
 }));
-const pagePanelMedia = window.matchMedia('(max-width: 860px)');
-document.querySelectorAll('[data-page-panel]').forEach((panel) => {
-    const adapt = () => { panel.open = !pagePanelMedia.matches; };
-    adapt();
-    pagePanelMedia.addEventListener('change', adapt);
-});
 document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    const open = event.target.closest('[data-close-on-escape][open], [data-page-panel][open]');
-    if (open && (!open.matches('[data-page-panel]') || pagePanelMedia.matches)) {
+    const open = event.target.closest('[data-close-on-escape][open]');
+    if (open) {
         open.open = false;
         open.querySelector('summary').focus();
     }
