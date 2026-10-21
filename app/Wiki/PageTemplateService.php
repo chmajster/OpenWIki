@@ -20,7 +20,7 @@ final class PageTemplateService
                     u.username AS creator_username
              FROM page_templates pt
              LEFT JOIN users u ON u.id = pt.created_by
-             ORDER BY pt.is_system DESC, pt.name ASC'
+             ORDER BY pt.is_system DESC, pt.name ASC, pt.id ASC'
         ));
     }
 
@@ -50,14 +50,27 @@ final class PageTemplateService
             'Incident Report' => ['incident', 'Raport incydentu', 'Operacje', 'Wpływ, oś czasu, przyczyna i działania naprawcze.', '<h2>Podsumowanie</h2><p></p><h2>Wpływ</h2><p></p><h2>Oś czasu</h2><table><tbody><tr><th>Czas</th><th>Zdarzenie</th></tr><tr><td></td><td></td></tr></tbody></table><h2>Przyczyna</h2><p></p><h2>Działania naprawcze</h2><ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p></p></li></ul>'],
         ];
         $stored = $this->all(); $systems = [];
+        $english = \OpenWiki\Core\I18n::locale() === 'en';
+        $categories = ['Techniczne' => ['technical', 'Technical'], 'Wiedza' => ['knowledge', 'Knowledge'], 'Zespół' => ['team', 'Team'], 'Operacje' => ['operations', 'Operations'], 'Własne' => ['custom', 'Custom']];
+        $summaries = [
+            'technical' => 'Architecture, configuration, and system maintenance.',
+            'guide' => 'Purpose, prerequisites, and ordered steps to complete a task.',
+            'meeting' => 'Agenda, decisions, and actions to follow up.',
+            'api' => 'Endpoints, parameters, examples, and responses.',
+            'operations' => 'Responsibilities, steps, checks, and rollback.',
+            'knowledge' => 'A question, its solution, and related resources.',
+            'project' => 'Goals, scope, milestones, and decisions.',
+            'incident' => 'Impact, timeline, root cause, and corrective actions.',
+        ];
         foreach ($stored as $row) if ($row['is_system']) $systems[$row['name']] = $row;
         $catalog = [];
         foreach ($starters as $name => [$key, $label, $category, $description, $html]) {
             $source = $systems[$name] ?? ['id' => 'builtin:' . $key, 'content_format' => 'visual', 'content_html' => $html, 'content_markdown' => null, 'is_system' => 1];
-            $catalog[] = $source + ['display_name' => $label, 'category' => $category, 'summary' => $description, 'icon' => $key];
+            $catalog[] = $source + ['display_name' => $english ? $name : $label, 'category' => $english ? $categories[$category][1] : $category, 'category_key' => $categories[$category][0], 'summary' => $english ? $summaries[$key] : $description, 'icon' => $key];
         }
         foreach ($stored as $row) if (!$row['is_system'] || !isset($starters[$row['name']])) {
-            $catalog[] = $row + ['display_name' => $row['name'], 'category' => $row['is_system'] ? 'Wiedza' : 'Własne', 'summary' => $row['description'] ?? '', 'icon' => 'document'];
+            $category = $row['is_system'] ? 'Wiedza' : 'Własne';
+            $catalog[] = $row + ['display_name' => $row['name'], 'category' => $english ? $categories[$category][1] : $category, 'category_key' => $categories[$category][0], 'summary' => $row['description'] ?? '', 'icon' => 'document'];
         }
         return array_map(fn (array $row): array => (new ContentService())->safeProjection($row), $catalog);
     }

@@ -2,6 +2,11 @@
 
 // Only interface messages are translated; document titles, content and metadata stay intact.
 return [
+    'Create from a template' => 'Utwórz stronę z szablonu', 'Give your next document a useful starting point.' => 'Wybierz gotowy układ i dopasuj go do swojego dokumentu.',
+    'Blank page' => 'Pusta strona', 'Find a template' => 'Znajdź szablon', 'Name or purpose' => 'Nazwa lub przeznaczenie',
+    'All templates' => 'Wszystkie szablony', 'Category' => 'Kategoria', 'Technical' => 'Techniczne', 'Knowledge' => 'Wiedza', 'Team' => 'Zespół', 'Operations' => 'Operacje', 'Custom' => 'Własne',
+    'Use template' => 'Użyj szablonu', 'Close preview' => 'Zamknij podgląd', 'No templates match these filters.' => 'Żaden szablon nie pasuje do filtrów.',
+    'Started from template' => 'Rozpoczęto z szablonu', 'Template not found.' => 'Nie znaleziono szablonu.',
     'Find a space' => 'Znajdź przestrzeń', 'Find a page' => 'Znajdź stronę',
     'Name, key, or description' => 'Nazwa, klucz lub opis', 'Search page titles' => 'Szukaj w tytułach stron',
     'Showing :from–:to of :total' => 'Wyświetlane :from–:to z :total',

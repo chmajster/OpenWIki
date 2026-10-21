@@ -14,9 +14,9 @@ $slugValue = $field('slug', $page['slug'] ?? '');
 $parentValue = $field('parent_id', $page['parent_id'] ?? $initialParentId ?? '');
 $statusValue = $field('status', $page['status'] ?? ($canPublish ? 'published' : 'draft'));
 if ((bool) $space['review_workflow'] && $statusValue === 'published') $statusValue = 'draft';
-$formatValue = $field('content_format', $page['content_format'] ?? 'visual');
-$markdownValue = $field('content_markdown', $page['content_markdown'] ?? '');
-$visualValue = (new \OpenWiki\Security\HtmlSanitizer())->sanitize($text($field('content_html', $page['content_html'] ?? '<p></p>')));
+$formatValue = $field('content_format', $page['content_format'] ?? $initialTemplate['content_format'] ?? 'visual');
+$markdownValue = $field('content_markdown', $page['content_markdown'] ?? $initialTemplate['content_markdown'] ?? '');
+$visualValue = (new \OpenWiki\Security\HtmlSanitizer())->sanitize($text($field('content_html', $page['content_html'] ?? $initialTemplate['content_html'] ?? '<p></p>')));
 $changeSummary = $field('change_summary', '');
 $tagValue = $field('tags', isset($tags) ? implode(', ', array_column($tags, 'name')) : '');
 if (is_array($tagValue)) $tagValue = implode(', ', array_filter($tagValue, 'is_string'));
@@ -63,6 +63,7 @@ foreach ($pages as $candidate) if ((int) $candidate['id'] === (int) $parentValue
     class="editor-shell"
     data-wiki-editor
     data-is-edit="<?= $isEdit ? '1' : '0' ?>"
+    data-initial-template="<?= $e($initialTemplate['id'] ?? '') ?>"
     data-user-id="<?= (int) $currentUser['id'] ?>"
     data-instance-id="<?= substr(hash('sha256', $app->basePath() . \OpenWiki\Core\Env::get('APP_URL', '')), 0, 16) ?>"
     data-space-id="<?= (int) $space['id'] ?>"
@@ -193,6 +194,7 @@ foreach ($pages as $candidate) if ((int) $candidate['id'] === (int) $parentValue
 
         <div class="editor-main workspace-canvas">
             <div class="document-title-area">
+                <?php if (!empty($initialTemplate)): ?><p class="editor-template-source" data-initial-template-name><?= $e($t('Started from template')) ?>: <strong><?= $e($initialTemplate['display_name']) ?></strong></p><?php endif; ?>
                 <div class="document-decoration"><details class="emoji-menu"><summary aria-label="Dodaj emoji do tytułu">☺ <span>Ikona</span></summary><div><?php foreach (['📄', '📘', '🛠️', '💡', '✅', '🚀', '📋', '🔍'] as $emoji): ?><button type="button" data-title-emoji="<?= $e($emoji) ?>" aria-label="Dodaj <?= $e($emoji) ?> do tytułu"><?= $emoji ?></button><?php endforeach; ?></div></details><?php if ($canUploadImage): ?><button type="button" data-add-cover><?= $editorIcon('image') ?> Obraz nagłówkowy</button><?php endif; ?></div>
                 <label class="sr-only" for="page-title"><?= $e($t('Title')) ?></label>
                 <textarea id="page-title" class="title-input" name="title" required maxlength="255" rows="1" placeholder="Tytuł strony" data-document-title><?= $e($titleValue) ?></textarea>
