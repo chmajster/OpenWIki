@@ -16,18 +16,21 @@ abstract class Controller
     protected function spaceNavigation(array $space): array
     {
         $user = $this->app->auth()->user();
-        $canSettings = false;
-        if ($user !== null) {
-            $actor = new \OpenWiki\Spaces\SpaceActor($this->app->database(), (int) $user['id']);
-            $service = new \OpenWiki\Spaces\SpaceService($this->app);
-            $canSettings = (bool) array_filter(['space.edit', 'space.manage_access', 'space.manage_owner', 'space.archive'],
-                fn (string $permission): bool => $service->allowed($space, $actor, $permission));
-        }
         return [
             'canCreatePage' => $user !== null && $this->app->auth()->can('page.create') && (new \OpenWiki\Permissions\SpaceAccessService($this->app))->canEdit($space),
-            'canSettings' => $canSettings,
+            'canSettings' => $this->spaceSettingsAllowed($space),
             'isWatchingSpace' => $user !== null && (new \OpenWiki\Wiki\PageEngagementService($this->app->database()))->isWatching((int) $user['id'], 'space', (int) $space['id']),
         ];
+    }
+
+    protected function spaceSettingsAllowed(array $space): bool
+    {
+        $user = $this->app->auth()->user();
+        if ($user === null) return false;
+        $actor = new \OpenWiki\Spaces\SpaceActor($this->app->database(), (int) $user['id']);
+        $service = new \OpenWiki\Spaces\SpaceService($this->app);
+        return (bool) array_filter(['space.edit', 'space.manage_access', 'space.manage_owner', 'space.archive'],
+            fn (string $permission): bool => $service->allowed($space, $actor, $permission));
     }
 
     protected function pageWritePolicy(array $space, ?array $context = null, bool $subtreeSnapshot = false): callable

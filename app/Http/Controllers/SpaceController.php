@@ -120,12 +120,12 @@ final class SpaceController extends Controller
         if ($space === null) return $this->render('errors/404', ['title' => 'Space not found'], 404);
         $service = new \OpenWiki\Spaces\SpaceService($this->app);
         $actor = new \OpenWiki\Spaces\SpaceActor($this->app->database(), (int) $this->app->auth()->user()['id']);
-        if (!$this->settingsAllowed($space)) return $this->render('errors/403', ['title' => 'Permission denied'], 403);
+        if (!$this->spaceSettingsAllowed($space)) return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         try {
             if ($operation === 'update') {
                 $space = $service->update((int) $space['id'], (array) $request->input(), $actor->id, $request);
                 Session::flash('success', 'Ustawienia przestrzeni zapisane.');
-                return Response::redirect($this->settingsAllowed($space) ? '/spaces/' . rawurlencode($key) . '/settings' : '/');
+                return Response::redirect($this->spaceSettingsAllowed($space) ? '/spaces/' . rawurlencode($key) . '/settings' : '/');
             }
             if (in_array($operation, ['rule', 'principals', 'effective'], true)) {
                 if ($operation === 'principals') {
@@ -155,7 +155,7 @@ final class SpaceController extends Controller
             if ($status === 500) error_log('[OpenWiki space settings] ' . $error->getMessage());
             if ($request->expectsJson()) return Response::json(['error' => ['message' => $message]], $status);
             $space = $service->find((int) $space['id']);
-            if (!$this->settingsAllowed($space)) return $this->render('errors/403', ['title' => 'Permission denied'], 403);
+            if (!$this->spaceSettingsAllowed($space)) return $this->render('errors/403', ['title' => 'Permission denied'], 403);
             $actor = new \OpenWiki\Spaces\SpaceActor($this->app->database(), $actor->id);
             return $this->settingsForm($space, $actor, $service, $status, $message, (array) $request->input());
         }

@@ -180,6 +180,7 @@
 .workspace-shell .attachment-upload, .workspace-shell .comment-form { background: var(--surface-2); }
 .workspace-shell .empty-state { font-size: 12px; padding: 16px; border: 0; }
 .space-overview-badge { display: flex; align-items: center; gap: 14px; margin: 30px 0 18px; }
+html:has([data-space-header]) { scrollbar-gutter: stable; }
 .workspace-shell .space-overview .page-heading { display: block; }
 .space-overview .page-heading .page-actions { margin-top: 24px; flex-wrap: wrap; }
 .space-overview .page-heading h1 { font-size: 32px; overflow-wrap: anywhere; }
