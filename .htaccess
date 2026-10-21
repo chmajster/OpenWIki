@@ -16,6 +16,7 @@ DirectoryIndex index.php
 
     # Never expose application internals when the repository root is used as
     # the web root.
+    RewriteRule ^\.well-known/acme-challenge/[A-Za-z0-9_-]+$ - [END]
     RewriteRule (^|/)\. - [R=404,END]
     RewriteRule ^(?:app|bin|bootstrap|database|docker|docs|node_modules|resources|routes|scripts|storage|tests|vendor)(?:/|$) - [R=404,END,NC]
 

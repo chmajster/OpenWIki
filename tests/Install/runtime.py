@@ -115,6 +115,9 @@ def main():
                 (root / '.openwiki').mkdir()
                 (root / '.openwiki/compose.env').write_text('PRIVATE_CONFIGURATION')
                 (root / '.env.tmp-sensitive').write_text('PRIVATE_CONFIGURATION')
+                (root / '.well-known/acme-challenge').mkdir(parents=True)
+                (root / '.well-known/acme-challenge/hosting-token').write_text('CERTIFICATE_CHALLENGE')
+                assert fetch(url + '/.well-known/acme-challenge/hosting-token') == (200, b'CERTIFICATE_CHALLENGE')
                 for private in ['/.env.tmp-sensitive', '/.openwiki/compose.env', '/vendor/autoload.php', '/database/migrations/001_initial.php',
                                 '/scripts/package-zip.php', '/composer.lock', '/install.sh', '/storage/cache/.gitkeep']:
                     status, body = fetch(url + private)
