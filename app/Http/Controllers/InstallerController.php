@@ -8,6 +8,7 @@ use OpenWiki\Core\Env;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
+use OpenWiki\Core\RuntimePaths;
 use OpenWiki\Http\Controller;
 use OpenWiki\Install\InstallService;
 
@@ -35,7 +36,8 @@ final class InstallerController extends Controller
                 'db_port' => Env::get('DB_PORT', '3306'),
                 'db_database' => Env::get('DB_DATABASE', 'openwiki'),
                 'db_username' => Env::bool('OPENWIKI_MANAGED_DATABASE') ? Env::get('DB_USERNAME') : '',
-                'create_database' => !Env::bool('OPENWIKI_MANAGED_DATABASE'),
+                'create_database' => false,
+                'admin_username' => 'admin',
             ],
             'managedDatabase' => Env::bool('OPENWIKI_MANAGED_DATABASE'),
         ]);
@@ -43,7 +45,7 @@ final class InstallerController extends Controller
 
     public function testDatabase(Request $request): Response
     {
-        if ($this->app->installed()) {
+        if (is_file($this->app->basePath('storage/installed.lock'))) {
             return Response::json([
                 'error' => ['code' => 'already_installed', 'message' => 'OpenWiki is already installed.'],
             ], 409);
@@ -59,12 +61,12 @@ final class InstallerController extends Controller
 
             return Response::json(['data' => $result]);
         } catch (\Throwable $exception) {
-            error_log('[OpenWiki installer database test] ' . $exception->getMessage());
+            error_log('[OpenWiki installer database test] ' . $exception::class);
 
             return Response::json([
                 'error' => [
                     'code' => 'database_connection_failed',
-                    'message' => $exception->getMessage(),
+                    'message' => $this->failureMessage($exception),
                 ],
             ], 422);
         }
@@ -72,7 +74,7 @@ final class InstallerController extends Controller
 
     public function store(Request $request): Response
     {
-        if ($this->app->installed()) {
+        if (is_file($this->app->basePath('storage/installed.lock'))) {
             return Response::redirect('/');
         }
 
@@ -81,21 +83,24 @@ final class InstallerController extends Controller
         }
 
         try {
+            if (!is_string($request->input('admin_password')) || $request->input('admin_password') !== $request->input('admin_password_confirmation')) {
+                throw new \InvalidArgumentException('Administrator passwords do not match.');
+            }
             (new InstallService($this->app->basePath()))->install($this->installationInput($request));
-            Env::load($this->app->basePath('.env'));
+            Env::load(RuntimePaths::configuration($this->app->basePath()));
             Session::flash(
                 'success',
-                'Installation completed. Sign in with admin/admin. You will be required to change the password.'
+                'Installation completed. Sign in with the administrator account you created.'
             );
             return Response::redirect('/login');
         } catch (\Throwable $exception) {
-            error_log('[OpenWiki installer] ' . $exception->getMessage());
+            error_log('[OpenWiki installer] ' . $exception::class);
             return $this->render('install/index', [
                 'title' => 'Install OpenWiki',
                 'requirements' => (new InstallService($this->app->basePath()))->requirements(),
-                'defaults' => array_diff_key($this->installationInput($request), ['db_password' => true, 'admin_password' => true]),
+                'defaults' => array_filter(array_intersect_key($this->installationInput($request), array_flip(['app_name', 'app_url', 'timezone', 'db_host', 'db_port', 'db_database', 'db_username', 'create_database', 'admin_username', 'admin_email'])), 'is_scalar'),
                 'managedDatabase' => Env::bool('OPENWIKI_MANAGED_DATABASE'),
-                'installError' => $exception->getMessage(),
+                'installError' => $this->failureMessage($exception),
             ], 422);
         }
     }
@@ -104,7 +109,25 @@ final class InstallerController extends Controller
     {
         $host = $request->header('Host', 'localhost') ?? 'localhost';
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        return $scheme . '://' . $host;
+        $url = $scheme . '://' . $host;
+        return filter_var($url, FILTER_VALIDATE_URL) && parse_url($url, PHP_URL_PATH) === null ? $url : $scheme . '://localhost';
+    }
+
+    private function failureMessage(\Throwable $exception): string
+    {
+        for ($cause = $exception; $cause !== null; $cause = $cause->getPrevious()) {
+            if ($cause instanceof \PDOException) {
+                return match ((int) ($cause->errorInfo[1] ?? 0)) {
+                    1045 => 'Database authentication failed. Check the username and password.',
+                    1044, 1142, 1227 => 'The database account lacks the required permissions. Grant access to this database in your hosting panel.',
+                    1049 => 'Database not found. Create it in your hosting panel or enable automatic creation.',
+                    2002, 2003, 2005 => 'Cannot reach the database server. Check the host, port and server availability.',
+                    default => 'The database operation failed. Check database permissions and availability, then retry with the same settings.',
+                };
+            }
+        }
+        return $exception instanceof \InvalidArgumentException || $exception instanceof \RuntimeException
+            ? $exception->getMessage() : 'Installation could not finish. Check server permissions and available disk space, then retry.';
     }
 
     private function installationInput(Request $request): array

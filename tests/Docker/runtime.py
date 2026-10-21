@@ -166,7 +166,8 @@ def run():
             password = secrets.token_hex(16)
             status, body, _ = http(browser, url + '/install', {'_token': csrf(body), 'app_name': 'Docker runtime verification',
                 'app_url': url, 'timezone': 'UTC', 'db_host': 'untrusted.invalid', 'create_database': '1',
-                'admin_username': 'docker-tester', 'admin_email': 'docker@example.invalid', 'admin_password': password})
+                'admin_username': 'docker-tester', 'admin_email': 'docker@example.invalid', 'admin_password': password,
+                'admin_password_confirmation': password})
             check(status == 200 and b'name="identifier"' in body, 'Real wizard creates an administrator and redirects to login')
             status, body, _ = http(browser, url + '/login', {'_token': csrf(body), 'identifier': 'docker-tester', 'password': password})
             check(status == 200 and b'name="identifier"' not in body, 'New administrator logs in through the real form')

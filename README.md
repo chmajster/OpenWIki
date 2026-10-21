@@ -18,7 +18,21 @@ Preferencja jest zapamiętywana w tej przeglądarce osobno dla konta i instancji
 
 Composer installs PHP runtime dependencies and development/test tools. Node.js 22+ is needed only when building assets from source. Production HTTP requests are handled entirely by PHP. On Linux x64/arm64, `bash scripts/build-editor.sh` can use a temporary, checksum-verified Node.js 22 toolchain if the system version is older; it removes that toolchain after building.
 
-## Install from Git
+## Instalacja z przeglądarki (hosting / katalog główny serwera)
+
+1. Pobierz **`openwiki.zip` z [Releases](https://github.com/chmajster/OpenWIki/releases)**. Paczka zawiera zależności PHP i gotowy edytor. Wersje robocze są również dostępne w artefakcie `openwiki-server-package` zakończonego przebiegu CI w zakładce Actions.
+2. Wypakuj **zawartość** paczki do katalogu domeny, np. `public_html/`, razem z ukrytym plikiem `.htaccess`. Plik `index.php` ma znajdować się bezpośrednio w katalogu głównym domeny.
+3. W panelu hostingu przygotuj pustą bazę MySQL/MariaDB i użytkownika z uprawnieniami do tej bazy. Włącz PHP 8.2+ oraz wymagane rozszerzenia. Apache musi obsługiwać `mod_rewrite` i `AllowOverride All`.
+4. Otwórz adres domeny. Kreator sprawdzi wymagania, poprosi o nazwę instancji, adres, strefę czasową, połączenie z bazą oraz **własny login, e-mail i hasło administratora**. Przetestuj połączenie i zatwierdź instalację.
+5. Zaloguj się utworzonym kontem. Przestrzenie, strony, użytkowników, role, integracje i kopie zapasowe obsłużysz w panelu WWW.
+
+Na serwerze nie są potrzebne SSH, Composer, Node.js, npm ani uruchamianie `install.sh`. Katalog aplikacji musi umożliwiać utworzenie `.env`, a `storage/` zapis danych; po instalacji można odebrać zapis do katalogu kodu. Nie używaj uprawnień `777`. Kreator pokazuje brakujące rozszerzenia i katalogi, które wymagają poprawienia uprawnień w panelu hostingu.
+
+Archiwum **Source code / Download ZIP** z GitHub zawiera źródła i wymaga poniższego budowania. Do instalacji przez samo wypakowanie użyj gotowego **`openwiki.zip`**. Nie wgrywaj plików bazy ani konfiguracji innej instancji. Instalator odmawia zmian w niepustej bazie i nie resetuje istniejących kont. Po przerwaniu instalacji popraw wskazany błąd i ponów ją z tymi samymi danymi bazy i administratora.
+
+Wdrożenie pod adresem głównym domeny jest obsługiwane; instalacja w podkatalogu URL nie jest obsługiwana. Dla Nginx ustaw katalog WWW na `public/` i regułę `try_files $uri $uri/ /index.php?$query_string` — Nginx nie czyta `.htaccess`. Zadania planowane (kolejki webhooków, przypomnienia i konserwacja) wymagają cyklicznego `php /pełna/ścieżka/bin/console cron:run`, które można ustawić w panelu hostingu; ich stan jest widoczny w Administracja → Informacje o systemie.
+
+## Install from source
 
 ```bash
 git clone https://github.com/chmajster/OpenWIki.git
@@ -32,7 +46,7 @@ For Apache, the repository can be extracted directly into the virtual host web r
 
 On the first HTTP request OpenWiki automatically redirects to `/install`. The four-step browser wizard checks the runtime, collects instance settings, configures MySQL/MariaDB, applies migrations, seeds RBAC and system templates, writes `.env`, creates the installation lock and creates the initial Super Admin account.
 
-The default first-login credentials are `admin` / `admin`. The account is marked for mandatory password change immediately after the first successful sign-in. The installation lock prevents the graphical installer from running again.
+Choose the initial administrator username, email and a unique password in the final wizard step. There is no default password. The installation lock prevents the graphical installer from running again, including when the instance configuration is lost. Filesystem and database locks serialize installation; interrupted setup can resume without rotating the application key or overwriting the administrator.
 
 ## Production installer
 

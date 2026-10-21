@@ -95,6 +95,18 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
     const databaseNext = wizard.querySelector('[data-database-next]');
     let currentStep = 1;
     let databaseTestPassed = databaseNext === null;
+    const connectionSnapshot = () => JSON.stringify(['db_host', 'db_port', 'db_database', 'db_username', 'db_password', 'create_database'].map(name => {
+        const field = form?.elements.namedItem(name);
+        return field?.type === 'checkbox' ? field.checked : field?.value;
+    }));
+    const password = form?.elements.namedItem('admin_password');
+    const confirmation = form?.elements.namedItem('admin_password_confirmation');
+    const validatePassword = () => {
+        confirmation?.setCustomValidity(confirmation.value !== password?.value ? t('Administrator passwords do not match.') : '');
+        password?.setCustomValidity(new TextEncoder().encode(password.value).length > 72 ? t('Administrator password must contain 12-72 bytes and no null characters.') : '');
+    };
+    password?.addEventListener('input', validatePassword);
+    confirmation?.addEventListener('input', validatePassword);
 
     const updateSummary = () => {
         if (!form) return;
@@ -149,7 +161,7 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
         databaseTestStatus.classList.toggle('is-success', state === 'success');
         databaseTestStatus.classList.toggle('is-error', state === 'error');
         databaseTestStatus.classList.toggle('is-pending', state === 'pending');
-        databaseTestStatus.textContent = message;
+        databaseTestStatus.textContent = t(message);
     };
 
     const resetDatabaseTest = () => {
@@ -181,6 +193,27 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
     });
 
     if (form) {
+        form.noValidate = true;
+        form.addEventListener('submit', event => {
+            validatePassword();
+            for (const panel of panels) {
+                const invalid = Array.from(panel.querySelectorAll('input, select, textarea')).find(field => !field.disabled && !field.checkValidity());
+                if (invalid) {
+                    event.preventDefault();
+                    showStep(Number(panel.dataset.wizardPanel));
+                    invalid.reportValidity();
+                    return;
+                }
+            }
+            if (!requirementsOk || !databaseTestPassed) {
+                event.preventDefault();
+                showStep(requirementsOk ? 3 : 1);
+                setDatabaseTestStatus('error', t('Test the database connection successfully before continuing.'));
+                return;
+            }
+            form.querySelector('[type="submit"]').disabled = true;
+            wizard.querySelector('[data-install-status]').textContent = t('Installing OpenWiki. Keep this page open until setup finishes.');
+        });
         form.addEventListener('input', updateSummary);
         form.addEventListener('change', updateSummary);
 
@@ -202,6 +235,9 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
         const originalLabel = databaseTestButton.textContent;
         databaseTestButton.textContent = 'Testing...';
         setDatabaseTestStatus('pending', 'Checking database connection...');
+        const snapshot = connectionSnapshot();
+        const abort = new AbortController();
+        const timeout = setTimeout(() => abort.abort(), 15000);
 
         try {
             const response = await fetch(databaseTest.dataset.testUrl || '/install/test-database', {
@@ -212,11 +248,17 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
                 },
                 body: new FormData(form),
                 credentials: 'same-origin',
+                signal: abort.signal,
             });
 
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload?.data?.ok !== true) {
                 throw new Error(t(payload?.error?.message) || 'Database connection test failed.');
+            }
+
+            if (snapshot !== connectionSnapshot()) {
+                resetDatabaseTest();
+                return;
             }
 
             databaseTestPassed = true;
@@ -230,6 +272,7 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
                 error instanceof Error ? error.message : 'Database connection test failed.'
             );
         } finally {
+            clearTimeout(timeout);
             databaseTestButton.disabled = false;
             databaseTestButton.textContent = originalLabel;
         }
