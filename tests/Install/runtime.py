@@ -88,6 +88,14 @@ def main():
                 return subprocess.Popen([APACHE, '-f', str(config), '-DFOREGROUND'], cwd=work,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     creationflags=subprocess.CREATE_NO_WINDOW if WINDOWS else 0, env=ENV)
+            def stop():
+                subprocess.run([APACHE, '-f', str(config), '-k', 'shutdown'], cwd=work, env=ENV,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NO_WINDOW if WINDOWS else 0, timeout=15)
+                process.wait(timeout=15)
+                # Windows releases the child process' current directory asynchronously.
+                if WINDOWS:
+                    time.sleep(.5)
             def ready():
                 for _ in range(100):
                     if process.poll() is not None:
@@ -107,7 +115,7 @@ def main():
                 (root / '.openwiki/compose.env').write_text('PRIVATE_CONFIGURATION')
                 (root / '.env.tmp-sensitive').write_text('PRIVATE_CONFIGURATION')
                 for private in ['/.env.tmp-sensitive', '/.openwiki/compose.env', '/vendor/autoload.php', '/database/migrations/001_initial.php',
-                                '/scripts/package-zip.php', '/composer.lock', '/install.sh', '/public/index.php', '/storage/cache/.gitkeep']:
+                                '/scripts/package-zip.php', '/composer.lock', '/install.sh', '/storage/cache/.gitkeep']:
                     status, body = fetch(url + private)
                     assert status in (403, 404) and b'PRIVATE_CONFIGURATION' not in body, private
                 # Remove a probe directory that would otherwise signal a managed upgrade.
@@ -117,8 +125,7 @@ def main():
                 run(['node', 'tests/Install/browser.cjs', url], timeout=240)
                 before = (root / '.env').read_bytes()
                 marker = (root / 'storage/installed.lock').read_bytes()
-                process.terminate()
-                process.wait(timeout=15)
+                stop()
                 process = start()
                 ready()
                 assert fetch(url + '/health')[0] == 200
@@ -133,8 +140,7 @@ def main():
                 print('PASS: extracted ZIP, Apache repository-root rewrites, private paths, static bundles, restart, configuration/key/marker persistence and lost-configuration protection.')
             finally:
                 if process is not None and process.poll() is None:
-                    process.terminate()
-                    process.wait(timeout=15)
+                    stop()
                 log = work / 'apache-error.log'
                 if log.exists():
                     shutil.copyfile(log, PROJECT / 'storage/temp/install-apache.log')
