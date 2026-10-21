@@ -4,7 +4,10 @@ const fixture = () => JSON.parse(fs.readFileSync('storage/temp/editor-browser.js
 const unique = name => name + ' ' + Date.now() + Math.random().toString(16).slice(2, 6);
 async function api(request, path, data) {
     const response = await request.post('/api/v1/' + path, {headers: {Authorization: 'Bearer ' + fixture().token}, data});
-    expect(response.ok(), await response.text()).toBeTruthy(); return (await response.json()).data;
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const result = (await response.json()).data;
+    if (path === 'spaces') createdSpaces.push(result.id);
+    return result;
 }
 async function login(page) {
     await page.context().addCookies([{name: 'openwiki_locale', value: 'pl', url: 'http://127.0.0.1:8765'}]);
@@ -28,9 +31,17 @@ async function stableTabs(page, base) {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBeTruthy();
     }
 }
-let errors;
-test.beforeEach(({page}) => { errors = []; page.on('pageerror', error => errors.push(error.message)); });
-test.afterEach(() => expect(errors).toEqual([]));
+let errors, createdSpaces;
+test.beforeEach(({page}) => { errors = []; createdSpaces = []; page.on('pageerror', error => errors.push(error.message)); });
+test.afterEach(async ({request}) => {
+    try { expect(errors).toEqual([]); }
+    finally {
+        for (const id of createdSpaces) {
+            const response = await request.delete('/api/v1/spaces/' + id, {headers: {Authorization: 'Bearer ' + fixture().token}});
+            expect(response.ok(), await response.text()).toBeTruthy();
+        }
+    }
+});
 
 for (const width of [360, 768, 1440]) test('space header stays identical while switching tabs at ' + width + ' pixels', async ({page, request}) => {
     const space = await api(request, 'spaces', {name: unique('Dokumentacja zespołu'), visibility: 'public', description: 'Stały opis przestrzeni.\nDrugi wiersz pozostaje nad zakładkami.', icon: '📘'});
