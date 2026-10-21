@@ -185,7 +185,7 @@ foreach ($pages as $candidate) if ((int) $candidate['id'] === (int) $parentValue
         </dialog>
         <div class="workspace-body">
         <aside class="workspace-tree" id="workspace-tree" data-workspace-tree aria-label="Drzewo przestrzeni">
-            <a class="workspace-brand" href="/">Open<span>Wiki</span></a><div class="workspace-space-name"><?= $editorIcon('document') ?><strong><?= $e($space['name']) ?></strong></div>
+            <a class="workspace-space-name" href="/spaces/<?= rawurlencode($space['space_key']) ?>"><?= $editorIcon('document') ?><strong><?= $e($space['name']) ?></strong></a>
             <div class="workspace-tree-heading"><span>Strony</span><a href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create" aria-label="Utwórz stronę w tej przestrzeni">+</a></div>
             <p class="workspace-location" data-current-location><?= $e($parentTitle ?? 'Główny poziom') ?> → <?= $isEdit ? 'Edytowana strona' : 'Nowa strona' ?></p>
             <?php $activePageId = $page['id'] ?? $parentValue; require __DIR__ . '/../partials/page-tree.php'; ?>

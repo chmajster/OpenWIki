@@ -12,7 +12,7 @@
 .document-workspace button:focus-visible,.document-workspace summary:focus-visible,.document-workspace a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .workspace-breadcrumbs { display:flex; align-items:center; gap:8px; min-width:0; flex:1; font-size:13px; color:var(--muted); }
 .workspace-breadcrumbs span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px; }
-.workspace-breadcrumbs a { color:var(--muted); white-space:nowrap; }
+.workspace-breadcrumbs a { color:var(--muted); white-space:nowrap; min-width:0; overflow:hidden; text-overflow:ellipsis; }
 .workspace-save-popover,.workspace-more { position:relative; }
 .workspace-save-popover summary { cursor:pointer; list-style:none; white-space:nowrap; font-size:12px; color:var(--muted); padding:8px; }
 .save-indicator::before { content:'○'; margin-right:5px; }
@@ -24,20 +24,19 @@
 .workspace-body { display:flex; align-items:stretch; min-height:calc(100dvh - var(--editor-sticky-offset)); }
 .workspace-tree { flex:0 0 236px; width:236px; background:var(--surface-2); padding:20px 12px; border-right:1px solid var(--border); position:sticky; top:var(--editor-sticky-offset); height:calc(100dvh - var(--editor-sticky-offset)); overflow:auto; }
 .workspace-tree h2 { font-size:15px; margin:16px 8px 12px; }
-.workspace-brand { font-weight:700; color:var(--text); margin:0 8px; }
 .workspace-tree .tree-create { padding:2px 5px; margin-left:auto; color:var(--muted); font-size:20px; }
 .workspace-tree .tree-actions { display:none; }
 .workspace-tree .page-tree { background:transparent; border:0; padding:0; }
 .workspace-tree .tree-row { min-height:34px; font-size:13px; }
 .workspace-tree .page-tree__link { display:block; color:var(--text); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.workspace-space-name { display:flex; align-items:center; gap:6px; font-size:14px; margin:24px 4px; }
+.workspace-space-name { display:flex; align-items:center; gap:10px; font-size:14px; margin:4px 4px 20px; color:var(--text); overflow-wrap:anywhere; }
 .workspace-space-name svg { width:20px; height:20px; }
 .workspace-tree-heading { display:flex; justify-content:space-between; color:var(--muted); font-size:12px; padding:6px; }
 .workspace-tree-heading a { font-size:20px; }
 .workspace-location { font-size:11px; color:var(--muted); }
 .workspace-tree .editor-outline { margin-top:32px; border-top:1px solid var(--border); padding-top:12px; }
 .workspace-tree .editor-outline button { border:0; background:transparent; font-size:12px; padding:5px; }
-.workspace-canvas { flex:1; min-width:0; padding:72px 52px 120px; max-width:none; background:var(--surface); }
+.workspace-canvas { flex:1; min-width:0; padding:72px 52px 120px; max-width:none; background:var(--surface); overflow:visible; }
 .workspace-canvas>* { max-width:760px; margin-left:auto; margin-right:auto; }
 [data-document-width=wide] .workspace-canvas>* { max-width:1100px; }
 [data-document-width=full] .workspace-canvas>* { max-width:none; }
@@ -124,3 +123,8 @@
 @media(max-width:480px) { .workspace-breadcrumbs span[data-workspace-title],.workspace-breadcrumbs span[aria-hidden] { display:none; } .workspace-canvas { padding:32px 20px 80px; } .document-workspace .editor-toolbar { gap:0; } .document-workspace .editor-toolbar button { min-width:30px; min-height:36px; } .document-workspace .title-input { font-size:28px; } .document-decoration { font-size:11px; } .document-workspace .command-menu { width:calc(100vw - 24px); } .document-workspace .block-handles { transform:translateX(-8px); } .document-workspace .rich-editor { font-size:15px; } .document-workspace .editor-meta-grid { grid-template-columns:1fr; } }
 .editor-template-source { margin: 0 0 18px; color: var(--muted); font-size: 12px; }
 .editor-template-source strong { color: var(--text); font-weight: 500; }
+.document-workspace .collaboration-panel { top:calc(var(--editor-sticky-offset) + 12px); max-height:calc(100dvh - var(--editor-sticky-offset) - 24px); }
+@media(max-width:900px) {
+    .document-workspace:has(noscript .editor-no-script) .workspace-body { display:block; }
+    .document-workspace:has(noscript .editor-no-script) .workspace-tree { position:static; width:auto; height:auto; box-shadow:none; }
+}

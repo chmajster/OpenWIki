@@ -184,7 +184,7 @@ for (const viewport of [{width:1920,height:1080},{width:1440,height:900},{width:
     await expect(page.locator('[data-document-title]')).toHaveValue('Dokumentacja zespołu');
     await expect(editor(page)).toHaveText('Wiedza, do której łatwo wrócić.');
     await editor(page).press('ControlOrMeta+s'); await expect(page.locator('[data-save-summary]')).toHaveText('Zapisano');
-    await openMore(page); await page.locator('select[data-workspace-theme]').selectOption('dark'); await page.keyboard.press('Escape');
+    await page.locator('.theme-menu > summary').click(); await page.locator('.theme-menu [data-theme-select]').selectOption('dark'); await page.keyboard.press('Escape');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
     await page.screenshot({path: 'storage/temp/workspace-' + viewport.width + 'x' + viewport.height + '-dark.png'});
     await openPublication(page); await expect(page.locator('[data-publication-dialog]')).toBeVisible();

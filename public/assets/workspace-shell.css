@@ -17,7 +17,7 @@
 .language-menu summary::-webkit-details-marker { display: none; }
 .application-shell { --header-height: 56px; background: var(--surface); font-size: 14px; }
 .workspace-shell { --navigation-width: 264px; }
-.application-shell .topbar { min-height: var(--header-height); background: var(--surface); backdrop-filter: none; z-index: 50; }
+.application-shell .topbar { position: sticky; top: 0; min-height: var(--header-height); background: var(--surface); backdrop-filter: none; z-index: 50; }
 .application-shell .topbar__inner { min-height: var(--header-height); gap: 12px; padding: 0 18px; flex-wrap: nowrap; }
 .application-shell .brand { margin-right: 30px; font-size: 19px; letter-spacing: -.6px; }
 .application-shell .top-search { margin: 0 auto; max-width: 720px; }
@@ -33,6 +33,7 @@
 .application-shell .shell-create { gap: 5px; white-space: nowrap; padding: 6px 11px; min-height: 34px; font-size: 13px; }
 .workspace-shell .button { border-radius: 5px; font-size: 13px; font-weight: 500; }
 .application-shell .topbar .button { border-radius: 5px; font-weight: 500; }
+.application-shell .topbar .account-avatar { border-radius: 50%; }
 .workspace-shell .button--ghost, .application-shell .topbar .button--ghost { border-color: transparent; background: transparent; }
 .workspace-shell .button--ghost:hover, .application-shell .topbar .button--ghost:hover { background: var(--surface-2); }
 .workspace-shell .card { box-shadow: none; border-radius: 8px; }

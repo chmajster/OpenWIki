@@ -1,6 +1,5 @@
 const {test, expect} = require('@playwright/test');
 const fs = require('node:fs');
-const {openMore} = require('./workspace-helpers.cjs');
 const fixture = () => JSON.parse(fs.readFileSync('storage/temp/editor-browser.json', 'utf8'));
 const theme = page => page.locator('.theme-menu [data-theme-select]');
 const root = page => page.locator('html');
@@ -40,11 +39,11 @@ test('one theme persists across work center, search, administration and the real
         await expect(theme(page)).toHaveValue('light');
     }
     await page.goto('/spaces/' + fixture().spaceKey + '/pages/create');
-    await openMore(page); await expect(page.locator('select[data-workspace-theme]')).toHaveValue('light');
-    await page.locator('select[data-workspace-theme]').selectOption('dark'); await page.keyboard.press('Escape');
+    await expect(theme(page)).toHaveValue('light');
+    await choose(page, 'dark');
     await expect(root(page)).toHaveAttribute('data-theme', 'dark');
     await expect(page.locator('body')).toHaveAttribute('data-workspace-theme', 'dark');
-    await page.reload(); await openMore(page); await expect(page.locator('select[data-workspace-theme]')).toHaveValue('dark');
+    await page.reload(); await expect(theme(page)).toHaveValue('dark');
     await page.goto('/'); await expect(root(page)).toHaveAttribute('data-theme', 'dark');
     await choose(page, 'light'); await page.reload(); await expect(root(page)).toHaveAttribute('data-theme', 'light');
 });
