@@ -124,6 +124,27 @@
 .editor-template-source { margin: 0 0 18px; color: var(--muted); font-size: 12px; }
 .editor-template-source strong { color: var(--text); font-weight: 500; }
 .document-workspace .collaboration-panel { top:calc(var(--editor-sticky-offset) + 12px); max-height:calc(100dvh - var(--editor-sticky-offset) - 24px); }
+.document-workspace .workspace-recovery { padding:20px; margin:0 auto 32px; border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:8px; background:var(--surface-2); color:var(--text); }
+.workspace-recovery-heading { display:flex; align-items:flex-start; gap:12px; margin-bottom:18px; }
+.workspace-recovery-icon { display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; width:32px; height:32px; background:var(--accent-soft); color:var(--accent-label); border-radius:7px; }
+.workspace-recovery-heading > div { min-width:0; }
+.workspace-recovery-heading h2 { margin:0; font-size:15px; line-height:1.5; font-weight:600; }
+.workspace-recovery-heading p { margin:5px 0 0; font-size:12px; line-height:1.6; color:var(--muted); }
+.workspace-recovery > label { margin-bottom:7px; font-size:12px; font-weight:500; }
+.workspace-recovery > select { width:100%; max-width:100%; min-width:0; border-radius:5px; background:var(--surface); font-size:13px; font-weight:400; text-overflow:ellipsis; }
+.workspace-recovery-meta { margin:7px 0 18px; font-size:11px; color:var(--muted); }
+.workspace-recovery-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.workspace-recovery-actions .button { min-height:36px; padding:8px 12px; font-size:12px; font-weight:500; }
+.workspace-recovery-actions .button--primary:hover { background:var(--accent-strong); color:var(--on-accent); }
+.workspace-recovery-actions [data-hide-recovery] { margin-left:auto; }
+@media(max-width:599px) {
+    .document-workspace .workspace-recovery { padding:16px; margin-bottom:24px; }
+    .workspace-recovery-heading { gap:10px; }
+    .workspace-recovery-icon { width:28px; height:28px; }
+    .workspace-recovery-heading h2 { font-size:14px; }
+    .workspace-recovery-actions [data-restore-recovery] { flex-basis:100%; }
+    .workspace-recovery-actions [data-compare-recovery] { flex:1; }
+}
 @media(max-width:900px) {
     .document-workspace:has(noscript .editor-no-script) .workspace-body { display:block; }
     .document-workspace:has(noscript .editor-no-script) .workspace-tree { position:static; width:auto; height:auto; box-shadow:none; }

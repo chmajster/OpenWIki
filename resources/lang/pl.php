@@ -502,4 +502,7 @@ return [
     'Parent page ACL inheritance disabled.' => 'Wyłączono dziedziczenie uprawnień ze stron nadrzędnych.',
     'Select a valid user, group or role.' => 'Wybierz istniejącego użytkownika, grupę lub rolę.',
     'Unable to save page ACL rule.' => 'Nie udało się zapisać reguły uprawnień.',
+    'Restore copy' => 'Przywróć kopię',
+    'Compare copy' => 'Porównaj kopię',
+    'Recovery point' => 'Punkt odzyskiwania',
 ];

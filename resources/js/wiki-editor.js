@@ -198,17 +198,27 @@ if (editorRoot) {
         updateSaveButton();
         markDirty();
     };
+    const recoveryTime = data => Date.parse(/T/.test(data.savedAt) ? data.savedAt : data.savedAt?.replace(' ', 'T') + 'Z') || 0;
+    const recoveryDate = data => {
+        const time = recoveryTime(data);
+        return time ? new Intl.DateTimeFormat(document.documentElement.lang || 'pl', {dateStyle: 'short', timeStyle: 'short'}).format(new Date(time)) : (data.savedAt || '');
+    };
+    const updateRecoveryMeta = () => {
+        const data = recoveryCopies.get(recoverySelect.value);
+        editorRoot.querySelector('[data-recovery-meta]').textContent = data ? t('Base version') + ': ' + data.baseVersion : '';
+    };
+    recoverySelect.addEventListener('change', updateRecoveryMeta);
     const showRecovery = () => {
         const selected = recoverySelect.value;
         recoverySelect.replaceChildren();
-        const time = (data) => Date.parse(/T/.test(data.savedAt) ? data.savedAt : data.savedAt?.replace(' ', 'T') + 'Z') || 0;
-        for (const [key, data] of [...recoveryCopies].sort((left, right) => time(right[1]) - time(left[1]))) {
+        for (const [key, data] of [...recoveryCopies].sort((left, right) => recoveryTime(right[1]) - recoveryTime(left[1]))) {
             const option = document.createElement('option');
             option.value = key;
-            option.textContent = (data.title || t('Untitled page')) + ' — ' + data.savedAt + ' — base ' + data.baseVersion;
+            option.textContent = (data.title || t('Untitled page')) + ' — ' + recoveryDate(data);
             recoverySelect.appendChild(option);
         }
         if (recoveryCopies.has(selected)) recoverySelect.value = selected;
+        updateRecoveryMeta();
         recoveryText.textContent = t('Choose a recovery copy. Restoring retains its original base version.');
         recoveryBanner.hidden = recoveryCopies.size === 0;
     };
@@ -677,7 +687,7 @@ if (editorRoot) {
             const local = recoveryCopies.get(draft.editorId);
             if (!local || Number(local.sequence) < draft.sequence) recoveryCopies.set(draft.editorId, {...draft, localKey: local?.localKey});
         }
-        for (const point of data.checkpoints || []) recoveryCopies.set('checkpoint:' + point.id, {...point, checkpoint: point.id, title: 'Punkt odzyskiwania'});
+        for (const point of data.checkpoints || []) recoveryCopies.set('checkpoint:' + point.id, {...point, checkpoint: point.id, title: t('Recovery point')});
         showRecovery();
     }).catch(() => { /* Local recovery remains usable without the server. */ });
     const resume = async () => {

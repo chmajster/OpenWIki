@@ -108,14 +108,6 @@ foreach ($pages as $candidate) if ((int) $candidate['id'] === (int) $parentValue
         <button type="button" class="button button--secondary" data-model-keep><?= $e($t('Keep original HTML')) ?></button>
         <button type="button" class="button button--primary" data-model-accept><?= $e($t('Accept transformation and keep original')) ?></button>
     </section>
-    <div class="alert alert--warning editor-recovery" data-recovery-banner hidden>
-        <span data-recovery-text><?= $e($t('Recovered content is available.')) ?></span>
-        <label><?= $e($t('Recovery copy')) ?> <select data-recovery-select></select></label>
-        <div class="recovery-actions">
-            <button class="button button--ghost" type="button" data-compare-recovery>Porównaj kopię</button><button class="button button--secondary" type="button" data-restore-recovery><?= $e($t('Restore recovered content')) ?></button>
-            <button class="button button--ghost" type="button" data-hide-recovery><?= $e($t('Ignore')) ?></button>
-        </div>
-    </div>
     <section class="card panel editor-conflict" data-conflict-panel hidden aria-label="<?= $e($t('Resolve edit conflict')) ?>">
         <h2><?= $e($t('Resolve edit conflict')) ?></h2>
         <p><?= $e($t('Your original base version is retained. Compare the base, your document and the server version, then edit your document to resolve the differences.')) ?></p>
@@ -193,6 +185,7 @@ foreach ($pages as $candidate) if ((int) $candidate['id'] === (int) $parentValue
         </aside>
 
         <div class="editor-main workspace-canvas">
+            <?php require __DIR__ . '/../partials/editor-recovery.php'; ?>
             <div class="document-title-area">
                 <?php if (!empty($initialTemplate)): ?><p class="editor-template-source" data-initial-template-name><?= $e($t('Started from template')) ?>: <strong><?= $e($initialTemplate['display_name']) ?></strong></p><?php endif; ?>
                 <div class="document-decoration"><details class="emoji-menu"><summary aria-label="Dodaj emoji do tytułu">☺ <span>Ikona</span></summary><div><?php foreach (['📄', '📘', '🛠️', '💡', '✅', '🚀', '📋', '🔍'] as $emoji): ?><button type="button" data-title-emoji="<?= $e($emoji) ?>" aria-label="Dodaj <?= $e($emoji) ?> do tytułu"><?= $emoji ?></button><?php endforeach; ?></div></details><?php if ($canUploadImage): ?><button type="button" data-add-cover><?= $editorIcon('image') ?> Obraz nagłówkowy</button><?php endif; ?></div>
