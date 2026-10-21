@@ -2,6 +2,21 @@
 
 // Only interface messages are translated; document titles, content and metadata stay intact.
 return [
+    'Find a space' => 'Znajdź przestrzeń', 'Find a page' => 'Znajdź stronę',
+    'Name, key, or description' => 'Nazwa, klucz lub opis', 'Search page titles' => 'Szukaj w tytułach stron',
+    'Showing :from–:to of :total' => 'Wyświetlane :from–:to z :total',
+    'Display mode' => 'Sposób wyświetlania', 'Card view' => 'Widok kart', 'List view' => 'Widok listy',
+    'Pagination' => 'Nawigacja między stronami', 'Page' => 'Strona', 'All pages' => 'Wszystkie strony',
+    'Previous' => 'Poprzednia', 'Next' => 'Następna',
+    'Space content' => 'Treść przestrzeni', 'No spaces match these filters.' => 'Żadna przestrzeń nie pasuje do filtrów.',
+    'No pages match these filters.' => 'Żadna strona nie pasuje do filtrów.',
+    'Try another name or change the filters.' => 'Wpisz inną nazwę lub zmień filtry.',
+    'Search must contain at most 200 characters.' => 'Wyszukiwana fraza może mieć najwyżej 200 znaków.',
+    'Choose a valid page number.' => 'Wybierz prawidłowy numer strony.',
+    'Choose a valid filter value.' => 'Wybierz prawidłową wartość filtra.',
+    'Space settings' => 'Ustawienia przestrzeni', 'Home page' => 'Strona startowa', 'Documentation' => 'Dokumentacja',
+    'Choose a page from the tree or browse all pages in this space.' => 'Wybierz stronę z drzewa lub przejrzyj wszystkie strony w tej przestrzeni.',
+    'This archived space is read-only. Restore it in space settings to edit its documents.' => 'Archiwum jest dostępne do odczytu. Aby edytować dokumenty, przywróć przestrzeń w ustawieniach.',
     'Home' => 'Strona główna', 'For you' => 'Dla Ciebie', 'Workspace' => 'Obszar pracy',
     'Workspace navigation' => 'Nawigacja obszaru pracy', 'Toggle navigation' => 'Zwiń lub rozwiń nawigację',
     'Close navigation' => 'Zamknij nawigację', 'Skip to content' => 'Przejdź do treści',

@@ -24,14 +24,15 @@ $listPages = match ($dashboardView) {
         </nav>
     <?php endif; ?>
     <?php if (in_array($dashboardView, ['home', 'spaces'], true)): ?>
+        <?php if ($dashboardView === 'spaces'): $browseResult = $directory; $browseKind = 'spaces'; $browseAction = '/'; $browseFixed = ['view' => 'spaces']; require __DIR__ . '/../partials/browse-filters.php'; endif; ?>
         <section class="home-section" aria-labelledby="home-spaces-heading">
-            <div class="panel__header"><h2 id="home-spaces-heading"><?= $e($t('Spaces')) ?> <span class="count"><?= count($spaces) ?></span></h2><?php if ($dashboardView === 'home'): ?><a class="text-link" href="/?view=spaces"><?= $e($t('View all spaces')) ?> <?= $uiIcon('arrow') ?></a><?php endif; ?></div>
+            <div class="panel__header"><h2 id="home-spaces-heading"><?= $e($t('Spaces')) ?><?php if ($dashboardView === 'spaces'): ?> <span class="count"><?= (int) $directory['meta']['total'] ?></span><?php endif; ?></h2><?php if ($dashboardView === 'home'): ?><a class="text-link" href="/?view=spaces"><?= $e($t('View all spaces')) ?> <?= $uiIcon('arrow') ?></a><?php endif; ?></div>
             <?php if ($spaces === []): ?>
-                <div class="workspace-empty"><?= $uiIcon('spaces') ?><h3><?= $e($t('Your knowledge starts here')) ?></h3><p><?= $e($t('No spaces are available.')) ?></p><?php if ($canCreateSpace): ?><a class="button button--primary" href="/spaces/create"><?= $e($t('Create space')) ?></a><?php endif; ?></div>
+                <div class="workspace-empty"><?= $uiIcon('spaces') ?><h3><?= $e($t($dashboardView === 'spaces' ? 'No spaces match these filters.' : 'Your knowledge starts here')) ?></h3><p><?= $e($t($dashboardView === 'spaces' ? 'Try another name or change the filters.' : 'No spaces are available.')) ?></p><?php if ($dashboardView === 'spaces'): ?><a class="button button--secondary" href="/?view=spaces"><?= $e($t('Reset filters')) ?></a><?php elseif ($canCreateSpace): ?><a class="button button--primary" href="/spaces/create"><?= $e($t('Create space')) ?></a><?php endif; ?></div>
             <?php else: ?>
-                <div class="space-grid home-space-grid">
+                <div class="space-grid home-space-grid"<?= $dashboardView === 'spaces' ? ' data-directory-layout="' . $e($directory['filters']['layout']) . '"' : '' ?>>
                     <?php foreach ($dashboardView === 'home' ? array_slice($spaces, 0, 6) : $spaces as $homeSpace): ?>
-                        <a class="space-card home-space-card" href="/spaces/<?= rawurlencode($homeSpace['space_key']) ?>">
+                        <a class="space-card home-space-card" data-space-id="<?= (int) $homeSpace['id'] ?>" href="/spaces/<?= rawurlencode($homeSpace['space_key']) ?>">
                             <span class="space-avatar space-avatar--large space-color-<?= (int) (crc32($homeSpace['space_key']) % 5) ?>" aria-hidden="true"><?= $e($homeSpace['icon'] ?: mb_substr($homeSpace['name'], 0, 1)) ?></span>
                             <strong><?= $e($homeSpace['name']) ?></strong><span class="space-description"><?= $e($homeSpace['description'] ?: $t('A shared place for knowledge')) ?></span>
                             <small><?= $e($homeSpace['space_key']) ?> <span aria-hidden="true">·</span> <?= $e($t(ucfirst($homeSpace['visibility']))) ?><?= $homeSpace['status'] === 'archived' ? ' · ' . $e($t('Archived')) : '' ?></small>
@@ -39,6 +40,7 @@ $listPages = match ($dashboardView) {
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
+            <?php if ($dashboardView === 'spaces'): require __DIR__ . '/../partials/browse-pagination.php'; endif; ?>
         </section>
     <?php endif; ?>
     <?php if (in_array($dashboardView, ['home', 'recent', 'favorites'], true)): ?>

@@ -5,7 +5,7 @@ $workspaceShell = $app->installed() && empty($editorWorkspace) && !in_array($tem
 $navigationSpace = $data['space'] ?? null;
 $navigationPageId = isset($data['page']['id']) ? (int) $data['page']['id'] : null;
 $navigationSpaces = $workspaceShell && $navigationSpace === null
-    ? ($template === 'dashboard/index' ? $data['spaces'] : (new \OpenWiki\Repositories\SpaceRepository($app->database()))->visibleFor($currentUser === null ? null : (int) $currentUser['id'], $app->auth()->can('*'), 12))
+    ? ($data['navigationSpaces'] ?? (new \OpenWiki\Repositories\SpaceRepository($app->database()))->visibleFor($currentUser === null ? null : (int) $currentUser['id'], $app->auth()->can('*'), 12))
     : [];
 $navigationCanCreate = $workspaceShell && $navigationSpace !== null && $app->auth()->can('page.create') && (new \OpenWiki\Permissions\SpaceAccessService($app))->canEdit($navigationSpace);
 $pageTitle = isset($title) ? $title . ' · ' . $app->name() : $app->name();
@@ -39,7 +39,7 @@ $notificationCount = $currentUser === null
             <form class="top-search search-combobox" method="get" action="/search" role="search" data-search-form>
                 <label class="sr-only" for="global-search"><?= $e($t('Search')) ?></label>
                 <span class="search-icon"><?= $uiIcon('search') ?></span>
-                <input id="global-search" name="q" type="search" placeholder="<?= $e($t('Search documentation…')) ?>" value="<?= $e(is_scalar($_GET['q'] ?? '') ? ($_GET['q'] ?? '') : '') ?>" autocomplete="off" data-search-query aria-autocomplete="list" aria-controls="global-search-suggestions" aria-expanded="false">
+                <input id="global-search" name="q" type="search" placeholder="<?= $e($t('Search documentation…')) ?>" value="<?= $e($template === 'search/index' ? ($data['query'] ?? '') : '') ?>" autocomplete="off" data-search-query aria-autocomplete="list" aria-controls="global-search-suggestions" aria-expanded="false">
                 <ul id="global-search-suggestions" class="search-suggestions" role="listbox" aria-label="Podpowiedzi wyszukiwania" hidden></ul>
                 <span class="sr-only" data-search-suggestion-status role="status" aria-live="polite"></span>
                 <span class="shortcut">Ctrl K</span>

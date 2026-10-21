@@ -10,6 +10,7 @@ use OpenWiki\Http\Controller;
 use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Repositories\SpaceRepository;
+use OpenWiki\Spaces\BrowseInput;
 use OpenWiki\Wiki\PageEngagementService;
 
 final class DashboardController extends Controller
@@ -29,11 +30,16 @@ final class DashboardController extends Controller
         $spaceRepository = new SpaceRepository($this->app->database());
         $pageRepository = new PageRepository($this->app->database());
         $pageAccess = new PageAclService($this->app);
-
-        $spaces = $spaceRepository->visibleFor(
+        $navigationSpaces = $spaceRepository->visibleFor(
             $user === null ? null : (int) $user['id'],
-            $this->app->auth()->can('*')
+            $this->app->auth()->can('*'), 12
         );
+        $directory = null;
+        if ($view === 'spaces') {
+            try { $directory = $spaceRepository->browse($user === null ? null : (int) $user['id'], $this->app->auth()->can('*'), BrowseInput::directory((array) $request->query())); }
+            catch (\InvalidArgumentException $error) { return $this->render('errors/422', ['title' => 'Invalid filters', 'message' => $error->getMessage(), 'resetUrl' => '/?view=spaces', 'dashboardView' => 'spaces'], 422); }
+        }
+        $spaces = $view === 'spaces' ? $directory['data'] : array_slice($navigationSpaces, 0, 6);
 
         $recentUpdated = [];
         foreach ($view === 'home' ? $pageRepository->recentUpdated(30) : [] as $page) {
@@ -73,6 +79,8 @@ final class DashboardController extends Controller
             'dashboardView' => $view,
             'workCenter' => $workCenter,
             'spaces' => $spaces,
+            'navigationSpaces' => $navigationSpaces,
+            'directory' => $directory,
             'recentUpdated' => $recentUpdated,
             'recentViewed' => $user === null || !in_array($view, ['home', 'recent'], true) ? [] : $filterAccessible(
                 $pageRepository->recentForUser((int) $user['id'], 20)
