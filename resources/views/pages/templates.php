@@ -12,15 +12,15 @@ $createUrl = static function (?array $row = null) use ($base, $parentQuery): str
 };
 $categoryIcons = ['technical' => 'document', 'knowledge' => 'book', 'team' => 'spaces', 'operations' => 'check', 'custom' => 'star'];
 ?>
-<section class="content-container template-gallery" data-template-gallery>
-    <header class="page-heading">
-        <div><div class="breadcrumbs"><a href="<?= $e($base) ?>"><?= $e($space['name']) ?></a><span>/</span><span><?= $e($t('Templates')) ?></span></div>
-            <h1><?= $e($t('Create from a template')) ?></h1><p class="muted"><?= $e($t('Give your next document a useful starting point.')) ?></p>
+<section class="wiki-layout space-overview">
+<article class="wiki-content template-gallery" data-template-gallery>
+    <?php require __DIR__ . '/../partials/space-header.php'; ?>
+    <header class="space-tab-heading">
+        <div><h2><?= $e($t('Create from a template')) ?></h2><p class="muted"><?= $e($t('Give your next document a useful starting point.')) ?></p>
             <?php if ($parent !== null): ?><p class="template-parent"><?= $e($t('Parent page')) ?>: <strong><?= $e($parent['title']) ?></strong></p><?php endif; ?>
         </div>
         <a class="button button--primary" href="<?= $e($createUrl()) ?>"><?= $uiIcon('plus') ?><?= $e($t('Blank page')) ?></a>
     </header>
-    <?php require __DIR__ . '/../partials/space-tabs.php'; ?>
     <form method="get" action="<?= $e($base) ?>/templates" class="browse-filters template-gallery-filters" role="search" data-template-gallery-filters>
         <?php if ($parent !== null): ?><input type="hidden" name="parent" value="<?= (int) $parent['id'] ?>"><?php endif; ?>
         <label class="browse-query"><?= $e($t('Find a template')) ?><span><?= $uiIcon('search') ?><input type="search" name="q" maxlength="200" value="<?= $e($filters['q']) ?>" placeholder="<?= $e($t('Name or purpose')) ?>"></span></label>
@@ -57,4 +57,5 @@ $categoryIcons = ['technical' => 'document', 'knowledge' => 'book', 'team' => 's
             </section>
         <?php endif; ?>
     </div>
+</article>
 </section>

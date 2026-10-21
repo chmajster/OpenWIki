@@ -188,7 +188,12 @@
 .space-action-menu { position: relative; }
 .space-action-menu > summary { list-style: none; cursor: pointer; }
 .space-action-menu > summary::-webkit-details-marker { display: none; }
-.workspace-shell .space-heading--content h1 { margin-top: 18px; }
+.space-tab-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+.space-tab-heading > div { min-width: 0; }
+.space-tab-heading h2 { margin: 0; font-size: 20px; }
+.space-tab-heading p { margin: 8px 0 0; font-size: 13px; line-height: 1.6; }
+.space-tab-heading > .button { flex-shrink: 0; gap: 6px; }
+@media (max-width: 599px) { .space-tab-heading { flex-direction: column; gap: 12px; } }
 .space-welcome { margin-top: 32px; padding: 32px !important; }
 .space-welcome-icon { display: flex; color: var(--accent); margin-bottom: 22px; }
 .space-welcome-icon .ui-icon { width: 32px; height: 32px; }

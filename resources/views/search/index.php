@@ -12,6 +12,9 @@ $highlight = static function (mixed $value, string $query) use ($e): string {
     return is_string($highlighted) ? $highlighted : $escaped;
 };
 $filters = $filters ?? [];
+$searchResetQuery = $space === null ? [] : ['space' => $space['space_key'], 'type' => 'page'];
+if ($query !== '') $searchResetQuery['q'] = $query;
+$searchResetUrl = '/search' . ($searchResetQuery === [] ? '' : '?' . http_build_query($searchResetQuery));
 $typeLabels = [
     'all' => 'All',
     'page' => 'Pages',
@@ -22,7 +25,11 @@ $typeLabels = [
     'tag' => 'Tags',
 ];
 ?>
-<section class="content-container">
+<section class="<?= $space === null ? 'content-container' : 'wiki-layout space-overview space-search' ?>">
+    <?php if ($space !== null): ?><div class="wiki-content">
+        <?php require __DIR__ . '/../partials/space-header.php'; ?>
+        <div class="space-tab-heading"><h2><?= $e($t('Search this space')) ?></h2></div>
+    <?php else: ?>
     <div class="page-heading">
         <div>
             <div class="eyebrow"><?= $e($t('Search')) ?></div>
@@ -30,11 +37,12 @@ $typeLabels = [
             <p class="muted"><?= $e($t('Search pages, Spaces, users, comments, tags and attachment names.')) ?></p>
         </div>
     </div>
+    <?php endif; ?>
 
     <form class="card form-card form-stack" method="get" action="/search" data-search-form>
         <div class="search-page-form">
             <div class="search-combobox">
-                <input type="search" name="q" value="<?= $e($query) ?>" placeholder="<?= $e($t('Search knowledge…')) ?>" autofocus required aria-label="<?= $e($t('Search')) ?>" aria-autocomplete="list" aria-controls="search-suggestions" aria-expanded="false" autocomplete="off" data-search-query>
+                <input type="search" name="q" value="<?= $e($query) ?>" placeholder="<?= $e($t('Search knowledge…')) ?>" <?= $space === null ? 'autofocus' : '' ?> required aria-label="<?= $e($t('Search')) ?>" aria-autocomplete="list" aria-controls="search-suggestions" aria-expanded="false" autocomplete="off" data-search-query>
                 <ul id="search-suggestions" class="search-suggestions" role="listbox" aria-label="Podpowiedzi wyszukiwania" hidden></ul>
                 <span data-search-suggestion-status class="muted" role="status" aria-live="polite"></span>
             </div>
@@ -94,7 +102,7 @@ $typeLabels = [
 
         <div class="form-actions">
             <button class="button button--secondary" type="submit"><?= $e($t('Apply filters')) ?></button>
-            <a class="button button--ghost" href="/search<?= $query !== '' ? '?q=' . rawurlencode($query) : '' ?>"><?= $e($t('Reset filters')) ?></a>
+            <a class="button button--ghost" href="<?= $e($searchResetUrl) ?>"><?= $e($t('Reset filters')) ?></a>
         </div>
     </form>
 
@@ -153,4 +161,5 @@ $typeLabels = [
             </nav>
         <?php endif; ?>
     <?php endif; ?>
+    <?php if ($space !== null): ?></div><?php endif; ?>
 </section>
