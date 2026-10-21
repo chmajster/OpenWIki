@@ -76,6 +76,34 @@ final class PageSavingTest extends TestCase
         Session::forget('user_id');
     }
 
+    public function testTemplateSelectionPrefillsNativeFieldsWithoutCreatingAPage(): void
+    {
+        $db = $this->app->database();
+        $source = "# Preserved source\n\nA **team** decision.";
+        $template = (new \OpenWiki\Wiki\PageTemplateService($db))->save(null, ['name' => 'Native template', 'content_format' => 'markdown', 'content_markdown' => $source], $this->userId);
+        $controller = new PageController($this->app);
+        $parentResponse = $controller->store($this->request(['title' => 'Parent guide', 'content_html' => '<p>Parent</p>']), $this->space['space_key']);
+        $parent = json_decode($parentResponse->body(), true)['data']['page'];
+        $before = $db->fetchOne('SELECT COUNT(*) AS n FROM pages')['n'];
+        $request = static fn (array $query): Request => new Request('GET', '/', $query, [], [], []);
+        $response = $controller->create($request(['template' => (string) $template, 'parent' => (string) $parent['id']]), $this->space['space_key']);
+        self::assertSame(200, $response->status());
+        $document = new \DOMDocument();
+        @$document->loadHTML('<?xml encoding="utf-8" ?>' . $response->body());
+        $xpath = new \DOMXPath($document);
+        self::assertSame($source, $xpath->query('//textarea[@name="content_markdown"]')->item(0)->textContent);
+        self::assertSame('markdown', $xpath->query('//*[@name="content_format"]')->item(0)->getAttribute('value'));
+        self::assertSame((string) $parent['id'], $xpath->query('//select[@name="parent_id"]/option[@selected]')->item(0)->getAttribute('value'));
+        self::assertSame(200, $controller->templates($request(['preview' => (string) $template]), $this->space['space_key'])->status());
+        self::assertSame(404, $controller->create($request(['template' => 'builtin:missing']), $this->space['space_key'])->status());
+        self::assertSame(404, $controller->create($request(['template' => []]), $this->space['space_key'])->status());
+        self::assertSame(404, $controller->templates($request(['parent' => []]), $this->space['space_key'])->status());
+        self::assertSame(422, $controller->templates($request(['category' => []]), $this->space['space_key'])->status());
+        self::assertSame($before, $db->fetchOne('SELECT COUNT(*) AS n FROM pages')['n']);
+        $db->execute('UPDATE spaces SET status = "archived" WHERE id = ?', [$this->space['id']]);
+        self::assertSame(403, $controller->templates($request([]), $this->space['space_key'])->status());
+    }
+
     public function testUiApiImportAndRestoreHaveTheSameDomainEffects(): void
     {
         $db = $this->app->database();

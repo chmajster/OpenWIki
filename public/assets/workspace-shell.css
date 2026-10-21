@@ -252,6 +252,7 @@
 @media (max-width: 1199px) {
     .template-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .template-gallery-layout--preview { grid-template-columns: minmax(0, 1fr); }
+    .template-gallery-layout--preview .template-full-preview { grid-row: 1; }
 }
 @media (max-width: 600px) {
     .template-gallery .page-heading { flex-direction: column; gap: 12px; }

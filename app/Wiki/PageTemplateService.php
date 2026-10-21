@@ -20,7 +20,7 @@ final class PageTemplateService
                     u.username AS creator_username
              FROM page_templates pt
              LEFT JOIN users u ON u.id = pt.created_by
-             ORDER BY pt.is_system DESC, pt.name ASC'
+             ORDER BY pt.is_system DESC, pt.name ASC, pt.id ASC'
         ));
     }
 

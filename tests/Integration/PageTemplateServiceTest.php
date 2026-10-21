@@ -38,6 +38,27 @@ final class PageTemplateServiceTest extends TestCase
         }
     }
 
+    public function testCatalogLocalizesMetadataWithoutRewritingStoredTemplateSources(): void
+    {
+        $old = $_COOKIE['openwiki_locale'] ?? null;
+        try {
+            $before = $this->database->fetchAll('SELECT * FROM page_templates ORDER BY id');
+            $service = new PageTemplateService($this->database);
+            $_COOKIE['openwiki_locale'] = 'en';
+            $english = array_column($service->catalog(), null, 'icon');
+            $_COOKIE['openwiki_locale'] = 'pl';
+            $polish = array_column($service->catalog(), null, 'icon');
+            self::assertSame('Meeting Notes', $english['meeting']['display_name']);
+            self::assertSame('Notatka ze spotkania', $polish['meeting']['display_name']);
+            self::assertSame('team', $english['meeting']['category_key']);
+            self::assertSame('team', $polish['meeting']['category_key']);
+            self::assertSame($english['meeting']['content_html'], $polish['meeting']['content_html']);
+            self::assertSame($before, $this->database->fetchAll('SELECT * FROM page_templates ORDER BY id'));
+        } finally {
+            if ($old === null) unset($_COOKIE['openwiki_locale']); else $_COOKIE['openwiki_locale'] = $old;
+        }
+    }
+
     public function testCustomTemplateLifecycleSanitizesContentAndProtectsSystemTemplates(): void
     {
         $suffix = bin2hex(random_bytes(4));
