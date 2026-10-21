@@ -90,12 +90,21 @@ def main():
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     creationflags=subprocess.CREATE_NO_WINDOW if WINDOWS else 0, env=ENV)
             def stop():
-                arguments = ['taskkill', '/PID', str(process.pid), '/T', '/F'] if WINDOWS else [APACHE, '-f', str(config), '-k', 'shutdown']
-                subprocess.run(arguments, cwd=work, env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                    creationflags=subprocess.CREATE_NO_WINDOW if WINDOWS else 0, timeout=15)
-                process.wait(timeout=15)
-                # Windows releases the child process' current directory asynchronously.
                 if WINDOWS:
+                    # Terminate only the Popen handle we own. Apache's child notices
+                    # its parent's exit and closes its listener without a PID-tree kill.
+                    process.terminate()
+                else:
+                    subprocess.run([APACHE, '-f', str(config), '-k', 'shutdown'], cwd=work, env=ENV,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+                process.wait(timeout=15)
+                if WINDOWS:
+                    for _ in range(100):
+                        with socket.socket() as listener:
+                            listener.settimeout(.1)
+                            if listener.connect_ex(('127.0.0.1', port)) != 0:
+                                break
+                        time.sleep(.1)
                     time.sleep(.5)
             def ready():
                 for _ in range(100):
