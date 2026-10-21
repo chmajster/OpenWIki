@@ -58,21 +58,19 @@ export function setupDocumentWorkspace({root, editor, form, requestJson, snapsho
     const setWidth = () => { root.dataset.documentWidth = width.value; preferences.width = width.value; store(); };
     width.onchange = setWidth; setWidth();
     const closeMenus = () => root.querySelectorAll('[data-close-on-escape]').forEach(details => { details.open = false; });
-    // Reuse the application's ACL-filtered search and keyboard behavior in the full-screen editor.
-    const globalSearch = document.querySelector('.top-search');
-    const searchDialog = document.createElement('dialog'); searchDialog.className = 'editor-dialog workspace-search-dialog';
-    const searchHeading = document.createElement('h2'); searchHeading.textContent = 'Szukaj dokumentacji';
-    const searchClose = document.createElement('button'); searchClose.type = 'button'; searchClose.className = 'button'; searchClose.textContent = 'Wróć do dokumentu'; searchClose.onclick = () => searchDialog.close();
-    searchDialog.append(searchHeading, globalSearch, searchClose); root.prepend(searchDialog);
-    searchDialog.addEventListener('keydown', event => {
-        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); searchDialog.close(); }
-    }, true);
-    const openSearch = () => { closeMenus(); if (!searchDialog.open) searchDialog.showModal(); globalSearch.querySelector('input').focus(); };
-    const searchButton = document.createElement('button'); searchButton.type = 'button'; searchButton.textContent = 'Szukaj dokumentacji (Ctrl/Cmd+K)'; searchButton.onclick = openSearch; q('.workspace-more .workspace-popover').prepend(searchButton);
     root.addEventListener('keydown', event => {
-        if (!event.defaultPrevented && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && !event.target.closest('[data-visual-editor]')) { event.preventDefault(); openSearch(); return; }
         if (event.key === 'Escape' && !event.target.closest('dialog')) { closeMenus(); if (mobile.matches) { showTree(false); showTemplates(false); } }
     });
+    const globalHeader = document.querySelector('.topbar'), editorHeader = q('.workspace-header');
+    const measureHeaders = () => {
+        document.body.style.setProperty('--editor-global-offset', globalHeader.getBoundingClientRect().height + 'px');
+        document.body.style.setProperty('--editor-bar-offset', editorHeader.getBoundingClientRect().height + 'px');
+    };
+    if (window.ResizeObserver) {
+        const headers = new ResizeObserver(measureHeaders);
+        headers.observe(globalHeader); headers.observe(editorHeader);
+    }
+    window.addEventListener('resize', measureHeaders); measureHeaders();
     q('[data-focus-mode]').onclick = () => {
         const active = root.dataset.workspaceFocus !== 'true'; root.dataset.workspaceFocus = String(active);
         q('[data-focus-mode]').setAttribute('aria-pressed', String(active)); closeMenus();

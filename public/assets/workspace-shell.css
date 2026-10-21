@@ -15,24 +15,26 @@
 .language-menu { position: relative; }
 .language-menu summary { list-style: none; cursor: pointer; }
 .language-menu summary::-webkit-details-marker { display: none; }
-.workspace-shell { --navigation-width: 264px; --header-height: 56px; background: var(--surface); font-size: 14px; }
-.workspace-shell .topbar { min-height: var(--header-height); background: var(--surface); backdrop-filter: none; }
-.workspace-shell .topbar__inner { min-height: var(--header-height); gap: 12px; padding: 0 18px; flex-wrap: nowrap; }
-.workspace-shell .brand { margin-right: 30px; font-size: 19px; letter-spacing: -.6px; }
-.workspace-shell .top-search { margin: 0 auto; max-width: 720px; }
-.workspace-shell .top-search input { height: 34px; border-radius: 6px; background: var(--surface-2); font-size: 13px; }
-.workspace-shell .search-icon { top: 7px; }
-.workspace-shell .shortcut { top: 6px; right: 8px; font-size: 10px; padding: 2px 4px; }
-.workspace-shell .top-actions { gap: 6px; margin: 0; }
-.workspace-shell .top-actions .button { padding: 6px 8px; min-height: 32px; font-size: 12px; }
-.workspace-shell .top-actions .account-avatar { padding: 0; border-radius: 50%; }
-.workspace-shell .theme-menu > summary > span { display: none; }
-.workspace-shell .notification-link { position: relative; }
-.workspace-shell .notification-badge { position: absolute; top: -3px; right: -2px; min-width: 17px; padding: 1px 4px; font-size: 9px; }
-.workspace-shell .shell-create { gap: 5px; white-space: nowrap; padding: 6px 11px; min-height: 34px; }
+.application-shell { --header-height: 56px; background: var(--surface); font-size: 14px; }
+.workspace-shell { --navigation-width: 264px; }
+.application-shell .topbar { min-height: var(--header-height); background: var(--surface); backdrop-filter: none; z-index: 50; }
+.application-shell .topbar__inner { min-height: var(--header-height); gap: 12px; padding: 0 18px; flex-wrap: nowrap; }
+.application-shell .brand { margin-right: 30px; font-size: 19px; letter-spacing: -.6px; }
+.application-shell .top-search { margin: 0 auto; max-width: 720px; }
+.application-shell .top-search input { height: 34px; border-radius: 6px; background: var(--surface-2); font-size: 13px; }
+.application-shell .search-icon { top: 7px; }
+.application-shell .shortcut { top: 6px; right: 8px; font-size: 10px; padding: 2px 4px; }
+.application-shell .top-actions { gap: 6px; margin: 0; }
+.application-shell .top-actions .button { padding: 6px 8px; min-height: 32px; font-size: 12px; }
+.application-shell .top-actions .account-avatar { padding: 0; border-radius: 50%; }
+.application-shell .theme-menu > summary > span { display: none; }
+.application-shell .notification-link { position: relative; }
+.application-shell .notification-badge { position: absolute; top: -3px; right: -2px; min-width: 17px; padding: 1px 4px; font-size: 9px; }
+.application-shell .shell-create { gap: 5px; white-space: nowrap; padding: 6px 11px; min-height: 34px; font-size: 13px; }
 .workspace-shell .button { border-radius: 5px; font-size: 13px; font-weight: 500; }
-.workspace-shell .button--ghost { border-color: transparent; background: transparent; }
-.workspace-shell .button--ghost:hover { background: var(--surface-2); }
+.application-shell .topbar .button { border-radius: 5px; font-weight: 500; }
+.workspace-shell .button--ghost, .application-shell .topbar .button--ghost { border-color: transparent; background: transparent; }
+.workspace-shell .button--ghost:hover, .application-shell .topbar .button--ghost:hover { background: var(--surface-2); }
 .workspace-shell .card { box-shadow: none; border-radius: 8px; }
 .workspace-shell .page-shell { min-height: calc(100vh - var(--header-height)); }
 .workspace-shell .workspace-main { margin-left: var(--navigation-width); min-width: 0; }
@@ -261,7 +263,7 @@
     .template-full-preview { padding: 18px; }
 }
 @media (max-width: 1199px) {
-    .workspace-shell .brand { margin-right: 10px; }
+    .application-shell .brand { margin-right: 10px; }
     .workspace-shell .document-layout--with-toc { grid-template-columns: minmax(0, 1fr); }
     .workspace-shell .page-toc { position: static; order: -1; }
     .reader-toolbar { align-items: flex-start; flex-direction: column; gap: 12px; margin-bottom: 32px; }
@@ -284,14 +286,14 @@
     [data-directory-layout=list] .space-avatar { grid-row: 1 / 4; width: 38px; height: 38px; }
     .browse-pagination { flex-wrap: wrap; }
     .browse-page-numbers { order: 3; justify-content: center; flex-basis: 100%; }
-    .workspace-shell { --header-height: 104px; }
-    .workspace-shell .topbar__inner { padding: 10px 12px; gap: 8px; flex-wrap: wrap; min-height: 104px; }
-    .workspace-shell .brand { margin: 0 auto 0 0; font-size: 17px; }
-    .workspace-shell .brand-mark .ui-icon { width: 23px; height: 23px; }
-    .workspace-shell .top-search { order: 5; max-width: none; flex: 1 1 100%; }
-    .workspace-shell .top-actions { flex: 0 0 auto; gap: 2px; }
-    .workspace-shell .shell-create { padding: 5px 7px; font-size: 11px; }
-    .workspace-shell .shell-create .ui-icon { width: 15px; height: 15px; }
+    .application-shell { --header-height: 104px; }
+    .application-shell .topbar__inner { padding: 10px 12px; gap: 8px; flex-wrap: wrap; min-height: 104px; }
+    .application-shell .brand { margin: 0 auto 0 0; font-size: 17px; }
+    .application-shell .brand-mark .ui-icon { width: 23px; height: 23px; }
+    .application-shell .top-search { order: 5; max-width: none; flex: 1 1 100%; }
+    .application-shell .top-actions { flex: 0 0 auto; gap: 2px; }
+    .application-shell .shell-create { padding: 5px 7px; font-size: 11px; }
+    .application-shell .shell-create .ui-icon { width: 15px; height: 15px; }
     .workspace-shell .content-container, .workspace-shell .wiki-content { padding: 24px 20px 48px; }
     .workspace-shell .page-heading h1, .space-overview .page-heading h1 { font-size: 26px; }
     .workspace-tabs { gap: 22px; margin-bottom: 24px; }
@@ -304,8 +306,8 @@
     .reader-heading h1 { font-size: 28px; }
     .reader-heading .page-meta { row-gap: 8px; }
     .reader-meta-separator { display: none; }
-    .workspace-shell .menu-items { max-height: calc(100dvh - 150px); overflow: auto; }
-    .workspace-shell .theme-menu .menu-items { top: 104px; }
+    .application-shell .menu-items { max-height: calc(100dvh - 150px); overflow: auto; }
+    .application-shell .theme-menu .menu-items { top: 104px; }
     .workspace-shell .page-toc { display: block; padding: 12px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); }
     .space-welcome { padding: 24px !important; }
     .workspace-shell .attachment-row { align-items: flex-start; }
@@ -321,8 +323,8 @@
     .home-document-list a { padding: 14px 12px; gap: 10px; }
     .home-work-link { padding: 16px 12px; gap: 10px; }
     .home-work-link small { font-size: 11px; }
-    .workspace-shell .shell-create span { max-width: 86px; white-space: normal; text-align: left; }
-    .workspace-shell .topbar__inner { column-gap: 4px; }
+    .application-shell .shell-create span { max-width: 86px; white-space: normal; text-align: left; }
+    .application-shell .topbar__inner { column-gap: 4px; }
 }
 @media (prefers-reduced-motion: no-preference) {
     .home-space-card, .navigation-link { transition: background-color .12s, border-color .12s; }
