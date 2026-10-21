@@ -1,13 +1,14 @@
 <?php
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 require __DIR__ . '/../partials/ui-icons.php';
-$workspaceShell = $app->installed() && empty($editorWorkspace) && !in_array($template, ['auth/login', 'auth/mfa-challenge'], true);
+$applicationShell = $app->installed() && !in_array($template, ['auth/login', 'auth/mfa-challenge'], true);
+$workspaceShell = $applicationShell && empty($editorWorkspace);
 $navigationSpace = $data['space'] ?? null;
 $navigationPageId = isset($data['page']['id']) ? (int) $data['page']['id'] : null;
 $navigationSpaces = $workspaceShell && $navigationSpace === null
     ? ($data['navigationSpaces'] ?? (new \OpenWiki\Repositories\SpaceRepository($app->database()))->visibleFor($currentUser === null ? null : (int) $currentUser['id'], $app->auth()->can('*'), 12))
     : [];
-$navigationCanCreate = $workspaceShell && $navigationSpace !== null && $app->auth()->can('page.create') && (new \OpenWiki\Permissions\SpaceAccessService($app))->canEdit($navigationSpace);
+$navigationCanCreate = $applicationShell && $navigationSpace !== null && $app->auth()->can('page.create') && (new \OpenWiki\Permissions\SpaceAccessService($app))->canEdit($navigationSpace);
 $pageTitle = isset($title) ? $title . ' · ' . $app->name() : $app->name();
 $notificationCount = $currentUser === null
     ? 0
@@ -28,7 +29,7 @@ $notificationCount = $currentUser === null
     <?php if ($workspaceShell): ?><script src="/assets/navigation.js" defer></script><?php endif; ?>
     <script src="/assets/document-reader.js" defer></script>
 </head>
-<body class="<?= !empty($editorWorkspace) ? 'document-workspace' : ($workspaceShell ? 'workspace-shell' : '') ?>" data-user-id="<?= (int) ($currentUser['id'] ?? 0) ?>">
+<body class="<?= $applicationShell ? 'application-shell ' : '' ?><?= !empty($editorWorkspace) ? 'document-workspace' : ($workspaceShell ? 'workspace-shell' : '') ?>" data-user-id="<?= (int) ($currentUser['id'] ?? 0) ?>">
 <textarea hidden data-ui-translations><?= $e(json_encode($locale === 'pl' ? \OpenWiki\Core\I18n::catalog() : new \stdClass(), JSON_THROW_ON_ERROR)) ?></textarea>
 <a class="skip-link" href="#main-content"><?= $e($t('Skip to content')) ?></a>
 <header class="topbar">
