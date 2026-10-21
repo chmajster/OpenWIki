@@ -86,7 +86,7 @@ $notificationCount = $currentUser === null
 </header>
 
 <?php if ($workspaceShell): require __DIR__ . '/../partials/workspace-navigation.php'; endif; ?>
-<div class="workspace-body" data-workspace-body>
+<div class="workspace-main" data-workspace-body>
 <?php if ($flashSuccess): ?>
     <div class="flash flash--success" role="status"><?= $e($t($flashSuccess)) ?></div>
 <?php endif; ?>
