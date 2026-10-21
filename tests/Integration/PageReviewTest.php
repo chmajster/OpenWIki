@@ -84,6 +84,22 @@ final class PageReviewTest extends TestCase
     private function token(string $kind): string { return (new ApiTokenService($this->app->database()))->create($this->users[$kind], 'Review', ['pages:read', 'pages:write', 'attachments:read'], null)['token']; }
     private function request(array $input, string $token, array $query = []): Request { return new Request('POST', '/', $query, $input, ['HTTP_AUTHORIZATION' => 'Bearer ' . $token, 'CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'], []); }
 
+    public function testPublishedReaderTimestampDoesNotExposeUnpublishedEdits(): void
+    {
+        $page = $this->write(null, ['title' => 'Public guide', 'content_html' => '<p>Visible text</p>', 'status' => 'published'], 'super');
+        $this->enable();
+        $this->write($page, ['base_version' => 1, 'title' => 'Private rewrite', 'content_html' => '<p>Unpublished text</p>']);
+        $db = $this->app->database();
+        $db->execute('UPDATE page_revisions SET created_at = ? WHERE page_id = ? AND revision_number = 1', ['2020-01-02 03:04:05', $page['id']]);
+        $db->execute('UPDATE pages SET updated_at = ? WHERE id = ?', ['2099-12-31 23:59:59', $page['id']]);
+
+        $repo = new PageRepository($db);
+        $public = $repo->published($repo->findById((int) $page['id']));
+        self::assertSame('Public guide', $public['title']);
+        self::assertSame(1, $public['version']);
+        self::assertSame('2020-01-02 03:04:05', $public['updated_at']);
+    }
+
     public function testReaderKeepsPublishedContentAndMetadataWhileApprovalIsBoundToHead(): void
     {
         $page = $this->write(null, ['title' => 'Public N', 'content_html' => '<p>Published N</p>', 'status' => 'published', 'tags' => ['public']], 'super'); $this->enable();

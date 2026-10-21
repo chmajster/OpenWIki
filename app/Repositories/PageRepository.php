@@ -48,7 +48,17 @@ final class PageRepository
 
     public function published(array $page): array
     {
-        if ($page['published_revision'] !== null) $page['version'] = (int) $page['published_revision'];
+        if ($page['published_revision'] !== null) {
+            $publishedVersion = (int) $page['published_revision'];
+            if ($publishedVersion < (int) $page['version']) {
+                $revision = $this->database->fetchOne(
+                    'SELECT created_at FROM page_revisions WHERE page_id = ? AND revision_number = ? LIMIT 1',
+                    [(int) $page['id'], $publishedVersion]
+                );
+                $page['updated_at'] = $revision['created_at'] ?? $page['published_at'] ?? $page['created_at'];
+            }
+            $page['version'] = $publishedVersion;
+        }
         return $page;
     }
 
