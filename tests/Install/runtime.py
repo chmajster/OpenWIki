@@ -90,13 +90,9 @@ def main():
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     creationflags=subprocess.CREATE_NO_WINDOW if WINDOWS else 0, env=ENV)
             def stop():
-                if WINDOWS:
-                    # Terminate only the Popen handle we own. Apache's child notices
-                    # its parent's exit and closes its listener without a PID-tree kill.
-                    process.terminate()
-                else:
-                    subprocess.run([APACHE, '-f', str(config), '-k', 'shutdown'], cwd=work, env=ENV,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+                # Signal only the Popen handle we own. On Unix Apache handles SIGTERM;
+                # on Windows its child notices the parent's exit and closes its listener.
+                process.terminate()
                 process.wait(timeout=15)
                 if WINDOWS:
                     for _ in range(100):
