@@ -52,7 +52,6 @@ final class SpaceController extends Controller
             return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         }
 
-        $canEdit = $access->canEdit($space);
         $tab = $request->query('tab', 'overview');
         if (!is_string($tab) || !in_array($tab, ['overview', 'content'], true)) return $this->render('errors/404', ['title' => 'Page not found'], 404);
         $contentListing = null;
@@ -74,18 +73,8 @@ final class SpaceController extends Controller
             'pages' => [],
             'spaceTab' => $tab,
             'contentListing' => $contentListing,
-            'canCreatePage' => $canEdit && $this->app->auth()->can('page.create'),
-            'canSettings' => $this->app->auth()->check() && $this->settingsAllowed($space),
             'homePage' => $homePage,
-            'isWatchingSpace' => $this->app->auth()->check() && (new \OpenWiki\Wiki\PageEngagementService($this->app->database()))->isWatching((int) $this->app->auth()->user()['id'], 'space', (int) $space['id']),
-        ]);
-    }
-
-    private function settingsAllowed(array $space): bool
-    {
-        $actor = new \OpenWiki\Spaces\SpaceActor($this->app->database(), (int) $this->app->auth()->user()['id']);
-        $service = new \OpenWiki\Spaces\SpaceService($this->app);
-        return (bool) array_filter(['space.edit', 'space.manage_access', 'space.manage_owner', 'space.archive'], fn (string $permission): bool => $service->allowed($space, $actor, $permission));
+        ] + $this->spaceNavigation($space));
     }
 
     public function settings(Request $request, string $spaceKey): Response
@@ -131,12 +120,12 @@ final class SpaceController extends Controller
         if ($space === null) return $this->render('errors/404', ['title' => 'Space not found'], 404);
         $service = new \OpenWiki\Spaces\SpaceService($this->app);
         $actor = new \OpenWiki\Spaces\SpaceActor($this->app->database(), (int) $this->app->auth()->user()['id']);
-        if (!$this->settingsAllowed($space)) return $this->render('errors/403', ['title' => 'Permission denied'], 403);
+        if (!$this->spaceSettingsAllowed($space)) return $this->render('errors/403', ['title' => 'Permission denied'], 403);
         try {
             if ($operation === 'update') {
                 $space = $service->update((int) $space['id'], (array) $request->input(), $actor->id, $request);
                 Session::flash('success', 'Ustawienia przestrzeni zapisane.');
-                return Response::redirect($this->settingsAllowed($space) ? '/spaces/' . rawurlencode($key) . '/settings' : '/');
+                return Response::redirect($this->spaceSettingsAllowed($space) ? '/spaces/' . rawurlencode($key) . '/settings' : '/');
             }
             if (in_array($operation, ['rule', 'principals', 'effective'], true)) {
                 if ($operation === 'principals') {
@@ -166,7 +155,7 @@ final class SpaceController extends Controller
             if ($status === 500) error_log('[OpenWiki space settings] ' . $error->getMessage());
             if ($request->expectsJson()) return Response::json(['error' => ['message' => $message]], $status);
             $space = $service->find((int) $space['id']);
-            if (!$this->settingsAllowed($space)) return $this->render('errors/403', ['title' => 'Permission denied'], 403);
+            if (!$this->spaceSettingsAllowed($space)) return $this->render('errors/403', ['title' => 'Permission denied'], 403);
             $actor = new \OpenWiki\Spaces\SpaceActor($this->app->database(), $actor->id);
             return $this->settingsForm($space, $actor, $service, $status, $message, (array) $request->input());
         }

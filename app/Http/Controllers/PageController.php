@@ -66,7 +66,7 @@ final class PageController extends Controller
             $preview = TemplateGallery::select($context['templates'], $request->query('preview'));
             if ($preview === null) return $this->render('errors/404', ['title' => 'Template not found.'], 404);
         }
-        return $this->render('pages/templates', $context + ['title' => 'Templates', 'spaceTab' => 'templates', 'canCreatePage' => true, 'listing' => $listing, 'preview' => $preview]);
+        return $this->render('pages/templates', $context + ['title' => 'Templates', 'spaceTab' => 'templates', 'listing' => $listing, 'preview' => $preview] + $this->spaceNavigation($context['space']));
     }
 
     public function create(Request $request, string $spaceKey): Response

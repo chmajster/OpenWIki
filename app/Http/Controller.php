@@ -12,6 +12,27 @@ use OpenWiki\Security\Csrf;
 
 abstract class Controller
 {
+    /** Identical space controls for overview, content, templates and scoped search. */
+    protected function spaceNavigation(array $space): array
+    {
+        $user = $this->app->auth()->user();
+        return [
+            'canCreatePage' => $user !== null && $this->app->auth()->can('page.create') && (new \OpenWiki\Permissions\SpaceAccessService($this->app))->canEdit($space),
+            'canSettings' => $this->spaceSettingsAllowed($space),
+            'isWatchingSpace' => $user !== null && (new \OpenWiki\Wiki\PageEngagementService($this->app->database()))->isWatching((int) $user['id'], 'space', (int) $space['id']),
+        ];
+    }
+
+    protected function spaceSettingsAllowed(array $space): bool
+    {
+        $user = $this->app->auth()->user();
+        if ($user === null) return false;
+        $actor = new \OpenWiki\Spaces\SpaceActor($this->app->database(), (int) $user['id']);
+        $service = new \OpenWiki\Spaces\SpaceService($this->app);
+        return (bool) array_filter(['space.edit', 'space.manage_access', 'space.manage_owner', 'space.archive'],
+            fn (string $permission): bool => $service->allowed($space, $actor, $permission));
+    }
+
     protected function pageWritePolicy(array $space, ?array $context = null, bool $subtreeSnapshot = false): callable
     {
         $tokens = new \OpenWiki\Auth\ApiTokenService($this->app->database());

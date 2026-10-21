@@ -50,9 +50,15 @@ final class SearchController extends Controller
     private function renderSearch(Request $request, array $result, ?string $error = null, int $status = 200): Response
     {
         $safeQuery = array_map(static fn ($value) => is_scalar($value) ? (string) $value : '', $request->query());
+        $space = null;
+        if (trim($safeQuery['space'] ?? '') !== '' && mb_strlen($safeQuery['space']) <= 191) {
+            $candidate = (new \OpenWiki\Repositories\SpaceRepository($this->app->database()))->findByKey(trim($safeQuery['space']));
+            if ($candidate !== null && (new \OpenWiki\Permissions\SpaceAccessService($this->app))->canView($candidate)) $space = $candidate;
+        }
         return $this->render('search/index', ['title' => 'Search', 'query' => trim($safeQuery['q'] ?? ''),
             'type' => $safeQuery['type'] ?? 'all', 'filters' => $safeQuery,
             'results' => $result['data'] ?? [], 'searchMeta' => $result['meta'] ?? ['page' => 1, 'per_page' => 25, 'total' => 0, 'total_pages' => 0, 'counts' => []],
-            'searchError' => $error, 'types' => SearchInput::TYPES], $status);
+            'searchError' => $error, 'types' => SearchInput::TYPES, 'space' => $space, 'spaceTab' => 'search']
+            + ($space === null ? [] : $this->spaceNavigation($space)), $status);
     }
 }
