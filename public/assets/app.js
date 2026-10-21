@@ -3,6 +3,44 @@
 const uiCatalog = JSON.parse(document.querySelector('[data-ui-translations]')?.value || '{}');
 window.wikiTranslate = (text) => uiCatalog[text] || text;
 const t = window.wikiTranslate;
+
+const pagePermissions = document.querySelector('[data-page-permissions]');
+if (pagePermissions) {
+    const form = pagePermissions.querySelector('[data-page-rule-form]');
+    const heading = form.querySelector('[data-rule-form-heading]');
+    const status = form.querySelector('[data-rule-editing]');
+    const cancel = form.querySelector('[data-cancel-page-rule]');
+    const identitySelects = ['principal', 'permission'].map(name => form.querySelector('select[name="' + name + '"]'));
+    const resetEditing = () => {
+        form.querySelectorAll('[data-rule-identity]').forEach(input => input.remove());
+        identitySelects.forEach(select => { select.disabled = false; });
+        form.reset(); heading.textContent = t('Add or update rule'); status.hidden = true; cancel.hidden = true;
+        pagePermissions.querySelectorAll('.is-editing').forEach(row => row.classList.remove('is-editing'));
+    };
+    pagePermissions.querySelectorAll('[data-edit-page-rule]').forEach(button => {
+        button.hidden = false;
+        button.addEventListener('click', () => {
+            resetEditing();
+            for (const name of ['principal', 'permission']) {
+                const select = identitySelects.find(select => select.name === name), value = button.dataset[name];
+                if (!Array.from(select.options).some(option => option.value === value)) {
+                    select.add(new Option(name === 'principal' ? button.dataset.principalName : value, value));
+                }
+                select.value = value; select.disabled = true;
+                const identity = document.createElement('input');
+                identity.type = 'hidden'; identity.name = name; identity.value = value; identity.dataset.ruleIdentity = '';
+                form.append(identity);
+            }
+            form.elements.effect.value = button.dataset.effect;
+            form.elements.inherit_to_children.checked = button.dataset.children === '1';
+            heading.textContent = t('Edit rule'); status.textContent = t('Recipient') + ': ' + button.dataset.principalName;
+            status.hidden = false; cancel.hidden = false; button.closest('[data-permission-rule]').classList.add('is-editing');
+            form.scrollIntoView({block: 'start'}); form.elements.effect.focus({preventScroll: true});
+        });
+    });
+    cancel.addEventListener('click', () => { resetEditing(); identitySelects[0].focus(); });
+}
+
 document.querySelectorAll('form[data-confirm]').forEach((form) => form.addEventListener('submit', (event) => {
     if (!window.confirm(t(form.dataset.confirm))) event.preventDefault();
 }));

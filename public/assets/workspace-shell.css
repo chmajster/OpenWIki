@@ -330,3 +330,87 @@
 @media (prefers-reduced-motion: no-preference) {
     .home-space-card, .navigation-link { transition: background-color .12s, border-color .12s; }
 }
+
+/* Page access settings share the application shell and remain native forms. */
+.page-permissions { max-width: 1440px; }
+.permissions-breadcrumbs { flex-wrap: wrap; overflow-wrap: anywhere; margin-bottom: 20px; font-size: 12px; }
+.permissions-breadcrumbs a { display: block; min-width: 0; max-width: min(100%, 480px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.permissions-heading { margin-bottom: 24px; }
+.permissions-heading > div { min-width: 0; }
+.permissions-heading h1 { font-size: 28px; }
+.permissions-heading p { margin: 8px 0 0; line-height: 1.6; }
+.permissions-heading > .button { gap: 8px; flex-shrink: 0; }
+.permissions-heading > .button .ui-icon { transform: rotate(180deg); width: 16px; height: 16px; }
+.page-permissions h2 { font-size: 16px; font-weight: 600; margin: 0; }
+.permissions-inheritance { padding: 20px 24px; margin-bottom: 24px; }
+.permissions-section-title { display: flex; align-items: flex-start; gap: 12px; }
+.permissions-section-title > div { min-width: 0; flex: 1; }
+.permissions-section-title p, .permissions-section-header p { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 6px 0 0; }
+.permissions-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 36px; height: 36px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-label); }
+.permissions-inheritance-form { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0 0 48px; }
+.permissions-checkbox { display: flex; align-items: flex-start; gap: 10px; min-width: 0; font-size: 13px; font-weight: 500; line-height: 1.5; cursor: pointer; }
+.permissions-checkbox input { flex: 0 0 auto; width: 16px; height: 16px; padding: 0; margin: 2px 0 0; accent-color: var(--accent); }
+.permissions-checkbox span { min-width: 0; }
+.permissions-checkbox small { display: block; margin-top: 4px; font-size: 12px; font-weight: 400; color: var(--muted); }
+.permissions-inheritance-form > .button { flex-shrink: 0; }
+.permissions-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; align-items: start; gap: 24px; }
+.permissions-main { min-width: 0; }
+.permissions-section-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px 24px; border-bottom: 1px solid var(--border); }
+.permissions-section-header h2 { display: flex; align-items: center; gap: 8px; }
+.permissions-section-header .text-link { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 12px; margin-top: 2px; }
+.permissions-section-header .ui-icon { width: 16px; height: 16px; }
+.permissions-empty { padding: 40px 24px; text-align: center; }
+.permissions-empty .permissions-icon { width: 48px; height: 48px; background: var(--surface-2); color: var(--muted); }
+.permissions-empty h3 { font-size: 15px; font-weight: 600; margin: 16px 0 8px; }
+.permissions-empty p { max-width: 380px; margin: 0 auto 20px; font-size: 13px; color: var(--muted); line-height: 1.7; }
+.permissions-rule-list { padding: 0; margin: 0; list-style: none; }
+.permissions-rule { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--border); }
+.permissions-rule:last-child { border-bottom: 0; }
+.permissions-rule.is-editing { background: var(--accent-soft); box-shadow: inset 3px 0 var(--accent); }
+.permissions-principal { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.permissions-avatar { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex: 0 0 auto; border-radius: 50%; font-size: 12px; font-weight: 600; color: var(--accent-label); background: var(--accent-soft); }
+.permissions-principal > div { min-width: 0; }
+.permissions-principal strong { display: block; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.permissions-principal small { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.permissions-badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; color: var(--muted); background: var(--surface-2); }
+.permissions-badge .ui-icon { width: 13px; height: 13px; }
+.permissions-rule > .permissions-badge { justify-self: end; }
+.permissions-badge--allow, .permissions-badge--enabled { color: var(--success-text); background: var(--success-soft); }
+.permissions-badge--deny { color: var(--danger-text); background: var(--danger-soft); }
+.permissions-rule-detail { display: grid; gap: 4px; font-size: 12px; min-width: 0; overflow-wrap: anywhere; }
+.permissions-rule-detail strong { font-weight: 500; }
+.permissions-caption { color: var(--muted); font-size: 11px; }
+.permissions-rule-detail code { font-size: 11px; color: var(--muted); background: transparent; padding: 0; }
+.permissions-rule-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 4px; grid-column: 1 / -1; }
+.permissions-rule-actions form { margin: 0; }
+.permissions-rule-actions .button { gap: 5px; min-height: 30px; padding: 5px 8px; font-size: 12px; }
+.permissions-rule-actions .ui-icon { width: 14px; height: 14px; }
+.permissions-rule-actions .permissions-delete { color: var(--danger-text); }
+.permissions-help { margin-top: 20px; font-size: 12px; line-height: 1.7; color: var(--muted); }
+.permissions-help summary { cursor: pointer; color: var(--text); font-weight: 500; }
+.permissions-help ul { padding-left: 20px; }
+.permissions-help li + li { margin-top: 8px; }
+.permissions-rule-form { min-width: 0; padding: 24px; gap: 20px; scroll-margin-top: calc(var(--header-height) + 20px); }
+.permissions-rule-form label { font-size: 12px; font-weight: 500; }
+.permissions-rule-form select { max-width: 100%; min-width: 0; font-size: 12px; border-radius: 5px; }
+.permissions-form-help { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.permissions-editing { padding: 10px 12px; background: var(--accent-soft); color: var(--accent-label); border-radius: 5px; font-size: 12px; overflow-wrap: anywhere; margin: 0; }
+.permissions-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 1199px) {
+    .permissions-layout { grid-template-columns: minmax(0, 1fr); }
+    .permissions-rule-form { max-width: none; }
+}
+@media (max-width: 599px) {
+    .permissions-heading { flex-direction: column; gap: 16px; }
+    .permissions-heading h1 { font-size: 25px; }
+    .permissions-inheritance, .permissions-rule-form { padding: 18px; }
+    .permissions-section-title { flex-wrap: wrap; }
+    .permissions-section-title > .permissions-icon { display: none; }
+    .permissions-section-title > div { flex-basis: 70%; }
+    .permissions-inheritance-form { align-items: flex-start; flex-direction: column; padding-left: 0; }
+    .permissions-section-header { padding: 18px; gap: 12px; flex-wrap: wrap; }
+    .permissions-rule { padding: 18px; gap: 14px; }
+    .permissions-rule-detail { grid-column: 1 / -1; }
+    .permissions-empty { padding: 28px 18px; }
+    .permissions-form-actions > .button { flex: 1 1 auto; }
+}
