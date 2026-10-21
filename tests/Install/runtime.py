@@ -89,6 +89,7 @@ def main():
             def start():
                 return subprocess.Popen([APACHE, '-f', str(config), '-DFOREGROUND'], cwd=work,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    start_new_session=not WINDOWS,
                     creationflags=subprocess.CREATE_NO_WINDOW if WINDOWS else 0, env=ENV)
             def stop():
                 child_handle = None
