@@ -33,6 +33,11 @@ final class Database
         $database = (string) ($config['database'] ?? '');
         $charset = (string) ($config['charset'] ?? 'utf8mb4');
 
+        if ($host === '' || preg_match('/[;\s\x00-\x1f\x7f]/', $host)
+            || ($withDatabase && !preg_match('/^[A-Za-z0-9_]{1,64}$/D', $database))) {
+            throw new \InvalidArgumentException('Invalid database host or name.');
+        }
+
         if (!preg_match('/^[A-Za-z0-9_]+$/', $charset)) {
             throw new \InvalidArgumentException('Invalid database charset.');
         }
@@ -48,6 +53,7 @@ final class Database
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES => false,
                 PDO::ATTR_STRINGIFY_FETCHES => false,
+                PDO::ATTR_TIMEOUT => 5,
             ]);
         } catch (PDOException $exception) {
             throw new \RuntimeException('Database connection failed: ' . $exception->getMessage(), 0, $exception);

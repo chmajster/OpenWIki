@@ -45,8 +45,8 @@ $timezones = array_values($timezones);
 
             <div class="install-bootstrap-note">
                 <span class="muted"><?= $e($t('Initial administrator')) ?></span>
-                <strong>admin / admin</strong>
-                <small><?= $e($t('Password change is required after the first sign-in.')) ?></small>
+                <strong><?= $e($t('Your own account')) ?></strong>
+                <small><?= $e($t('Choose your administrator credentials in the final step.')) ?></small>
             </div>
         </aside>
 
@@ -62,7 +62,7 @@ $timezones = array_values($timezones);
             <?php if (!empty($installError)): ?>
                 <div class="alert alert--error" role="alert">
                     <strong><?= $e($t('Installation failed.')) ?></strong>
-                    <span><?= $e($installError) ?></span>
+                    <span><?= $e($t($installError)) ?></span>
                 </div>
             <?php endif; ?>
 
@@ -117,6 +117,7 @@ $timezones = array_values($timezones);
                             <?= $e($t('Continue')) ?>
                         </button>
                     </div>
+                    <p><a href="/install"><?= $e($t('Check requirements again')) ?></a></p>
                 </section>
 
                 <section class="install-panel" data-wizard-panel="2">
@@ -249,14 +250,24 @@ $timezones = array_values($timezones);
                         <div><dt><?= $e($t('Database')) ?></dt><dd><span data-wizard-summary="db_host"><?= $value('db_host', '127.0.0.1') ?></span>:<span data-wizard-summary="db_port"><?= $value('db_port', '3306') ?></span> / <span data-wizard-summary="db_database"><?= $value('db_database', 'openwiki') ?></span></dd></div>
                     </dl>
 
-                    <div class="install-credentials">
-                        <div>
-                            <span class="eyebrow"><?= $e($t('Default administrator')) ?></span>
-                            <h4>admin / admin</h4>
-                            <p><?= $e($t('The password is hashed in the database. OpenWiki will require a new password immediately after the first successful sign-in.')) ?></p>
-                        </div>
-                        <code>admin</code>
+                    <div class="form-stack">
+                        <h4><?= $e($t('Initial administrator')) ?></h4>
+                        <label><?= $e($t('Administrator username')) ?>
+                            <input name="admin_username" required pattern="[A-Za-z0-9._\-]{3,100}" maxlength="100" autocomplete="username" value="<?= $value('admin_username', 'admin') ?>">
+                        </label>
+                        <label><?= $e($t('Administrator email')) ?>
+                            <input name="admin_email" type="email" required maxlength="191" autocomplete="email" value="<?= $value('admin_email') ?>">
+                        </label>
+                        <label><?= $e($t('Administrator password')) ?>
+                            <input name="admin_password" type="password" required minlength="12" maxlength="72" autocomplete="new-password">
+                            <span class="field-help"><?= $e($t('Use a unique password containing at least 12 characters (up to 72 bytes).')) ?></span>
+                        </label>
+                        <label><?= $e($t('Confirm administrator password')) ?>
+                            <input name="admin_password_confirmation" type="password" required minlength="12" maxlength="72" autocomplete="new-password">
+                        </label>
                     </div>
+
+                    <p class="muted" role="status" aria-live="polite" data-install-status></p>
 
                     <div class="wizard-actions">
                         <button class="button button--ghost" type="button" data-wizard-prev data-wizard-only><?= $e($t('Back')) ?></button>

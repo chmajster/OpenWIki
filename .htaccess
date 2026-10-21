@@ -1,8 +1,12 @@
-Options -Indexes
+Options -Indexes -MultiViews
 DirectoryIndex index.php
 
+<IfModule !mod_rewrite.c>
+    Require all denied
+</IfModule>
+
 <IfModule mod_authz_core.c>
-    <FilesMatch "^(?:\.env(?:\..*)?|composer\.(?:json|lock)|package(?:-lock)?\.json|playwright\.config\.cjs|phpunit\.xml|AGENTS\.md)$">
+    <FilesMatch "^(?:\..*|composer\.(?:json|lock)|package(?:-lock)?\.json|playwright\.config\.cjs|phpunit\.xml|AGENTS\.md|install\.sh|release\.json)$">
         Require all denied
     </FilesMatch>
 </IfModule>
@@ -12,10 +16,12 @@ DirectoryIndex index.php
 
     # Never expose application internals when the repository root is used as
     # the web root.
-    RewriteRule ^(?:\.git|\.github|\.svn|\.hg|app|bin|bootstrap|database|node_modules|resources|routes|scripts|storage|tests|vendor)(?:/|$) - [R=404,L]
+    RewriteRule (^|/)\. - [R=404,END]
+    RewriteRule ^(?:app|bin|bootstrap|database|docker|docs|node_modules|resources|routes|scripts|storage|tests|vendor)(?:/|$) - [R=404,END,NC]
 
     # Public assets keep their normal /assets/... URLs.
-    RewriteRule ^assets/(.*)$ public/assets/$1 [L]
+    RewriteRule ^assets/([A-Za-z0-9_./-]+\.(?:css|js|html|png|jpe?g|gif|webp|ico|svg|woff2?))$ public/assets/$1 [END,NC]
+    RewriteRule ^(?:assets|public)(?:/|$) - [R=404,END,NC]
 
     # Existing files in the repository root (for example favicon/robots added
     # by an administrator) may be served directly after the protected paths

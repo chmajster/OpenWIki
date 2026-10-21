@@ -174,7 +174,8 @@ def run():
                 'db_host': os.getenv('OPENWIKI_TEST_DB_HOST'), 'db_port': os.getenv('OPENWIKI_TEST_DB_PORT', '3306'),
                 'db_database': DB_NAME, 'db_username': os.getenv('OPENWIKI_TEST_DB_USERNAME'),
                 'db_password': os.getenv('OPENWIKI_TEST_DB_PASSWORD', ''), 'create_database': '1',
-                'admin_username': 'local-tester', 'admin_email': 'local@example.invalid', 'admin_password': 'Local-runtime-test-123!'}
+                'admin_username': 'local-tester', 'admin_email': 'local@example.invalid', 'admin_password': 'Local-runtime-test-123!',
+                'admin_password_confirmation': 'Local-runtime-test-123!'}
             # Fresh DDL plus durable recovery checkpoints can exceed a normal
             # request budget on CI disks. Keep startup/read probes at 3 seconds.
             status, body, headers = http(browser, url + '/install', setup, timeout=30)
