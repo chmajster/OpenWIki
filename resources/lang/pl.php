@@ -7,6 +7,7 @@ return [
     'Showing :from–:to of :total' => 'Wyświetlane :from–:to z :total',
     'Display mode' => 'Sposób wyświetlania', 'Card view' => 'Widok kart', 'List view' => 'Widok listy',
     'Pagination' => 'Nawigacja między stronami', 'Page' => 'Strona', 'All pages' => 'Wszystkie strony',
+    'Previous' => 'Poprzednia', 'Next' => 'Następna',
     'Space content' => 'Treść przestrzeni', 'No spaces match these filters.' => 'Żadna przestrzeń nie pasuje do filtrów.',
     'No pages match these filters.' => 'Żadna strona nie pasuje do filtrów.',
     'Try another name or change the filters.' => 'Wpisz inną nazwę lub zmień filtry.',

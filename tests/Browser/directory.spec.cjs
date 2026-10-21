@@ -14,7 +14,7 @@ async function login(page, index = 0) {
     await page.goto('/login'); await page.locator('[name=identifier]').fill(fixture().users[index].username); await page.locator('[name=password]').fill(fixture().users[index].password);
     await page.locator('form[action="/login"] [type=submit]').click(); await expect(page).toHaveURL('/');
 }
-const space = (request, name, visibility = 'public') => api(request, 'post', 'spaces', {name, visibility, description: 'A shared library of team guides and decisions.'});
+const space = (request, name, visibility = 'public', extra = {}) => api(request, 'post', 'spaces', {name, visibility, description: 'A shared library of team guides and decisions.', ...extra});
 const document = (request, target, title, extra = {}) => api(request, 'post', 'pages', {space_id: target.id, title, content_html: '<p>Verified team documentation.</p>', status: 'published', ...extra});
 let errors;
 test.beforeEach(({page}) => { errors = []; page.on('pageerror', error => errors.push(error.message)); });
@@ -98,7 +98,7 @@ test('content hides denied ancestors and working pages and remains usable withou
 });
 
 for (const width of [390, 768, 1024, 1440]) test('directory and content fit ' + width + ' pixels in both themes', async ({page, request}) => {
-    const target = await space(request, unique('Responsive knowledge') + ' ' + 'W'.repeat(120)); await document(request, target, 'Page'.repeat(50));
+    const target = await space(request, unique('Responsive knowledge') + ' ' + 'W'.repeat(120), 'public', {space_key: unique('LONG').replace(/ /g, '-').toUpperCase().padEnd(50, 'K')}); await document(request, target, 'Page'.repeat(50));
     await page.setViewportSize({width, height: 900}); await login(page);
     for (const theme of ['light', 'dark']) {
         await page.locator('.theme-menu > summary').click(); await page.locator('[data-theme-select]').selectOption(theme); await page.keyboard.press('Escape');
