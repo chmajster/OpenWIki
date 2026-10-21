@@ -152,7 +152,8 @@
 .space-overview-badge { display: flex; align-items: center; gap: 14px; margin: 30px 0 18px; }
 .workspace-shell .space-overview .page-heading { display: block; }
 .space-overview .page-heading .page-actions { margin-top: 24px; flex-wrap: wrap; }
-.space-overview .page-heading h1 { font-size: 32px; }
+.space-overview .page-heading h1 { font-size: 32px; overflow-wrap: anywhere; }
+.workspace-shell .breadcrumbs > a, .workspace-shell .breadcrumbs > span { min-width: 0; overflow-wrap: anywhere; }
 .space-overview .lead { font-size: 14px; }
 .space-action-menu { position: relative; }
 .space-action-menu > summary { list-style: none; cursor: pointer; }
