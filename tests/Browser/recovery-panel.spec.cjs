@@ -86,3 +86,40 @@ test('English recovery labels show the base version separately from copy names',
     await expect(panel.locator('[data-recovery-select]')).not.toContainText(' — base ');
     await expect(panel.locator('[data-recovery-meta]')).toHaveText('Base version: 1');
 });
+
+test.describe('checkpoint timestamps', () => {
+    test.use({timezoneId: 'UTC'});
+
+    for (const locale of ['pl', 'en']) test('copies saved within one minute remain distinguishable in ' + locale, async ({page, request}) => {
+        const target = await createPage(request);
+        await login(page, locale); await page.goto('/spaces/' + fixture().spaceKey + '/pages/' + target.slug + '/edit');
+        await saveDraft(page, 'Earlier recovery content.');
+        await saveDraft(page, 'Later recovery content.');
+        // Pin only list timestamps; restore both checkpoints through the real server.
+        await page.route('**/editor-drafts?*', async route => {
+            if (new URL(route.request().url()).searchParams.has('checkpoint')) { await route.continue(); return; }
+            const response = await route.fetch(), body = await response.json();
+            const points = [...body.data.checkpoints].sort((left, right) => left.draftVersion - right.draftVersion);
+            expect(points).toHaveLength(2);
+            points[0].savedAt = '2026-10-22 10:15:11';
+            points[1].savedAt = '2026-10-22 10:15:49';
+            await route.fulfill({response, json: body});
+        });
+        await page.reload();
+        const panel = page.locator('[data-recovery-banner]'), select = panel.locator('[data-recovery-select]');
+        const name = locale === 'pl' ? 'Punkt odzyskiwania' : 'Recovery point';
+        const options = select.locator('option[value^="checkpoint:"]');
+        await expect(options).toHaveText([new RegExp(name + '.*10:15:49'), new RegExp(name + '.*10:15:11')]);
+        const labels = await options.allTextContents();
+        for (const [index, content] of [[1, 'Earlier recovery content.'], [0, 'Later recovery content.']]) {
+            if (index === 0) await page.reload();
+            await select.selectOption({label: labels[index]});
+            await panel.locator('[data-restore-recovery]').click();
+            await expect(panel).toBeHidden(); await expect(editor(page)).toHaveText(content);
+            await expect(page.locator('[name=base_version]')).toHaveValue('1');
+        }
+        const response = await request.get('/api/v1/pages/' + target.id, {headers: {Authorization: 'Bearer ' + fixture().token}});
+        const saved = (await response.json()).data;
+        expect(saved.version).toBe(1); expect(saved.content_html).toBe('<p>Published document stays intact.</p>');
+    });
+});
