@@ -97,7 +97,7 @@ $inherits = !empty($page['inherit_acl']);
                 </ul>
             </details>
         </div>
-        <form class="card permissions-rule-form form-stack" id="page-rule-form" method="post" action="<?= $e($baseUrl) ?>/rules" aria-labelledby="rule-form-heading" data-page-rule-form>
+        <form class="card permissions-rule-form form-stack" id="page-rule-form" method="post" action="<?= $e($baseUrl) ?>/rules" aria-labelledby="rule-form-heading" data-page-rule-form tabindex="-1">
             <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
             <div><h2 id="rule-form-heading" data-rule-form-heading aria-live="polite"><?= $e($t('Add or update rule')) ?></h2>
                 <p class="permissions-form-help"><?= $e($t('Saving the same recipient and permission updates the existing rule.')) ?></p>

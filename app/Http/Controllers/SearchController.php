@@ -17,6 +17,10 @@ final class SearchController extends Controller
         catch (\InvalidArgumentException $error) { return $this->renderSearch($request, [], $error->getMessage(), 422); }
         if ($input['query'] === '') return $this->renderSearch($request, []);
         if (!$this->rateLimit($request)) return $this->renderSearch($request, [], 'Zbyt wiele wyszukiwań. Spróbuj ponownie za chwilę.', 429);
+        if ($input['filters']['my_work']) {
+            $user = $this->app->auth()->user();
+            if ($user !== null) $input['filters']['author'] = (string) $user['username'];
+        }
         $result = (new SearchService($this->app->database()))->search($input, $this->userId(), $this->permissions());
         return $this->renderSearch($request, $result);
     }
@@ -27,9 +31,45 @@ final class SearchController extends Controller
         catch (\InvalidArgumentException $error) { return Response::json(['error' => ['message' => $error->getMessage()]], 422); }
         if (mb_strlen($input['query']) < 2) return Response::json(['data' => []]);
         if (!$this->rateLimit($request, 'search-suggest', 120)) return Response::json(['error' => ['message' => 'Zbyt wiele zapytań.']], 429);
-        $input['page'] = 1; $input['per_page'] = 8;
-        $result = (new SearchService($this->app->database()))->search($input, $this->userId(), $this->permissions());
-        return Response::json(['data' => $result['data']]);
+        $panelMode = $request->query('panel') === '1';
+        $input['page'] = 1; $input['per_page'] = $panelMode ? 30 : 8;
+        $search = new SearchService($this->app->database());
+        $userId = $this->userId(); $permissions = $this->permissions();
+        if ($input['filters']['my_work']) {
+            $user = $this->app->auth()->user();
+            if ($user !== null) $input['filters']['author'] = (string) $user['username'];
+        }
+        $allResults = null;
+        if ($panelMode && $input['type'] !== 'all') {
+            $allInput = $input; $allInput['type'] = 'all';
+            $allResults = $search->search($allInput, $userId, $permissions);
+        }
+        $result = $search->search($input, $userId, $permissions);
+        if (!$panelMode) return Response::json(['data' => $result['data']]);
+
+        if ($allResults !== null) $result['meta']['counts'] = $allResults['meta']['counts'];
+        $facetResults = $allResults ?? $result;
+
+        $spaces = []; $authors = [];
+        foreach ($facetResults['data'] as $row) {
+            if (!empty($row['space']['key'])) {
+                $key = (string) $row['space']['key'];
+                $spaces[$key] ??= ['key' => $key, 'name' => (string) ($row['space']['name'] ?? $key), 'count' => 0];
+                $spaces[$key]['count']++;
+            }
+            if (!empty($row['author'])) {
+                $name = (string) $row['author'];
+                $authors[$name] ??= ['name' => $name, 'count' => 0];
+                $authors[$name]['count']++;
+            }
+        }
+        $sortFacets = static function (array &$facets): void {
+            uasort($facets, static fn (array $a, array $b): int => ($b['count'] <=> $a['count']) ?: strcasecmp($a['name'] ?? $a['key'], $b['name'] ?? $b['key']));
+            $facets = array_values($facets);
+        };
+        $sortFacets($spaces); $sortFacets($authors);
+
+        return Response::json(['data' => $result['data'], 'meta' => $result['meta'], 'facets' => ['spaces' => $spaces, 'authors' => $authors]]);
     }
 
     private function permissions(): array

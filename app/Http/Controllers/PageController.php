@@ -91,6 +91,8 @@ final class PageController extends Controller
             'tags' => [],
             'initialParentId' => $parent['id'] ?? null,
             'workspaceSpaces' => (new \OpenWiki\Wiki\PageWorkspaceService($this->app))->spaces(),
+            'canManagePageAcl' => $this->app->auth()->can('page.edit'),
+            'pageAclPrincipals' => $this->pageAclPrincipals(),
             'canPublish' => !(bool) $space['review_workflow'] && $this->pageWritePolicy($space)('page.publish', $page ?? null),
             'canArchive' => $this->pageWritePolicy($space)('page.archive', $page ?? null),
             'canUploadImage' => $this->app->auth()->can('attachment.upload'),
@@ -279,6 +281,8 @@ final class PageController extends Controller
             'pages' => $this->visibleTree($space),
             'templates' => (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->catalog(),
             'workspaceSpaces' => (new \OpenWiki\Wiki\PageWorkspaceService($this->app))->spaces($page),
+            'canManagePageAcl' => $this->app->auth()->can('page.edit'),
+            'pageAclPrincipals' => $this->pageAclPrincipals(),
             'tags' => isset($page['tags']) ? array_map(static fn (string $name): array => ['name' => $name], $page['tags']) : (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),
             'canPublish' => !(bool) $space['review_workflow'] && $this->pageWritePolicy($space)('page.publish', $page ?? null),
             'canArchive' => $this->pageWritePolicy($space)('page.archive', $page ?? null),
@@ -445,6 +449,16 @@ final class PageController extends Controller
             fn (): array => (new PageRepository($this->app->database()))->tree((int) $space['id']));
     }
 
+    private function pageAclPrincipals(): array
+    {
+        $db = $this->app->database();
+        return [
+            'users' => $db->fetchAll('SELECT id, username, email FROM users WHERE deleted_at IS NULL AND status = "active" ORDER BY username ASC'),
+            'groups' => $db->fetchAll('SELECT id, name, source FROM user_groups ORDER BY name ASC'),
+            'roles' => $db->fetchAll('SELECT id, name, slug FROM roles ORDER BY is_system DESC, name ASC'),
+        ];
+    }
+
     private function revisionDiff(Request $request, array $page, array $space, PageRepository $repository, PageAclService $acl): ?array
     {
         if ($request->query('from') === null && $request->query('to') === null) return null;
@@ -528,6 +542,8 @@ final class PageController extends Controller
             'pages' => $this->visibleTree($space),
             'templates' => (new \OpenWiki\Wiki\PageTemplateService($this->app->database()))->catalog(),
             'workspaceSpaces' => (new \OpenWiki\Wiki\PageWorkspaceService($this->app))->spaces($page),
+            'canManagePageAcl' => $this->app->auth()->can('page.edit'),
+            'pageAclPrincipals' => $this->pageAclPrincipals(),
             'tags' => $page === null
                 ? []
                 : (new WikiMetadataService($this->app->database()))->tagsForPage((int) $page['id']),

@@ -7,16 +7,16 @@ $userIds = array_map('intval', (array) ($old['user_ids'] ?? ($record['user_ids']
 $isEdit = $record !== null;
 $isLdap = $isEdit && $record['source'] === 'ldap';
 ?>
-<section class="content-container">
+<section class="content-container admin-page">
     <div class="page-heading">
         <div>
             <div class="eyebrow"><?= $e($t('Administration · Groups')) ?></div>
-            <h1><?= $isEdit ? 'Edit ' . $e($record['name']) : 'Create group' ?></h1>
+            <h1><?= $isEdit ? $e(strtr($t('Edit :name'), [':name' => $record['name']])) : $e($t('Create group')) ?></h1>
         </div>
         <a class="button button--ghost" href="/admin/groups"><?= $e($t('Back to groups')) ?></a>
     </div>
 
-    <?php if (!empty($formError)): ?><div class="alert alert--error"><?= $e($formError) ?></div><?php endif; ?>
+    <?php if (!empty($formError)): ?><div class="alert alert--error" role="alert"><?= $e($t($formError)) ?></div><?php endif; ?>
     <?php if ($isLdap): ?><div class="alert"><?= $e($t('LDAP groups are read-only locally. Membership is managed by directory synchronization.')) ?></div><?php endif; ?>
 
     <section class="card form-card">
@@ -42,9 +42,10 @@ $isLdap = $isEdit && $record['source'] === 'ldap';
                                 <span><?= $e($user['username']) ?> <small><?= $e($user['email']) ?></small></span>
                             </label>
                         <?php endforeach; ?>
+                        <?php if ($users === []): ?><p class="empty-state"><?= $e($t('No users are available to add.')) ?></p><?php endif; ?>
                     </div>
                 </fieldset>
-                <button class="button button--primary" type="submit"><?= $isEdit ? 'Save changes' : 'Create group' ?></button>
+                <div class="form-actions"><button class="button button--primary" type="submit"><?= $e($t($isEdit ? 'Save changes' : 'Create group')) ?></button></div>
             <?php endif; ?>
         </form>
     </section>

@@ -29,7 +29,7 @@ final class SystemAdminController extends Controller
         if (($failure = $this->authorize($request, 'settings.manage')) !== null) return $failure;
         if (($failure = $this->verifyCsrf($request)) !== null) return $failure;
         (new \OpenWiki\Search\SearchIndexer($this->app->database()))->enqueue();
-        \OpenWiki\Core\Session::flash('success', 'Przebudowa indeksu jest w kolejce. Worker przetwarza ją partiami.');
+        \OpenWiki\Core\Session::flash('success', 'Search index rebuild queued. The worker processes pages in batches.');
         return Response::redirect('/admin/system');
     }
 }

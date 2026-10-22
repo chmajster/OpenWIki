@@ -6,6 +6,22 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
     const dialog = (name) => q('[data-' + name + '-dialog]');
     const close = (name) => { dialog(name).close(); editor.view.focus(); };
     const focusedChain = () => { editor.view.focus(); return editor.chain(); };
+    const tableTools = q('[data-table-tools]');
+    let tableToolsAnchor = null, tableToolsDismissed = false;
+    const placeTableTools = (x, y) => {
+        tableTools.hidden = false;
+        tableTools.style.visibility = 'hidden';
+        const rect = tableTools.getBoundingClientRect(), margin = 12, gap = 12;
+        let left = x + gap;
+        if (left + rect.width > window.innerWidth - margin) left = x - rect.width - gap;
+        left = Math.max(margin, Math.min(left, window.innerWidth - rect.width - margin));
+        let top = y + gap;
+        if (top + rect.height > window.innerHeight - margin) top = y - rect.height - gap;
+        top = Math.max(margin, Math.min(top, window.innerHeight - rect.height - margin));
+        tableTools.style.left = left + 'px';
+        tableTools.style.top = top + 'px';
+        tableTools.style.removeProperty('visibility');
+    };
     const command = (name) => {
         const chain = focusedChain();
         if (['sink', 'lift'].includes(name)) {
@@ -17,7 +33,18 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
         return chain[methods[name]]().run();
     };
     const refresh = () => {
-        q('[data-table-tools]').hidden = !editor.isActive('table') || !canEdit();
+        const inEditableTable = editor.isActive('table') && canEdit();
+        tableTools.hidden = !inEditableTable || tableToolsDismissed;
+        if (inEditableTable && !tableToolsDismissed) {
+            if (!tableToolsAnchor) {
+                const caret = editor.view.coordsAtPos(editor.state.selection.from);
+                tableToolsAnchor = {x: caret.right, y: caret.top};
+            }
+            placeTableTools(tableToolsAnchor.x, tableToolsAnchor.y);
+        } else if (!inEditableTable) {
+            tableToolsAnchor = null;
+            tableToolsDismissed = false;
+        }
         q('[data-heading]').value = String(editor.getAttributes('heading').level || 0);
         root.querySelectorAll('[data-insert-table], [data-open-link], [data-open-code], [data-open-callout], [data-open-macro], [data-image-picker], [data-attachment-picker], [data-heading]').forEach((control) => { control.disabled = !canEdit(); });
         root.querySelectorAll('[data-rich-command]').forEach((button) => {
@@ -32,6 +59,31 @@ export function setupEditorTools(root, editor, requestJson, snapshot, fields, ca
         root.querySelectorAll('[data-table-command]').forEach((button) => { button.disabled = !canEdit() || !editor.can()[button.dataset.tableCommand](); });
     };
     editor.on('transaction', refresh);
+    editor.on('selectionUpdate', refresh);
+    refresh();
+    editor.view.dom.addEventListener('contextmenu', (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target?.closest('td, th') || !canEdit()) return;
+        event.preventDefault();
+        const anchor = {x: event.clientX, y: event.clientY};
+        tableToolsDismissed = false;
+        tableToolsAnchor = anchor;
+        const position = editor.view.posAtCoords({left: anchor.x, top: anchor.y});
+        if (position) {
+            editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(editor.state.doc.resolve(position.pos), 1)));
+            editor.view.focus();
+        }
+        requestAnimationFrame(() => { if (tableToolsAnchor === anchor && editor.isActive('table') && canEdit()) placeTableTools(anchor.x, anchor.y); });
+    });
+    document.addEventListener('pointerdown', (event) => {
+        if (tableTools.hidden || tableTools.contains(event.target) || editor.view.dom.contains(event.target)) return;
+        tableTools.hidden = true;
+        tableToolsAnchor = null;
+        tableToolsDismissed = true;
+    }, true);
+    window.addEventListener('resize', () => {
+        if (!tableTools.hidden && tableToolsAnchor) placeTableTools(tableToolsAnchor.x, tableToolsAnchor.y);
+    });
     root.querySelectorAll('[data-rich-command]').forEach((button) => button.addEventListener('click', () => { if (canEdit()) { command(button.dataset.richCommand); editor.view.focus(); } }));
     q('[data-heading]').addEventListener('change', (event) => {
         if (!canEdit()) return;

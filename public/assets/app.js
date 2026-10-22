@@ -11,6 +11,16 @@ if (pagePermissions) {
     const status = form.querySelector('[data-rule-editing]');
     const cancel = form.querySelector('[data-cancel-page-rule]');
     const identitySelects = ['principal', 'permission'].map(name => form.querySelector('select[name="' + name + '"]'));
+    pagePermissions.querySelectorAll('a[href="#page-rule-form"]').forEach(link => link.addEventListener('click', event => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const recipient = form.querySelector('[name="principal"]');
+        if (!recipient) return;
+        event.preventDefault();
+        if (!status.hidden) resetEditing();
+        if (location.hash !== '#page-rule-form') history.pushState(null, '', '#page-rule-form');
+        form.scrollIntoView({behavior: 'auto', block: 'start'});
+        recipient.focus({preventScroll: true});
+    }));
     const resetEditing = () => {
         form.querySelectorAll('[data-rule-identity]').forEach(input => input.remove());
         identitySelects.forEach(select => { select.disabled = false; });
@@ -115,6 +125,55 @@ document.querySelectorAll('[data-document-content] pre').forEach((pre) => {
     pre.appendChild(button);
 });
 
+const copyToClipboard = async (value) => {
+    try {
+        if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
+        await navigator.clipboard.writeText(value);
+        return;
+    } catch {
+        const helper = document.createElement('textarea');
+        helper.value = value;
+        helper.setAttribute('readonly', '');
+        helper.style.position = 'fixed';
+        helper.style.left = '-9999px';
+        document.body.appendChild(helper);
+        let copied = false;
+        try {
+            helper.select();
+            copied = document.execCommand('copy');
+        } finally {
+            helper.remove();
+        }
+        if (!copied) throw new Error('Clipboard copy failed');
+    }
+};
+
+document.querySelectorAll('[data-copy-target]').forEach((button) => {
+    const source = document.getElementById(button.dataset.copyTarget);
+    const status = button.closest('[data-copy-field]')?.querySelector('[data-copy-status]');
+    const label = button.textContent;
+    let resetTimer;
+    if (!source) return;
+
+    button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+            await copyToClipboard('value' in source ? source.value : source.textContent);
+            button.textContent = t('Copied');
+            if (status) status.textContent = t('Copied');
+        } catch {
+            button.textContent = t('Copy failed');
+            if (status) status.textContent = t('Copy failed');
+        }
+        window.clearTimeout(resetTimer);
+        resetTimer = window.setTimeout(() => {
+            button.textContent = label;
+            button.disabled = false;
+            if (status) status.textContent = '';
+        }, 1800);
+    });
+});
+
 
 document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
     const panels = Array.from(wizard.querySelectorAll('[data-wizard-panel]'));
@@ -130,6 +189,8 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
     const reinstallWarning = wizard.querySelector('[data-reinstall-warning]');
     const reviewReinstallWarning = wizard.querySelector('[data-review-reinstall-warning]');
     const databaseModeSummary = wizard.querySelector('[data-database-mode-summary]');
+    const currentStepLabel = wizard.querySelector('[data-current-step]');
+    const sidebarProgress = wizard.querySelector('[data-sidebar-progress]');
     let currentStep = 1;
     let databaseTestPassed = databaseNext === null;
     const connectionSnapshot = () => JSON.stringify(['db_host', 'db_port', 'db_database', 'db_username', 'db_password', 'create_database', 'full_database_reinstall'].map(name => {
@@ -168,7 +229,7 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
         updateDatabaseMode();
     };
 
-    const showStep = (step) => {
+    const showStep = (step, shouldScroll = true) => {
         currentStep = Math.max(1, Math.min(panels.length, step));
 
         panels.forEach((panel) => {
@@ -179,13 +240,18 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
             const indicatorStep = Number(indicator.dataset.wizardIndicator);
             indicator.classList.toggle('is-active', indicatorStep === currentStep);
             indicator.classList.toggle('is-complete', indicatorStep < currentStep);
+            if (indicatorStep === currentStep) indicator.setAttribute('aria-current', 'step');
+            else indicator.removeAttribute('aria-current');
         });
+
+        if (currentStepLabel) currentStepLabel.textContent = String(currentStep);
+        if (sidebarProgress) sidebarProgress.textContent = `${currentStep} / ${panels.length}`;
 
         if (currentStep === panels.length) {
             updateSummary();
         }
 
-        wizard.scrollIntoView({behavior: 'smooth', block: 'start'});
+        if (shouldScroll) wizard.scrollIntoView({behavior: 'smooth', block: 'start'});
     };
 
     const validateCurrentStep = () => {
@@ -329,7 +395,7 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
     });
 
     updateSummary();
-    showStep(1);
+    showStep(1, false);
 });
 
 document.querySelectorAll('[data-timezone-picker]').forEach((picker) => {

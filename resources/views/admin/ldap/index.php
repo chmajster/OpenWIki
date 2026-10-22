@@ -6,29 +6,40 @@ $value = static function (string $key, mixed $fallback = '') use ($old, $config)
 $enabled = array_key_exists('enabled', $old)
     ? filter_var($old['enabled'], FILTER_VALIDATE_BOOL)
     : (bool) ($config['enabled'] ?? false);
+$translateLdapMessage = static function (string $message) use ($t): string {
+    foreach ([
+        'Invalid LDAP attribute: ' => 'Invalid LDAP attribute: :attribute',
+        'Unknown role in LDAP mapping: ' => 'Unknown role in LDAP mapping: :role',
+    ] as $prefix => $template) {
+        if (str_starts_with($message, $prefix)) {
+            return strtr($t($template), [str_contains($template, ':attribute') ? ':attribute' : ':role' => substr($message, strlen($prefix))]);
+        }
+    }
+    return $t($message);
+};
 ?>
-<section class="content-container">
+<section class="content-container admin-page admin-page--ldap">
     <div class="page-heading">
         <div>
             <div class="eyebrow"><?= $e($t('Administration')) ?></div>
-            <h1>LDAP / Active Directory</h1>
+            <h1><?= $e($t('LDAP / Active Directory')) ?></h1>
             <p class="muted"><?= $e($t('Authenticate directory users, create local profiles after first login and map directory groups to OpenWiki roles.')) ?></p>
         </div>
     </div>
 
     <?php if (!empty($formError)): ?>
-        <div class="alert alert--error" role="alert"><?= $e($formError) ?></div>
+        <div class="alert alert--error" role="alert"><?= $e($translateLdapMessage($formError)) ?></div>
     <?php endif; ?>
     <?php if (!empty($testSuccess)): ?>
-        <div class="alert alert--success" role="status"><?= $e($testSuccess) ?></div>
+        <div class="alert alert--success" role="status"><?= $e($translateLdapMessage($testSuccess)) ?></div>
     <?php endif; ?>
 
     <form class="card form-card form-stack" method="post" action="/admin/ldap">
         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
 
-        <label>
+        <label class="admin-form-checkbox">
             <input type="checkbox" name="enabled" value="1" <?= $enabled ? 'checked' : '' ?>>
-            <?= $e($t('Enable LDAP / Active Directory authentication')) ?>
+            <span><?= $e($t('Enable LDAP / Active Directory authentication')) ?><small><?= $e($t('Use your directory to authenticate users and synchronize mapped roles.')) ?></small></span>
         </label>
 
         <div class="form-grid">
@@ -46,24 +57,24 @@ $enabled = array_key_exists('enabled', $old)
             </label>
         </div>
 
-        <label>Base DN
+        <label><?= $e($t('Base DN')) ?>
             <input name="base_dn" required maxlength="1000" value="<?= $e($value('base_dn')) ?>" placeholder="dc=example,dc=com">
         </label>
 
         <div class="form-grid">
-            <label>Bind DN
+            <label><?= $e($t('Bind DN')) ?>
                 <input name="bind_dn" maxlength="1000" value="<?= $e($value('bind_dn')) ?>" placeholder="cn=openwiki,ou=service,dc=example,dc=com">
             </label>
             <label><?= $e($t('Bind Password')) ?>
-                <input name="bind_password" type="password" maxlength="2048" autocomplete="new-password" placeholder="<?= !empty($config['bind_password_set']) ? 'Stored password — leave blank to keep' : 'Bind password' ?>">
+                <input name="bind_password" type="password" maxlength="2048" autocomplete="new-password" placeholder="<?= $e($t(!empty($config['bind_password_set']) ? 'Stored password — leave blank to keep' : 'Bind password')) ?>">
             </label>
         </div>
 
         <div class="form-grid">
-            <label>User DN
+            <label><?= $e($t('User DN')) ?>
                 <input name="user_dn" maxlength="1000" value="<?= $e($value('user_dn')) ?>" placeholder="ou=users,dc=example,dc=com">
             </label>
-            <label>Group DN
+            <label><?= $e($t('Group DN')) ?>
                 <input name="group_dn" maxlength="1000" value="<?= $e($value('group_dn')) ?>" placeholder="ou=groups,dc=example,dc=com">
             </label>
         </div>
@@ -89,7 +100,9 @@ $enabled = array_key_exists('enabled', $old)
 
         <h2><?= $e($t('Group mapping')) ?></h2>
         <p class="muted"><?= $e($t('One mapping per line: LDAP group DN or CN')) ?> <code>=&gt;</code> <?= $e($t('OpenWiki role slug.')) ?></p>
-        <textarea name="group_mapping" rows="8" placeholder="CN=Wiki Editors,OU=Groups,DC=example,DC=com => editor"><?= $e($value('group_mapping')) ?></textarea>
+        <label><?= $e($t('Group mapping')) ?>
+            <textarea name="group_mapping" rows="8" placeholder="CN=Wiki Editors,OU=Groups,DC=example,DC=com => editor"><?= $e($value('group_mapping')) ?></textarea>
+        </label>
 
         <details>
             <summary><?= $e($t('Available role slugs')) ?></summary>

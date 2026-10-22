@@ -189,6 +189,27 @@ final class InstallServiceTest extends TestCase
         $service->install($this->input());
     }
 
+    public function testExplicitFullReinstallCanReplaceExistingConfigurationAfterMarkerRemoval(): void
+    {
+        $service = new InstallService($this->basePath);
+        $service->install($this->input());
+        unlink($this->basePath . '/storage/installed.lock');
+
+        $replacement = array_replace($this->input(), [
+            'full_database_reinstall' => true,
+            'admin_username' => 'replacement-admin',
+            'admin_email' => 'replacement@example.test',
+            'admin_password' => 'Replacement-Password!42',
+        ]);
+        $service->install($replacement);
+
+        self::assertFileExists($this->basePath . '/storage/installed.lock');
+        self::assertNull($this->database()->fetchOne('SELECT id FROM users WHERE username = "admin"'));
+        $administrator = $this->database()->fetchOne('SELECT * FROM users WHERE username = "replacement-admin"');
+        self::assertNotNull($administrator);
+        self::assertTrue(password_verify($replacement['admin_password'], $administrator['password_hash']));
+    }
+
     public function testInvalidInputIsRejectedBeforeDatabaseChanges(): void
     {
         $service = new InstallService($this->basePath);

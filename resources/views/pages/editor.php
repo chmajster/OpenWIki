@@ -2,7 +2,6 @@
 $text = static fn (mixed $value): string => is_scalar($value) ? (string) $value : '';
 $e = static fn (mixed $value): string => htmlspecialchars($text($value), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $old = $old ?? [];
-$editorWorkspace = true;
 require __DIR__ . '/../partials/editor-icons.php';
 $isEdit = $page !== null;
 $field = static function (string $key, mixed $fallback = '') use ($old): mixed {
@@ -165,24 +164,61 @@ foreach ($pages as $candidate) if ((int) $candidate['id'] === (int) $parentValue
         <input type="hidden" name="publication_parent_id" disabled value="<?= $e($field('publication_parent_id', $parentValue)) ?>">
         <?php require __DIR__ . '/../partials/editor-header.php'; ?>
         <dialog data-publication-dialog class="editor-dialog publication-dialog" aria-labelledby="publication-heading">
-            <h2 id="publication-heading"><?= $isEdit ? 'Zapisz zmiany' : 'Opublikuj stronę' ?></h2>
-            <p class="field-help">Sprawdź lokalizację i dostęp. Zapis szkicu pozostaje niezależny od publikacji.</p>
-            <h3 data-publication-title><?= $e($titleValue ?: 'Tytuł strony') ?></h3>
-            <label>Przestrzeń<select data-publication-space <?= $isEdit ? 'disabled' : '' ?>><?php foreach ($workspaceSpaces ?? [] as $target): ?><option value="<?= (int) $target['id'] ?>" <?= (int) $target['id'] === (int) $space['id'] ? 'selected' : '' ?>><?= $e($target['name']) ?></option><?php endforeach; ?></select></label>
-            <?php if ($isEdit): ?><p class="field-help">Przenoszenie istniejącej strony między przestrzeniami jest dostępne w działaniach strony.</p><?php endif; ?>
-            <label>Strona nadrzędna<select data-publication-parent><option value="">Główny poziom przestrzeni</option></select></label>
-            <section class="publication-access"><h3>Dostęp</h3><p data-publication-access></p><p data-publication-permission></p></section>
+            <header class="publication-heading">
+                <div><div class="eyebrow"><?= $isEdit ? 'Zapis strony' : 'Nowa strona' ?></div>
+                    <h2 id="publication-heading"><?= $isEdit ? 'Zapisz zmiany' : 'Opublikuj stronę' ?></h2>
+                    <p class="field-help">Sprawdź lokalizację, metadane i dostęp przed zapisem.</p>
+                </div>
+                <span class="publication-title-preview" data-publication-title><?= $e($titleValue ?: 'Tytuł strony') ?></span>
+            </header>
+            <div class="publication-location-grid">
+                <label>Przestrzeń<select data-publication-space <?= $isEdit ? 'disabled' : '' ?>><?php foreach ($workspaceSpaces ?? [] as $target): ?><option value="<?= (int) $target['id'] ?>" <?= (int) $target['id'] === (int) $space['id'] ? 'selected' : '' ?>><?= $e($target['name']) ?></option><?php endforeach; ?></select></label>
+                <label>Strona nadrzędna<select data-publication-parent><option value="">Główny poziom przestrzeni</option></select></label>
+            </div>
+            <?php if ($isEdit): ?><p class="field-help publication-move-help">Przenoszenie do innej przestrzeni jest dostępne w działaniach strony.</p><?php endif; ?>
+            <section class="publication-access" aria-labelledby="publication-access-heading"><div class="publication-access__heading"><span aria-hidden="true">🔒</span><div><h3 id="publication-access-heading">Dostęp odziedziczony</h3><p data-publication-access></p></div></div><p class="publication-access__permission" data-publication-permission></p></section>
+            <?php if (!empty($canManagePageAcl)): ?>
+                <?php
+                    $aclPrincipals = $pageAclPrincipals ?? ['users' => [], 'groups' => [], 'roles' => []];
+                    $accessPrincipalValue = (string) $field('access_principal', '');
+                    $accessPermissionValue = (string) $field('access_permission', 'page.view');
+                    $accessChildrenValue = (string) $field('access_inherit_to_children', '0');
+                ?>
+                <section class="publication-share" aria-labelledby="publication-share-heading">
+                    <div class="publication-share__heading"><div><h3 id="publication-share-heading">Przydziel dostęp</h3><p>Dodaj regułę dla osoby, grupy albo roli.</p></div><?php if ($isEdit): ?><a href="/spaces/<?= rawurlencode((string) $space['space_key']) ?>/pages/<?= rawurlencode((string) $page['slug']) ?>/permissions">Więcej ustawień</a><?php else: ?><span>Więcej ustawień po zapisie</span><?php endif; ?></div>
+                    <div class="publication-share__fields">
+                        <label>Odbiorca
+                            <select name="access_principal">
+                                <option value="" <?= $accessPrincipalValue === '' ? 'selected' : '' ?>>Nie dodawaj reguły</option>
+                                <?php if (($aclPrincipals['users'] ?? []) !== []): ?><optgroup label="Osoby"><?php foreach ($aclPrincipals['users'] as $recipient): $recipientValue = 'user:' . (int) $recipient['id']; ?><option value="<?= $e($recipientValue) ?>" <?= $accessPrincipalValue === $recipientValue ? 'selected' : '' ?>><?= $e($recipient['username']) ?> · <?= $e($recipient['email']) ?></option><?php endforeach; ?></optgroup><?php endif; ?>
+                                <?php if (($aclPrincipals['groups'] ?? []) !== []): ?><optgroup label="Grupy"><?php foreach ($aclPrincipals['groups'] as $recipient): $recipientValue = 'group:' . (int) $recipient['id']; ?><option value="<?= $e($recipientValue) ?>" <?= $accessPrincipalValue === $recipientValue ? 'selected' : '' ?>><?= $e($recipient['name']) ?></option><?php endforeach; ?></optgroup><?php endif; ?>
+                                <?php if (($aclPrincipals['roles'] ?? []) !== []): ?><optgroup label="Role"><?php foreach ($aclPrincipals['roles'] as $recipient): $recipientValue = 'role:' . (int) $recipient['id']; ?><option value="<?= $e($recipientValue) ?>" <?= $accessPrincipalValue === $recipientValue ? 'selected' : '' ?>><?= $e($recipient['name']) ?></option><?php endforeach; ?></optgroup><?php endif; ?>
+                            </select>
+                        </label>
+                        <label>Uprawnienie
+                            <select name="access_permission">
+                                <option value="page.view" <?= $accessPermissionValue === 'page.view' ? 'selected' : '' ?>>Może wyświetlać stronę</option>
+                                <option value="page.edit" <?= $accessPermissionValue === 'page.edit' ? 'selected' : '' ?>>Może edytować stronę</option>
+                            </select>
+                        </label>
+                        <label class="publication-share__children"><input type="checkbox" name="access_inherit_to_children" value="1" <?= $accessChildrenValue === '1' ? 'checked' : '' ?>><span>Uwzględnij też strony podrzędne</span></label>
+                    </div>
+                    <p class="publication-share__help">Reguła nie zastępuje dostępu do przestrzeni ani uprawnień globalnych. Odczyt i edycja tworzą listę uprawnionych do danej czynności; inni mogą utracić dostęp. Zapis odrzucimy, jeśli reguła zablokuje Ci zarządzanie stroną.</p>
+                </section>
+            <?php endif; ?>
             <div data-publication-metadata></div><p data-publication-error role="alert"></p>
             <div class="form-actions"><button class="button button--primary" type="submit" data-confirm-publication>Potwierdź zapis</button><button class="button" type="button" data-dialog-close>Wróć do edycji</button></div>
         </dialog>
         <div class="workspace-body">
         <aside class="workspace-tree" id="workspace-tree" data-workspace-tree aria-label="Drzewo przestrzeni">
+            <a class="workspace-main-menu" href="/" aria-label="<?= $e($t('Return to dashboard')) ?>" title="<?= $e($t('Return to dashboard')) ?>"><?= $editorIcon('home') ?><span><?= $e($t('Home')) ?></span></a>
             <a class="workspace-space-name" href="/spaces/<?= rawurlencode($space['space_key']) ?>"><?= $editorIcon('document') ?><strong><?= $e($space['name']) ?></strong></a>
             <div class="workspace-tree-heading"><span>Strony</span><a href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create" aria-label="Utwórz stronę w tej przestrzeni">+</a></div>
             <p class="workspace-location" data-current-location><?= $e($parentTitle ?? 'Główny poziom') ?> → <?= $isEdit ? 'Edytowana strona' : 'Nowa strona' ?></p>
             <?php $activePageId = $page['id'] ?? $parentValue; require __DIR__ . '/../partials/page-tree.php'; ?>
             <details class="editor-outline" open><summary>Nagłówki dokumentu</summary><nav data-editor-outline aria-label="Nagłówki dokumentu"></nav></details>
         </aside>
+        <div class="workspace-tree-resizer" data-tree-resize role="separator" aria-orientation="vertical" aria-label="Zmień szerokość drzewa stron" aria-valuemin="200" aria-valuemax="420" aria-valuenow="236" tabindex="0"><span aria-hidden="true"></span></div>
 
         <div class="editor-main workspace-canvas">
             <?php require __DIR__ . '/../partials/editor-recovery.php'; ?>
@@ -222,6 +258,12 @@ foreach ($pages as $candidate) if ((int) $candidate['id'] === (int) $parentValue
                             <?php endif; ?>
                         </select>
                     </label>
+                    <label>Właściciel merytoryczny
+                        <select name="content_owner_id" required><?php foreach (($pageAclPrincipals['users'] ?? []) as $recipient): ?><option value="<?= (int) $recipient['id'] ?>" <?= (string) $field('content_owner_id', $page['content_owner_id'] ?? $currentUser['id']) === (string) $recipient['id'] ? 'selected' : '' ?>><?= $e($recipient['username']) ?></option><?php endforeach; ?><?php if ($page !== null && !in_array((int) ($page['content_owner_id'] ?? 0), array_map(static fn (array $row): int => (int) $row['id'], $pageAclPrincipals['users'] ?? []), true)): ?><option value="<?= (int) $page['content_owner_id'] ?>" selected>Nieaktywne konto (<?= (int) $page['content_owner_id'] ?>)</option><?php endif; ?></select>
+                    </label>
+                    <label>Termin przeglądu wiedzy
+                        <input type="date" name="review_due_at" value="<?= $e($field('review_due_at', $page['review_due_at'] ?? '')) ?>">
+                    </label>
                 </div>
 
                 <label><?= $e($t('Tags')) ?>
@@ -231,9 +273,7 @@ foreach ($pages as $candidate) if ((int) $candidate['id'] === (int) $parentValue
 
             </div>
 
-                        <label>Właściciel merytoryczny (ID konta)<input type="number" name="content_owner_id" min="1" required value="<?= $e($field('content_owner_id', $page['content_owner_id'] ?? $currentUser['id'])) ?>"></label>
-                        <label>Termin przeglądu wiedzy<input type="date" name="review_due_at" value="<?= $e($field('review_due_at', $page['review_due_at'] ?? '')) ?>"></label>
-                        <label><?= $e($t('Change summary')) ?>
+                <label><?= $e($t('Change summary')) ?>
                 <textarea name="change_summary" rows="3" maxlength="500" placeholder="<?= $e($t('Describe this change')) ?>"><?= $e($changeSummary) ?></textarea>
             </label>
 </details>
@@ -250,36 +290,128 @@ foreach ($pages as $candidate) if ((int) $candidate['id'] === (int) $parentValue
             <?php endif; ?>
             <div class="editor-pane" id="visual-pane" data-pane="visual">
                 <div class="editor-toolbar" role="toolbar" aria-label="<?= $e($t('Formatting')) ?>">
-                    <label class="sr-only" for="heading-level"><?= $e($t('Heading')) ?></label>
-                    <select id="heading-level" data-heading><option value="0"><?= $e($t('Paragraph')) ?></option><?php for ($level = 1; $level <= 6; $level++): ?><option value="<?= $level ?>">H<?= $level ?></option><?php endfor; ?></select>
-                    <?php foreach (['bold' => 'Bold', 'italic' => 'Italic', 'underline' => 'Underline', 'strike' => 'Strike', 'blockquote' => 'Quote', 'bulletList' => 'Bullet list', 'orderedList' => 'Numbered list', 'taskList' => 'Checklist', 'undo' => 'Undo', 'redo' => 'Redo'] as $command => $label): ?>
-                        <button type="button" data-rich-command="<?= $command ?>" aria-label="<?= $e($t($label)) ?>" title="<?= $e($t($label)) ?>"><span aria-hidden="true"><?php if (in_array($command, ['undo', 'redo'], true)) echo $editorIcon($command); elseif ($command === 'bulletList') echo $editorIcon('list'); elseif ($command === 'taskList') echo $editorIcon('check'); else echo ['bold'=>'<b>B</b>', 'italic'=>'<i>I</i>', 'underline'=>'<u>U</u>', 'strike'=>'<s>S</s>', 'blockquote'=>'❝', 'orderedList'=>'1.'][$command]; ?></span></button>
-                    <?php endforeach; ?>
-                    <button type="button" data-insert-table aria-label="<?= $e($t('Table')) ?>" title="<?= $e($t('Table')) ?>"><?= $editorIcon('table') ?></button>
-                    <button type="button" data-open-link aria-label="<?= $e($t('Link')) ?>" title="<?= $e($t('Link')) ?>"><?= $editorIcon('link') ?></button>
-                    <button type="button" data-open-code aria-label="<?= $e($t('Code block')) ?>" title="<?= $e($t('Code block')) ?>"><?= $editorIcon('code') ?></button>
-                    <button type="button" data-open-callout aria-label="<?= $e($t('Callout')) ?>" title="<?= $e($t('Callout')) ?>"><?= $editorIcon('callout') ?></button>
-                    <button type="button" data-open-macro aria-label="<?= $e($t('Macro')) ?>" title="<?= $e($t('Macro')) ?>"><?= $editorIcon('macro') ?></button>
-                    <details class="format-menu"><summary aria-label="Więcej formatowania i bloków">•••</summary><div class="format-menu-content">
-                    <button type="button" data-rich-command="sink"><?= $e($t('Indent list')) ?></button><button type="button" data-rich-command="lift"><?= $e($t('Outdent list')) ?></button>
-                    <button type="button" data-advanced-command="superscript">Indeks górny</button><button type="button" data-advanced-command="subscript">Indeks dolny</button><button type="button" data-advanced-command="inlineCode">Kod w linii</button><button type="button" data-advanced-command="separator">Separator</button><button type="button" data-advanced-command="clearFormat">Usuń formatowanie</button>
-                    <label>Kolor<select data-text-color><option value="">Domyślny</option><?php foreach (['red'=>'Czerwony','blue'=>'Niebieski','green'=>'Zielony','orange'=>'Pomarańczowy','purple'=>'Fioletowy','gray'=>'Szary'] as $value=>$label): ?><option value="<?= $value ?>"><?= $label ?></option><?php endforeach; ?></select></label>
-                    <label>Wyróżnienie<select data-highlight><option value="">Brak</option><option value="yellow">Żółte</option><option value="green">Zielone</option><option value="blue">Niebieskie</option><option value="pink">Różowe</option></select></label>
-                    <label>Wyrównanie<select data-text-align><option value="left">Do lewej</option><option value="center">Wyśrodkowane</option><option value="right">Do prawej</option><option value="justify">Wyjustowane</option></select></label>
-                    <button type="button" data-open-block>Sekcja lub kolumny</button><button type="button" data-open-diagram>Diagram</button>
-                    </div></details>
-                    <?php if ($canUploadImage): ?><button type="button" data-image-picker aria-label="<?= $e($t('Image')) ?>" title="<?= $e($t('Image')) ?>"><?= $editorIcon('image') ?></button><input type="file" accept="image/png,image/jpeg,image/gif,image/webp" data-image-file hidden><?php endif; ?>
+                    <div class="editor-toolbar-group editor-toolbar-history" aria-label="Historia zmian">
+                        <?php foreach (['undo' => 'Undo', 'redo' => 'Redo'] as $command => $label): ?><button type="button" data-rich-command="<?= $command ?>" aria-label="<?= $e($t($label)) ?>" title="<?= $e($t($label)) ?>"><?= $editorIcon($command) ?></button><?php endforeach; ?>
+                    </div>
+                    <div class="editor-toolbar-group">
+                        <label class="sr-only" for="heading-level"><?= $e($t('Heading')) ?></label>
+                        <select id="heading-level" data-heading><option value="0"><?= $e($t('Paragraph')) ?></option><?php for ($level = 1; $level <= 6; $level++): ?><option value="<?= $level ?>">H<?= $level ?></option><?php endfor; ?></select>
+                    </div>
+                    <div class="editor-toolbar-group" aria-label="Format tekstu">
+                        <?php foreach (['bold' => ['Bold', '<b>B</b>'], 'italic' => ['Italic', '<i>I</i>'], 'underline' => ['Underline', '<u>U</u>'], 'strike' => ['Strike', '<s>S</s>']] as $command => [$label, $symbol]): ?><button type="button" data-rich-command="<?= $command ?>" aria-label="<?= $e($t($label)) ?>" title="<?= $e($t($label)) ?>"><span aria-hidden="true"><?= $symbol ?></span></button><?php endforeach; ?>
+                    </div>
+                    <div class="editor-toolbar-group" aria-label="Wyróżnienie tekstu">
+                        <details class="editor-toolbar-picker">
+                            <summary aria-label="Kolor tekstu" title="Kolor tekstu"><span class="editor-toolbar-color-mark" aria-hidden="true">A</span><span class="editor-toolbar-picker-chevron" aria-hidden="true"></span></summary>
+                            <div class="editor-toolbar-picker__panel editor-color-palette" role="group" aria-label="Paleta kolorów tekstu">
+                                <strong>Kolor tekstu</strong>
+                                <div class="editor-color-palette__swatches">
+                                    <button type="button" data-text-color-choice="" aria-label="Kolor domyślny" title="Kolor domyślny" aria-pressed="true"><span class="editor-color-swatch editor-color-swatch--default" aria-hidden="true"></span></button>
+                                    <?php foreach (['red' => ['Czerwony', 'var(--doc-red)'], 'orange' => ['Pomarańczowy', 'var(--doc-orange)'], 'green' => ['Zielony', 'var(--doc-green)'], 'blue' => ['Niebieski', 'var(--doc-blue)'], 'purple' => ['Fioletowy', 'var(--doc-purple)'], 'gray' => ['Szary', 'var(--doc-gray)']] as $value => [$label, $swatch]): ?>
+                                        <button type="button" data-text-color-choice="<?= $e($value) ?>" style="--editor-color-swatch:<?= $e($swatch) ?>" aria-label="Kolor tekstu: <?= $e($label) ?>" title="<?= $e($label) ?>" aria-pressed="false"><span class="editor-color-swatch" aria-hidden="true"></span></button>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        </details>
+                        <details class="editor-toolbar-picker">
+                            <summary aria-label="Wyróżnienie tekstu" title="Wyróżnienie tekstu"><span class="editor-toolbar-highlight-mark" aria-hidden="true">▰</span><span class="editor-toolbar-picker-chevron" aria-hidden="true"></span></summary>
+                            <div class="editor-toolbar-picker__panel"><label>Wyróżnienie<select data-highlight aria-label="Wyróżnienie tekstu"><option value="">Brak</option><option value="yellow">Żółte</option><option value="green">Zielone</option><option value="blue">Niebieskie</option><option value="pink">Różowe</option></select></label></div>
+                        </details>
+                    </div>
+                    <div class="editor-toolbar-group" aria-label="Struktura tekstu">
+                        <button type="button" data-rich-command="blockquote" aria-label="<?= $e($t('Quote')) ?>" title="<?= $e($t('Quote')) ?>"><span aria-hidden="true">❝</span></button>
+                        <button type="button" data-rich-command="bulletList" aria-label="<?= $e($t('Bullet list')) ?>" title="<?= $e($t('Bullet list')) ?>"><?= $editorIcon('list') ?></button>
+                        <button type="button" data-rich-command="orderedList" aria-label="<?= $e($t('Numbered list')) ?>" title="<?= $e($t('Numbered list')) ?>"><span aria-hidden="true">1.</span></button>
+                        <button type="button" data-rich-command="taskList" aria-label="<?= $e($t('Checklist')) ?>" title="<?= $e($t('Checklist')) ?>"><?= $editorIcon('check') ?></button>
+                        <button type="button" data-rich-command="lift" aria-label="<?= $e($t('Outdent list')) ?>" title="<?= $e($t('Outdent list')) ?>"><?= $editorIcon('outdent') ?></button>
+                        <button type="button" data-rich-command="sink" aria-label="<?= $e($t('Indent list')) ?>" title="<?= $e($t('Indent list')) ?>"><?= $editorIcon('indent') ?></button>
+                    </div>
+                    <div class="editor-toolbar-group" aria-label="Wyrównanie tekstu">
+                        <details class="editor-toolbar-picker" data-align-picker>
+                            <summary aria-label="Wyrównanie tekstu" title="Wyrównanie tekstu"><?= $editorIcon('align') ?><span class="editor-toolbar-picker-chevron" aria-hidden="true"></span></summary>
+                            <div class="editor-toolbar-picker__panel editor-align-picker" role="group" aria-label="Wyrównanie tekstu">
+                                <header class="editor-align-picker__heading"><span class="editor-align-picker__icon" aria-hidden="true"><?= $editorIcon('align') ?></span><span><strong>Wyrównanie</strong><small>Ustaw położenie tekstu</small></span></header>
+                                <div class="editor-align-picker__options">
+                                    <button type="button" data-text-align-choice="left" aria-label="Do lewej" title="Do lewej" aria-pressed="true"><?= $editorIcon('align-left') ?><span>Do lewej</span></button>
+                                    <button type="button" data-text-align-choice="center" aria-label="Wyśrodkuj" title="Wyśrodkuj" aria-pressed="false"><?= $editorIcon('align-center') ?><span>Wyśrodkuj</span></button>
+                                    <button type="button" data-text-align-choice="right" aria-label="Do prawej" title="Do prawej" aria-pressed="false"><?= $editorIcon('align-right') ?><span>Do prawej</span></button>
+                                    <button type="button" data-text-align-choice="justify" aria-label="Wyjustuj" title="Wyjustuj" aria-pressed="false"><?= $editorIcon('align-justify') ?><span>Wyjustuj</span></button>
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+                    <div class="editor-toolbar-group" aria-label="Wstaw element">
+                        <button type="button" data-insert-table aria-label="<?= $e($t('Table')) ?>" title="<?= $e($t('Table')) ?>"><?= $editorIcon('table') ?></button>
+                        <button type="button" data-open-link aria-label="<?= $e($t('Link')) ?>" title="<?= $e($t('Link')) ?>"><?= $editorIcon('link') ?></button>
+                        <button type="button" data-open-code aria-label="<?= $e($t('Code block')) ?>" title="<?= $e($t('Code block')) ?>"><?= $editorIcon('code') ?></button>
+                        <button type="button" data-open-callout aria-label="<?= $e($t('Callout')) ?>" title="<?= $e($t('Callout')) ?>"><?= $editorIcon('callout') ?></button>
+                        <button type="button" data-open-macro aria-label="<?= $e($t('Macro')) ?>" title="<?= $e($t('Macro')) ?>"><?= $editorIcon('macro') ?></button>
+                        <?php if ($canUploadImage): ?><button type="button" data-image-picker aria-label="<?= $e($t('Image')) ?>" title="<?= $e($t('Image')) ?>"><?= $editorIcon('image') ?></button><input type="file" accept="image/png,image/jpeg,image/gif,image/webp" data-image-file hidden><?php endif; ?>
+                        <details class="editor-toolbar-picker editor-emoji-picker">
+                            <summary aria-label="Wstaw emoji" title="Wstaw emoji"><?= $editorIcon('emoji') ?><span class="editor-toolbar-picker-chevron" aria-hidden="true"></span></summary>
+                            <div class="editor-toolbar-picker__panel editor-emoji-picker__panel" role="group" aria-label="Wybierz emoji">
+                                <?php foreach (['🙂' => 'Uśmiech', '👍' => 'Kciuk w górę', '❤️' => 'Serce', '✅' => 'Gotowe', '🎉' => 'Świętowanie', '🔥' => 'Ogień', '🚀' => 'Start', '💡' => 'Pomysł'] as $emoji => $label): ?><button type="button" data-editor-emoji="<?= $e($emoji) ?>" aria-label="Wstaw emoji: <?= $e($label) ?>" title="<?= $e($label) ?>"><?= $e($emoji) ?></button><?php endforeach; ?>
+                            </div>
+                        </details>
+                        <details class="format-menu"><summary aria-label="Więcej opcji edycji" title="Dodaj element"><?= $editorIcon('plus') ?></summary><div class="format-menu-content">
+                        <?php foreach (['superscript' => ['Indeks górny', 'superscript'], 'subscript' => ['Indeks dolny', 'subscript'], 'inlineCode' => ['Kod w linii', 'inline-code'], 'separator' => ['Separator', 'separator'], 'clearFormat' => ['Usuń formatowanie', 'clear-format']] as $command => [$label, $icon]): ?>
+                            <button type="button" class="format-menu__action" data-advanced-command="<?= $e($command) ?>" aria-label="<?= $e($label) ?>"><span class="format-menu__icon" aria-hidden="true"><?= $editorIcon($icon) ?></span><span><?= $e($label) ?></span></button>
+                        <?php endforeach; ?>
+                        <button type="button" class="format-menu__action" data-open-block aria-label="Sekcja lub kolumny"><span class="format-menu__icon" aria-hidden="true"><?= $editorIcon('columns') ?></span><span>Sekcja lub kolumny</span></button>
+                        <button type="button" class="format-menu__action" data-open-diagram aria-label="Diagram"><span class="format-menu__icon" aria-hidden="true"><?= $editorIcon('diagram') ?></span><span>Diagram</span></button>
+                        </div></details>
+                    </div>
                 </div>
                 <div class="editor-table-tools" data-table-tools hidden role="toolbar" aria-label="<?= $e($t('Table editing')) ?>">
-                    <?php foreach (['addRowBefore' => 'Row before', 'addRowAfter' => 'Row after', 'deleteRow' => 'Delete row', 'addColumnBefore' => 'Column before', 'addColumnAfter' => 'Column after', 'deleteColumn' => 'Delete column', 'toggleHeaderRow' => 'Header row', 'mergeCells' => 'Merge cells', 'splitCell' => 'Split cell', 'deleteTable' => 'Delete table'] as $command => $label): ?>
-                        <button type="button" data-table-command="<?= $command ?>"><?= $e($t($label)) ?></button>
-                    <?php endforeach; ?>
-                    <button type="button" data-table-command="toggleHeaderColumn">Kolumna nagłówkowa</button>
-                    <button type="button" data-table-move="row:-1">Wiersz w górę</button><button type="button" data-table-move="row:1">Wiersz w dół</button><button type="button" data-table-move="column:-1">Kolumna w lewo</button><button type="button" data-table-move="column:1">Kolumna w prawo</button>
-                    <label>Tło komórki<select data-cell-color><option value="">Brak</option><option value="yellow">Żółte</option><option value="green">Zielone</option><option value="blue">Niebieskie</option><option value="pink">Różowe</option><option value="gray">Szare</option></select></label><label>Szerokość kolumny<input type="number" min="40" max="1600" step="10" value="160" data-column-width></label><button type="button" data-column-width-apply>Zmień szerokość</button>
+                    <header class="table-tools__heading"><span aria-hidden="true"><?= $editorIcon('table') ?></span><span><strong>Edytuj tabelę</strong><small>Dodawaj, usuwaj i porządkuj wiersze oraz kolumny</small></span></header>
+                    <div class="table-tools__groups">
+                        <section class="table-tools__group" aria-label="Wiersze">
+                            <h3>Wiersze</h3>
+                            <div class="table-tools__buttons">
+                                <?php foreach (['addRowBefore' => ['Row before', 'row-before'], 'addRowAfter' => ['Row after', 'row-after'], 'deleteRow' => ['Delete row', 'trash']] as $command => [$label, $icon]): ?>
+                                    <button type="button" class="table-tools__action<?= $command === 'deleteRow' ? ' table-tools__action--danger' : '' ?>" data-table-command="<?= $command ?>" title="<?= $e($t($label)) ?>"><?= $editorIcon($icon) ?><span><?= $e($t($label)) ?></span></button>
+                                <?php endforeach; ?>
+                                <button type="button" class="table-tools__action" data-table-move="row:-1" title="Wiersz w górę"><?= $editorIcon('move-up') ?><span>W górę</span></button>
+                                <button type="button" class="table-tools__action" data-table-move="row:1" title="Wiersz w dół"><?= $editorIcon('move-down') ?><span>W dół</span></button>
+                            </div>
+                        </section>
+                        <section class="table-tools__group" aria-label="Kolumny">
+                            <h3>Kolumny</h3>
+                            <div class="table-tools__buttons">
+                                <?php foreach (['addColumnBefore' => ['Column before', 'column-before'], 'addColumnAfter' => ['Column after', 'column-after'], 'deleteColumn' => ['Delete column', 'trash']] as $command => [$label, $icon]): ?>
+                                    <button type="button" class="table-tools__action<?= $command === 'deleteColumn' ? ' table-tools__action--danger' : '' ?>" data-table-command="<?= $command ?>" title="<?= $e($t($label)) ?>"><?= $editorIcon($icon) ?><span><?= $e($t($label)) ?></span></button>
+                                <?php endforeach; ?>
+                                <button type="button" class="table-tools__action" data-table-move="column:-1" title="Kolumna w lewo"><?= $editorIcon('move-left') ?><span>W lewo</span></button>
+                                <button type="button" class="table-tools__action" data-table-move="column:1" title="Kolumna w prawo"><?= $editorIcon('move-right') ?><span>W prawo</span></button>
+                            </div>
+                        </section>
+                        <section class="table-tools__group table-tools__group--cells" aria-label="Komórki">
+                            <h3>Komórki</h3>
+                            <div class="table-tools__buttons">
+                                <button type="button" class="table-tools__action" data-table-command="toggleHeaderRow" title="Wiersz nagłówka"><?= $editorIcon('header-row') ?><span>Wiersz nagłówka</span></button>
+                                <button type="button" class="table-tools__action" data-table-command="toggleHeaderColumn" title="Kolumna nagłówkowa"><?= $editorIcon('header-column') ?><span>Kolumna nagłówkowa</span></button>
+                                <button type="button" class="table-tools__action" data-table-command="mergeCells" title="Scal komórki"><?= $editorIcon('merge') ?><span>Scal komórki</span></button>
+                                <button type="button" class="table-tools__action" data-table-command="splitCell" title="Podziel komórkę"><?= $editorIcon('split') ?><span>Podziel komórkę</span></button>
+                            </div>
+                        </section>
+                        <section class="table-tools__group table-tools__group--appearance" aria-label="Wygląd komórki i kolumny">
+                            <h3>Wygląd</h3>
+                            <label class="table-tools__field">Tło komórki<select data-cell-color><option value="">Brak</option><option value="yellow">Żółte</option><option value="green">Zielone</option><option value="blue">Niebieskie</option><option value="pink">Różowe</option><option value="gray">Szare</option></select></label>
+                            <label class="table-tools__field">Szerokość kolumny<span class="table-tools__width"><input type="number" min="40" max="1600" step="10" value="160" data-column-width><span>px</span></span></label>
+                            <button type="button" class="table-tools__action" data-column-width-apply><?= $editorIcon('resize') ?><span>Zmień szerokość</span></button>
+                        </section>
+                    </div>
+                    <footer class="table-tools__footer"><span>Zmiany można cofnąć przyciskiem Cofnij.</span><button type="button" class="table-tools__action table-tools__action--danger" data-table-command="deleteTable" title="Usuń całą tabelę"><?= $editorIcon('trash') ?><span>Usuń tabelę</span></button></footer>
                 </div>
                 <div data-code-tools hidden role="toolbar" class="editor-table-tools" aria-label="Blok kodu"><label><input type="checkbox" data-code-numbers> Numery linii</label><label><input type="checkbox" data-code-wrap> Zawijaj kod</label><button type="button" class="button" data-code-copy>Kopiuj kod</button></div>
-                <div data-block-tools class="block-handles" role="toolbar" aria-label="Operacje bloków"><button type="button" data-block-add aria-label="Dodaj blok poniżej">+</button><button type="button" draggable="true" data-block-drag aria-label="Przeciągnij bieżący blok">⠿</button><details data-block-menu><summary aria-label="Działania bloku">•••</summary><div class="block-action-menu"><button type="button" data-block-action="copy">Kopiuj blok</button><button type="button" data-block-action="duplicate">Duplikuj blok</button><button type="button" data-block-action="up">W górę</button><button type="button" data-block-action="down">W dół</button><button type="button" data-block-action="delete">Usuń blok</button><label>Format<select data-block-transform><option value="">Format</option><option value="paragraph">Akapit</option><option value="h1">H1</option><option value="h2">H2</option><option value="h3">H3</option><option value="h4">H4</option><option value="h5">H5</option><option value="h6">H6</option><option value="codeBlock">Kod</option><option value="blockquote">Cytat</option></select></label></div></details></div><span class="sr-only" data-block-feedback role="status"></span>
+                <div data-block-tools class="block-handles" role="toolbar" aria-label="Operacje bloków">
+                    <button type="button" class="block-handle-add" data-block-add aria-label="Dodaj blok poniżej" title="Dodaj element"><?= $editorIcon('plus') ?></button>
+                    <button type="button" class="block-handle-drag" draggable="true" data-block-drag aria-label="Przeciągnij bieżący blok" title="Przeciągnij blok"><?= $editorIcon('drag') ?></button>
+                    <details data-block-menu>
+                        <summary aria-label="Działania bloku" title="Więcej działań"><?= $editorIcon('more') ?></summary>
+                        <div class="block-action-menu"><button type="button" data-block-action="copy">Kopiuj blok</button><button type="button" data-block-action="duplicate">Duplikuj blok</button><button type="button" data-block-action="up">W górę</button><button type="button" data-block-action="down">W dół</button><button type="button" data-block-action="delete">Usuń blok</button><label>Format<select data-block-transform><option value="">Format</option><option value="paragraph">Akapit</option><option value="h1">H1</option><option value="h2">H2</option><option value="h3">H3</option><option value="h4">H4</option><option value="h5">H5</option><option value="h6">H6</option><option value="codeBlock">Kod</option><option value="blockquote">Cytat</option></select></label></div>
+                    </details>
+                </div><span class="sr-only" data-block-feedback role="status"></span>
                 <div data-rich-host data-label="<?= $e($t('Page content (Visual)')) ?>"><?= $visualValue ?></div>
                 <div data-retained-html hidden class="panel">
                     <p><?= $e($t('Original HTML is retained for metadata-only editing.')) ?></p>
@@ -291,16 +423,23 @@ foreach ($pages as $candidate) if ((int) $candidate['id'] === (int) $parentValue
 
             <div class="editor-pane" id="markdown-pane" data-pane="markdown">
                 <textarea name="content_markdown" class="markdown-editor" aria-label="<?= $e($t('Page content (Markdown)')) ?>" rows="24" data-markdown-editor spellcheck="false"><?= $e($markdownValue) ?></textarea>
-                <button type="button" class="button button--secondary" data-markdown-preview><?= $e($t('Preview Markdown')) ?></button>
-                <div role="status" data-preview-status></div><div class="document-content markdown-preview" data-markdown-preview-content hidden></div>
-                <p class="field-help"><?= $e($t('Supports headings, lists, blockquotes, links, emphasis, inline code, fenced code blocks and wiki links such as [[Linux]].')) ?></p>
+                <div class="markdown-editor-actions">
+                    <button type="button" class="button button--secondary" data-markdown-preview><?= $e($t('Preview Markdown')) ?></button>
+                    <p class="field-help"><?= $e($t('Supports headings, lists, blockquotes, links, emphasis, inline code, fenced code blocks and wiki links such as [[Linux]].')) ?></p>
+                </div>
+                <p class="markdown-editor-status" role="status" data-preview-status></p>
+                <div class="document-content markdown-preview" data-markdown-preview-content hidden></div>
             </div>
         </div>
 
         <aside class="workspace-inspector" aria-label="Właściwości obrazu">
             <?php if ($canUploadImage): ?>
                 <div class="image-inspector" data-image-inspector hidden>
-                    <h3><?= $e($t('Image')) ?></h3>
+                    <header class="image-inspector__heading">
+                        <span class="image-inspector__icon"><?= $editorIcon('image') ?></span>
+                        <h3><?= $e($t('Image')) ?></h3>
+                    </header>
+                    <div class="image-inspector__fields">
                     <label><?= $e($t('Alt text')) ?>
                         <input type="text" maxlength="500" data-image-alt placeholder="<?= $e($t('Describe the image')) ?>">
                     </label>
@@ -308,15 +447,21 @@ foreach ($pages as $candidate) if ((int) $candidate['id'] === (int) $parentValue
                         <textarea rows="2" maxlength="1000" data-image-caption placeholder="<?= $e($t('Optional caption')) ?>"></textarea>
                     </label>
                     <label><?= $e($t('Display width')) ?>
-                        <input type="number" min="64" max="1600" step="1" data-image-width>
+                        <span class="image-inspector__number"><input type="number" min="64" max="1600" step="1" data-image-width><span aria-hidden="true">px</span></span>
                     </label>
-                    <label>Wyrównanie obrazu<select data-image-align><option value="left">Do lewej</option><option value="center">Na środku</option><option value="right">Do prawej</option></select></label>
-                    <label>Proporcje<input type="checkbox" checked data-image-ratio> Zachowaj oryginalne proporcje</label><label>Wysokość przy ręcznych proporcjach<input type="number" min="32" max="1600" data-image-height></label><a data-image-preview target="_blank" rel="noopener">Otwórz chroniony podgląd</a>
-                    <div class="form-actions">
-                        <button class="button button--secondary" type="button" data-image-apply><?= $e($t('Apply')) ?></button>
-                        <button class="button button--ghost" type="button" data-image-remove><?= $e($t('Remove')) ?></button>
+                    <label><?= $e($t('Image alignment')) ?><select data-image-align><option value="left">Do lewej</option><option value="center">Na środku</option><option value="right">Do prawej</option></select></label>
+                    <div class="image-inspector__ratio-field">
+                        <span class="image-inspector__field-label"><?= $e($t('Proportions')) ?></span>
+                        <label class="image-inspector__ratio"><input type="checkbox" checked data-image-ratio><span><?= $e($t('Keep original proportions')) ?></span></label>
                     </div>
-                    <p class="field-help"><?= $e($t('Click an image in the visual editor to edit its alt text, caption and width.')) ?></p>
+                    <label><?= $e($t('Height for custom proportions')) ?><span class="image-inspector__number"><input type="number" min="32" max="1600" data-image-height><span aria-hidden="true">px</span></span></label>
+                    </div>
+                    <a class="image-inspector__preview" data-image-preview target="_blank" rel="noopener"><?= $editorIcon('preview') ?><span><?= $e($t('Open protected preview')) ?></span></a>
+                    <div class="form-actions">
+                        <button class="button button--ghost" type="button" data-image-remove><?= $e($t('Remove')) ?></button>
+                        <button class="button button--primary" type="button" data-image-apply><?= $e($t('Apply')) ?></button>
+                    </div>
+                    <p class="field-help"><?= $e($t('Set image alt text, caption, size and alignment.')) ?></p>
                 </div>
             <?php endif; ?>
 
@@ -332,4 +477,4 @@ foreach ($pages as $candidate) if ((int) $candidate['id'] === (int) $parentValue
 </section>
 
 <noscript><p class="alert editor-no-script">JavaScript jest wyłączony. Zapis formularza działa bez narzędzi dokumentu i autozapisu.</p></noscript>
-<script src="/assets/wiki-editor.js" defer></script>
+<script src="/assets/wiki-editor.js?v=<?= $e((string) (@filemtime($app->basePath('public/assets/wiki-editor.js')) ?: 1)) ?>" defer></script>

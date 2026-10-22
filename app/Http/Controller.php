@@ -16,9 +16,11 @@ abstract class Controller
     protected function spaceNavigation(array $space): array
     {
         $user = $this->app->auth()->user();
+        $canManageSpace = $this->spaceSettingsAllowed($space);
         return [
             'canCreatePage' => $user !== null && $this->app->auth()->can('page.create') && (new \OpenWiki\Permissions\SpaceAccessService($this->app))->canEdit($space),
-            'canSettings' => $this->spaceSettingsAllowed($space),
+            'canSettings' => $canManageSpace,
+            'canMissionControl' => $canManageSpace,
             'isWatchingSpace' => $user !== null && (new \OpenWiki\Wiki\PageEngagementService($this->app->database()))->isWatching((int) $user['id'], 'space', (int) $space['id']),
         ];
     }

@@ -27,7 +27,7 @@ async function stableTabs(page, base) {
         expect(await page.locator('[data-space-header]').innerHTML()).toBe(before);
         const after = await geometry(page);
         for (let i = 0; i < boxes.length; i++) for (const key of ['x', 'y', 'width', 'height']) expect(Math.abs(after[i][key] - boxes[i][key]), name + ' ' + i + ' ' + key).toBeLessThan(1);
-        await expect(page.locator('[data-workspace-navigation] .navigation-space-heading')).toHaveAttribute('href', base);
+        await expect(page.locator('[data-workspace-navigation] .navigation-space-item[aria-current="location"]')).toHaveAttribute('href', base);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBeTruthy();
     }
 }

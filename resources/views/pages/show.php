@@ -2,6 +2,11 @@
 require __DIR__ . '/../partials/ui-icons.php';
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $pageUrl = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlencode($page['slug']);
+$wordCount = (int) preg_match_all('/[\p{L}\p{N}]+/u', html_entity_decode(strip_tags($renderedContent), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+$readMinutes = max(1, (int) ceil($wordCount / 265));
+$commentAvatarHue = static function (int $authorId): int {
+    return hexdec(substr(hash('sha256', (string) $authorId), 0, 6)) % 360;
+};
 ?>
 <section class="wiki-layout reader-layout">
     <article class="wiki-content">
@@ -74,6 +79,8 @@ $pageUrl = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlen
                     <span class="reader-meta-separator" aria-hidden="true">·</span>
                     <span><?= $e($t('Updated')) ?> <time datetime="<?= $e(str_replace(' ', 'T', $page['updated_at'])) ?>Z"><?= $e($page['updated_at']) ?></time></span>
                     <span class="reader-meta-separator" aria-hidden="true">·</span>
+                    <span><?= $readMinutes ?> <?= $e($t('min read')) ?></span>
+                    <span class="reader-meta-separator" aria-hidden="true">·</span>
                     <span class="status-pill status-pill--<?= $e($page['status']) ?>"><?= $e($t($page['status'])) ?></span>
                     <span><?= $e($t('Version')) ?> <?= (int) $page['version'] ?></span>
                 </div>
@@ -86,9 +93,32 @@ $pageUrl = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlen
                 <?php endif; ?>
         </header>
 
-        <details class="knowledge-status" data-knowledge-status><summary><?= $e($t('Content health')) ?></summary><div><p>Właściciel merytoryczny: <?= $e($contentOwnerName) ?>. Termin przeglądu: <?= $e($page['review_due_at'] ?? 'Nie wyznaczono') ?>. <?= $page['review_due_at'] !== null && $page['review_due_at'] < gmdate('Y-m-d') ? 'Dokument wymaga przeglądu.' : '' ?> Potwierdzenie aktualności: <?= (int) ($page['verified_revision'] ?? 0) === (int) $page['version'] ? $e($page['verified_at']) : 'Brak dla tej rewizji' ?>.</p>
-        <?php if (!empty($canReadWorking)): ?><a class="button" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/review">Obieg i aktualność · robocza rewizja <?= (int) $headVersion ?></a><?php endif; ?>
-        <a href="/knowledge/overdue">Dokumenty po terminie przeglądu</a></div></details>
+        <?php $reviewIsOverdue = $page['review_due_at'] !== null && $page['review_due_at'] < gmdate('Y-m-d'); ?>
+        <?php $currentRevisionVerified = (int) ($page['verified_revision'] ?? 0) === (int) $page['version']; ?>
+        <details class="knowledge-status" data-knowledge-status>
+            <summary><?= $e($t('Content health')) ?></summary>
+            <div class="knowledge-status__panel">
+                <div class="knowledge-status__facts">
+                    <div class="knowledge-status__fact">
+                        <span>Właściciel merytoryczny</span>
+                        <strong><?= $e($contentOwnerName) ?></strong>
+                    </div>
+                    <div class="knowledge-status__fact">
+                        <span>Termin przeglądu</span>
+                        <strong><?= $e($page['review_due_at'] ?? 'Nie wyznaczono') ?></strong>
+                        <?php if ($reviewIsOverdue): ?><small class="knowledge-status__warning">Wymaga przeglądu</small><?php endif; ?>
+                    </div>
+                    <div class="knowledge-status__fact">
+                        <span>Potwierdzenie aktualności</span>
+                        <strong><?= $currentRevisionVerified ? $e($page['verified_at']) : 'Brak dla tej rewizji' ?></strong>
+                    </div>
+                </div>
+                <nav class="knowledge-status__actions" aria-label="Nawigacja stanu treści">
+                    <?php if (!empty($canReadWorking)): ?><a class="knowledge-status__link" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/review">Obieg i aktualność <span>· robocza rewizja <?= (int) $headVersion ?></span></a><?php endif; ?>
+                    <a class="knowledge-status__link" href="/knowledge/overdue">Dokumenty po terminie przeglądu</a>
+                </nav>
+            </div>
+        </details>
         <div class="document-layout document-layout--with-toc">
             <div class="document card document-content" data-document-content>
                 <?= $renderedContent ?>
@@ -131,24 +161,27 @@ $pageUrl = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlen
             </section>
         <?php endif; ?>
 
-        <section class="attachments-section" id="attachments">
-            <div class="panel__header">
-                <h2><?= $e($t('Attachments')) ?></h2>
+        <section class="attachments-section page-support-section" id="attachments">
+            <div class="panel__header page-support-heading">
+                <div class="page-support-heading__copy">
+                    <span class="page-support-icon"><?= $uiIcon('document') ?></span>
+                    <div><h2><?= $e($t('Attachments')) ?></h2><p><?= $e($t('Files attached to this page.')) ?></p></div>
+                </div>
                 <span class="count"><?= count($attachments) ?></span>
             </div>
 
             <?php if ($canUploadAttachment): ?>
                 <form class="card form-card attachment-upload" method="post" enctype="multipart/form-data" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/attachments">
                     <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                    <label><?= $e($t('Upload attachment')) ?>
+                    <label class="attachment-upload__label"><span><?= $e($t('Upload attachment')) ?></span>
                         <input type="file" name="attachment" required>
                     </label>
-                    <button class="button button--secondary" type="submit"><?= $e($t('Upload')) ?></button>
+                    <button class="button button--primary attachment-upload__submit" type="submit"><?= $uiIcon('upload') ?><?= $e($t('Upload')) ?></button>
                 </form>
             <?php endif; ?>
 
             <?php if ($attachments === []): ?>
-                <div class="card empty-state"><?= $e($t('No attachments.')) ?></div>
+                <div class="card empty-state page-support-empty"><span class="page-support-empty__icon"><?= $uiIcon('document') ?></span><span><?= $e($t('No attachments.')) ?></span></div>
             <?php else: ?>
                 <div class="attachment-list">
                     <?php foreach ($attachments as $attachment): ?>
@@ -160,25 +193,25 @@ $pageUrl = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlen
                             </div>
                             <div class="attachment-row__actions">
                                 <?php if (in_array($attachment['mime_type'], ['image/png','image/jpeg','image/gif','image/webp','application/pdf','text/plain'], true)): ?>
-                                    <a class="button button--ghost" href="/attachments/<?= (int) $attachment['id'] ?>/preview" target="_blank" rel="noopener"><?= $e($t('Preview')) ?></a>
+                                    <a class="button button--ghost attachment-action" href="/attachments/<?= (int) $attachment['id'] ?>/preview" target="_blank" rel="noopener"><?= $uiIcon('eye') ?><span><?= $e($t('Preview')) ?></span></a>
                                 <?php endif; ?>
-                                <a class="button button--ghost" href="/attachments/<?= (int) $attachment['id'] ?>/download"><?= $e($t('Download')) ?></a>
+                                <a class="button button--primary attachment-action" href="/attachments/<?= (int) $attachment['id'] ?>/download"><?= $uiIcon('download') ?><span><?= $e($t('Download')) ?></span></a>
 
                                 <?php if ($canUploadAttachment): ?>
                                     <details>
-                                        <summary class="button button--ghost"><?= $e($t('New version')) ?></summary>
+                                        <summary class="button button--secondary attachment-action"><?= $uiIcon('upload') ?><span><?= $e($t('New version')) ?></span></summary>
                                         <form class="form-stack compact-form" method="post" enctype="multipart/form-data" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/attachments/<?= (int) $attachment['id'] ?>/version">
                                             <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                                             <input type="file" name="attachment" required>
-                                            <button class="button button--secondary" type="submit"><?= $e($t('Upload version')) ?></button>
+                                            <button class="button button--primary" type="submit"><?= $e($t('Upload version')) ?></button>
                                         </form>
                                     </details>
                                     <details>
-                                        <summary class="button button--ghost"><?= $e($t('Rename')) ?></summary>
+                                        <summary class="button button--secondary attachment-action"><?= $uiIcon('edit') ?><span><?= $e($t('Rename')) ?></span></summary>
                                         <form class="form-stack compact-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/attachments/<?= (int) $attachment['id'] ?>/rename">
                                             <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                                             <input name="name" maxlength="255" value="<?= $e($attachment['name']) ?>" required>
-                                            <button class="button button--secondary" type="submit"><?= $e($t('Rename')) ?></button>
+                                            <button class="button button--primary" type="submit"><?= $e($t('Rename')) ?></button>
                                         </form>
                                     </details>
                                 <?php endif; ?>
@@ -186,7 +219,7 @@ $pageUrl = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlen
                                 <?php if ($canDeleteAttachment): ?>
                                     <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/attachments/<?= (int) $attachment['id'] ?>/delete" data-confirm="<?= $e($t('Delete this attachment?')) ?>">
                                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                                        <button class="button button--ghost" type="submit"><?= $e($t('Delete')) ?></button>
+                                        <button class="button button--ghost attachment-action attachment-action--danger" type="submit"><?= $uiIcon('trash') ?><span><?= $e($t('Delete')) ?></span></button>
                                     </form>
                                 <?php endif; ?>
                             </div>
@@ -196,18 +229,24 @@ $pageUrl = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlen
             <?php endif; ?>
         </section>
 
-        <section class="comments-section" id="comments">
-            <div class="panel__header">
-                <h2><?= $e($t('Comments')) ?></h2>
+        <section class="comments-section page-support-section" id="comments">
+            <div class="panel__header page-support-heading">
+                <div class="page-support-heading__copy">
+                    <span class="page-support-icon"><?= $uiIcon('message') ?></span>
+                    <div><h2><?= $e($t('Comments')) ?></h2><p><?= $e($t('Leave a comment or mention a user.')) ?></p></div>
+                </div>
                 <span class="count"><?= count($comments) ?></span>
             </div>
 
             <?php if ($canComment): ?>
-                <form class="card form-card comment-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/comments">
+                <form class="card form-card comment-form page-comment-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/comments">
                     <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                    <label><?= $e($t('Add comment')) ?>
-                        <textarea name="body" rows="4" maxlength="10000" required placeholder="<?= $e($t('Write a comment. Use @username to mention someone.')) ?>"></textarea>
-                    </label>
+                    <label class="page-comment-label" for="page-comment-body"><?= $e($t('Add comment')) ?></label>
+                    <div class="comment-mention-field" data-user-mention-field>
+                        <textarea id="page-comment-body" name="body" rows="4" maxlength="10000" required placeholder="<?= $e($t('Write a comment. Use @username to mention someone.')) ?>" data-user-mention aria-autocomplete="list" aria-controls="page-comment-mentions" aria-expanded="false" autocomplete="off"></textarea>
+                        <ul id="page-comment-mentions" class="comment-mention-suggestions" role="listbox" aria-label="Wybierz użytkownika" hidden></ul>
+                        <span class="sr-only" data-user-mention-status role="status" aria-live="polite"></span>
+                    </div>
                     <div class="form-actions">
                         <button class="button button--primary" type="submit"><?= $e($t('Comment')) ?></button>
                     </div>
@@ -215,7 +254,7 @@ $pageUrl = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlen
             <?php endif; ?>
 
             <?php if ($comments === []): ?>
-                <div class="card empty-state"><?= $e($t('No comments yet.')) ?></div>
+                <div class="card empty-state page-support-empty"><span class="page-support-empty__icon"><?= $uiIcon('message') ?></span><span><?= $e($t('No comments yet.')) ?></span></div>
             <?php else: ?>
                 <div class="comment-list">
                     <?php foreach ($comments as $comment): ?>
@@ -226,6 +265,7 @@ $pageUrl = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlen
                         ?>
                         <article class="card comment <?= $comment['parent_id'] !== null ? 'comment--reply' : '' ?>" id="comment-<?= (int) $comment['id'] ?>">
                             <div class="comment__header">
+                                <span class="comment-avatar" style="--comment-avatar-hue: <?= $commentAvatarHue((int) $comment['author_id']) ?>" aria-hidden="true"><svg class="comment-avatar__icon" viewBox="0 0 24 24" fill="none" focusable="false"><circle cx="12" cy="8" r="3.5"/><path d="M5.5 20c.35-3.7 2.75-6 6.5-6s6.15 2.3 6.5 6"/></svg></span>
                                 <strong><?= $e($comment['username']) ?></strong>
                                 <span><?= $e($comment['created_at']) ?></span>
                                 <?php if ($comment['updated_at'] !== $comment['created_at']): ?><span><?= $e($t('edited')) ?></span><?php endif; ?>
@@ -235,23 +275,31 @@ $pageUrl = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlen
                             <div class="comment__actions">
                                 <?php if ($canComment): ?>
                                     <details>
-                                        <summary class="button button--ghost"><?= $e($t('Reply')) ?></summary>
+                                        <summary class="button button--ghost comment-action comment-action--reply"><?= $e($t('Reply')) ?></summary>
                                         <form method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/comments" class="form-stack compact-form">
                                             <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                                             <input type="hidden" name="parent_id" value="<?= (int) $comment['id'] ?>">
-                                            <textarea name="body" rows="3" maxlength="10000" required placeholder="Reply to <?= $e($comment['username']) ?>"></textarea>
-                                            <button class="button button--secondary" type="submit"><?= $e($t('Reply')) ?></button>
+                                            <div class="comment-mention-field" data-user-mention-field>
+                                                <textarea id="comment-reply-<?= (int) $comment['id'] ?>" name="body" rows="3" maxlength="10000" required placeholder="Reply to <?= $e($comment['username']) ?>" aria-label="Reply to <?= $e($comment['username']) ?>" data-user-mention aria-autocomplete="list" aria-controls="comment-reply-mentions-<?= (int) $comment['id'] ?>" aria-expanded="false" autocomplete="off"></textarea>
+                                                <ul id="comment-reply-mentions-<?= (int) $comment['id'] ?>" class="comment-mention-suggestions" role="listbox" aria-label="Wybierz użytkownika" hidden></ul>
+                                                <span class="sr-only" data-user-mention-status role="status" aria-live="polite"></span>
+                                            </div>
+                                            <button class="button button--primary" type="submit"><?= $e($t('Reply')) ?></button>
                                         </form>
                                     </details>
                                 <?php endif; ?>
 
                                 <?php if ($isOwnComment && $canComment): ?>
                                     <details>
-                                        <summary class="button button--ghost"><?= $e($t('Edit')) ?></summary>
+                                        <summary class="button button--ghost comment-action comment-action--edit"><?= $e($t('Edit')) ?></summary>
                                         <form method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/comments/<?= (int) $comment['id'] ?>/edit" class="form-stack compact-form">
                                             <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                                            <textarea name="body" rows="3" maxlength="10000" required><?= $e($plainBody) ?></textarea>
-                                            <button class="button button--secondary" type="submit"><?= $e($t('Save')) ?></button>
+                                            <div class="comment-mention-field" data-user-mention-field>
+                                                <textarea id="comment-edit-<?= (int) $comment['id'] ?>" name="body" rows="3" maxlength="10000" required aria-label="<?= $e($t('Edit comment')) ?>" data-user-mention aria-autocomplete="list" aria-controls="comment-edit-mentions-<?= (int) $comment['id'] ?>" aria-expanded="false" autocomplete="off"><?= $e($plainBody) ?></textarea>
+                                                <ul id="comment-edit-mentions-<?= (int) $comment['id'] ?>" class="comment-mention-suggestions" role="listbox" aria-label="Wybierz użytkownika" hidden></ul>
+                                                <span class="sr-only" data-user-mention-status role="status" aria-live="polite"></span>
+                                            </div>
+                                            <button class="button button--primary" type="submit"><?= $e($t('Save')) ?></button>
                                         </form>
                                     </details>
                                 <?php endif; ?>
@@ -259,7 +307,7 @@ $pageUrl = '/spaces/' . rawurlencode($space['space_key']) . '/pages/' . rawurlen
                                 <?php if (($isOwnComment && $canComment) || $canDeleteComment): ?>
                                     <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/comments/<?= (int) $comment['id'] ?>/delete" data-confirm="<?= $e($t('Delete this comment?')) ?>">
                                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                                        <button class="button button--ghost" type="submit"><?= $e($t('Delete')) ?></button>
+                                        <button class="button button--ghost comment-action comment-action--delete" type="submit"><?= $e($t('Delete')) ?></button>
                                     </form>
                                 <?php endif; ?>
                             </div>

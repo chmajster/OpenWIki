@@ -10,7 +10,7 @@ final class SearchInput
 
     public static function fromRequest(Request $request, string $defaultType = 'all'): array
     {
-        foreach (['q','type','visibility','space','author','tag','created_from','created_to','updated_from','updated_to','page','per_page'] as $key) {
+        foreach (['q','type','visibility','space','author','tag','created_from','created_to','updated_from','updated_to','updated_period','my_work','page','per_page'] as $key) {
             $value = $request->query($key);
             if ($value !== null && ((!is_string($value) && !is_int($value)) || !mb_check_encoding((string) $value, 'UTF-8'))) throw new \InvalidArgumentException('Nieprawidłowy parametr: ' . $key . '.');
         }
@@ -21,7 +21,11 @@ final class SearchInput
         if ($query !== '' && self::literal($query) === '') throw new \InvalidArgumentException('Fraza nie może być pusta.');
         if (!in_array($type, self::TYPES, true)) throw new \InvalidArgumentException('Nieprawidłowy typ wyników.');
         if (!in_array($visibility, ['all', 'published', 'working'], true)) throw new \InvalidArgumentException('Nieprawidłowy zakres rewizji.');
-        $filters = ['visibility' => $visibility];
+        $updatedPeriod = (string) $request->query('updated_period', 'any');
+        if (!in_array($updatedPeriod, ['any', 'today', 'yesterday', '7', '30', '365', 'custom'], true)) throw new \InvalidArgumentException('Nieprawidłowy zakres aktualizacji.');
+        $myWork = (string) $request->query('my_work', '0');
+        if (!in_array($myWork, ['0', '1'], true)) throw new \InvalidArgumentException('Nieprawidłowy filtr użytkownika.');
+        $filters = ['visibility' => $visibility, 'updated_period' => $updatedPeriod, 'my_work' => $myWork === '1'];
         foreach (['space' => 191, 'author' => 100, 'tag' => 100] as $key => $length) {
             $filters[$key] = trim((string) $request->query($key, ''));
             if (mb_strlen($filters[$key]) > $length) throw new \InvalidArgumentException('Zbyt długi filtr: ' . $key . '.');
@@ -32,6 +36,17 @@ final class SearchInput
                 throw new \InvalidArgumentException('Nieprawidłowa data: ' . $key . '.');
             }
             $filters[$key] = $value === '' ? '' : $value . (str_ends_with($key, '_to') ? ' 23:59:59' : ' 00:00:00');
+        }
+        if ($updatedPeriod !== 'any' && $updatedPeriod !== 'custom') {
+            $today = new \DateTimeImmutable('today');
+            $from = match ($updatedPeriod) {
+                'today' => $today,
+                'yesterday' => $today->modify('-1 day'),
+                default => $today->modify('-' . ((int) $updatedPeriod - 1) . ' days'),
+            };
+            $to = $updatedPeriod === 'yesterday' ? $today->modify('-1 day') : $today;
+            $filters['updated_from'] = $from->format('Y-m-d') . ' 00:00:00';
+            $filters['updated_to'] = $to->format('Y-m-d') . ' 23:59:59';
         }
         foreach (['created', 'updated'] as $prefix) {
             if ($filters[$prefix . '_from'] !== '' && $filters[$prefix . '_to'] !== '' && $filters[$prefix . '_from'] > $filters[$prefix . '_to']) throw new \InvalidArgumentException('Początek zakresu dat musi poprzedzać jego koniec.');

@@ -121,6 +121,9 @@ if (editorRoot) {
         publication_space_id: form.elements.publication_space_id.value,
         publication_parent_id: form.elements.publication_parent_id.value,
         content_owner_id: form.elements.content_owner_id.value, review_due_at: form.elements.review_due_at.value,
+        access_principal: form.elements.access_principal?.value || '',
+        access_permission: form.elements.access_permission?.value || 'page.view',
+        access_inherit_to_children: form.elements.access_inherit_to_children?.checked ? '1' : '0',
         status: form.elements.status.value, tags: form.elements.tags.value,
         changeSummary: form.elements.change_summary.value, format: formatInput.value,
         html: getVisualHtml(), markdown: markdownEditor.value, conversionBackup,
@@ -181,9 +184,10 @@ if (editorRoot) {
         if (sourceOverride !== null) setVisualHtml(sourceOverride);
     });
     const restoreSnapshot = (data) => {
-        for (const key of ['title', 'slug', 'status', 'tags', 'content_owner_id', 'review_due_at', 'publication_space_id', 'publication_parent_id']) {
-            if (typeof data[key] === 'string') form.elements[key].value = data[key];
+        for (const key of ['title', 'slug', 'status', 'tags', 'content_owner_id', 'review_due_at', 'publication_space_id', 'publication_parent_id', 'access_principal', 'access_permission']) {
+            if (form.elements[key] && typeof data[key] === 'string') form.elements[key].value = data[key];
         }
+        if (form.elements.access_inherit_to_children) form.elements.access_inherit_to_children.checked = data.access_inherit_to_children === '1';
         if (typeof data.parentId === 'string') form.elements.parent_id.value = data.parentId;
         if (typeof data.changeSummary === 'string') form.elements.change_summary.value = data.changeSummary;
         if (Number.isInteger(Number(data.baseVersion)) && Number(data.baseVersion) >= (isEdit ? 1 : 0)) baseVersionField.value = String(data.baseVersion);
@@ -271,6 +275,8 @@ if (editorRoot) {
         draft_sequence: data.sequence, base_version: data.baseVersion,
         document: data.document,
         content_owner_id: data.content_owner_id, review_due_at: data.review_due_at,
+        access_principal: data.access_principal, access_permission: data.access_permission,
+        access_inherit_to_children: data.access_inherit_to_children,
         title: data.title, slug: data.slug, parent_id: data.parentId, status: data.status,
         publication_space_id: data.publication_space_id, publication_parent_id: data.publication_parent_id,
         tags: data.tags, change_summary: data.changeSummary, content_format: data.format,

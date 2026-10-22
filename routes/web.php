@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use OpenWiki\Http\Controllers\AccountPasswordController;
+use OpenWiki\Http\Controllers\AccountController;
 use OpenWiki\Http\Controllers\AccountSessionController;
 use OpenWiki\Http\Controllers\Api\ApiV1Controller;
 use OpenWiki\Http\Controllers\ApiTokenController;
@@ -46,6 +47,7 @@ $router->post('/logout', [AuthController::class, 'logout']);
 
 $router->get('/mfa/challenge', [MfaController::class, 'challenge']);
 $router->post('/mfa/challenge', [MfaController::class, 'verify']);
+$router->get('/account', [AccountController::class, 'index']);
 $router->get('/account/mfa/setup', [MfaController::class, 'setup']);
 $router->post('/account/mfa/confirm', [MfaController::class, 'confirm']);
 
@@ -59,6 +61,7 @@ $router->post('/structure/pages/{id}/preview', [\OpenWiki\Http\Controllers\Struc
 $router->post('/structure/pages/{id}', [\OpenWiki\Http\Controllers\StructureController::class, 'commit']);
 $router->post('/spaces', [SpaceController::class, 'store']);
 $router->get('/spaces/{spaceKey}', [SpaceController::class, 'show']);
+$router->get('/spaces/{spaceKey}/mission-control', [SpaceController::class, 'missionControl']);
 $router->get('/spaces/{spaceKey}/settings', [SpaceController::class, 'settings']);
 $router->get('/spaces/{spaceKey}/tree', [SpaceController::class, 'tree']);
 $router->post('/spaces/{spaceKey}/settings', [SpaceController::class, 'saveSettings']);

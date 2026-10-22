@@ -1,7 +1,13 @@
 <?php
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$eventLabels = [
+    'page.created' => 'Page created', 'page.updated' => 'Page updated', 'page.deleted' => 'Page deleted',
+    'page.published' => 'Page published', 'page.review' => 'Page reviewed', 'space.created' => 'Space created',
+    'space.updated' => 'Space updated', 'space.deleted' => 'Space deleted', 'comment.created' => 'Comment created',
+    'user.created' => 'User created',
+];
 ?>
-<section class="content-container">
+<section class="content-container admin-page">
     <div class="page-heading">
         <div>
             <div class="eyebrow"><?= $e($t('Administration')) ?></div>
@@ -35,7 +41,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
             <legend><?= $e($t('Events')) ?></legend>
             <div class="checkbox-grid">
                 <?php foreach ($events as $event): ?>
-                    <label><input type="checkbox" name="events[]" value="<?= $e($event) ?>"> <?= $e($event) ?></label>
+                    <label><input type="checkbox" name="events[]" value="<?= $e($event) ?>"><span><?= $e($t($eventLabels[$event] ?? $event)) ?><small><code><?= $e($event) ?></code></small></span></label>
                 <?php endforeach; ?>
             </div>
         </fieldset>
@@ -59,13 +65,13 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                         <div>
                             <strong><?= $e($webhook['name']) ?></strong>
                             <div><?= $e($webhook['target_url']) ?></div>
-                            <small><?= $e(implode(', ', $configuredEvents)) ?> · <?= $e($webhook['status']) ?></small>
+                            <small><?= $e(implode(', ', array_map(fn (string $event): string => $t($eventLabels[$event] ?? $event), $configuredEvents))) ?> · <span class="status-pill status-pill--<?= $e($webhook['status']) ?>"><?= $e($t(ucfirst((string) $webhook['status']))) ?></span></small>
                         </div>
                         <div class="form-actions">
                             <form method="post" action="/admin/webhooks/<?= (int) $webhook['id'] ?>/status">
                                 <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                                 <input type="hidden" name="status" value="<?= $webhook['status'] === 'active' ? 'disabled' : 'active' ?>">
-                                <button class="button button--ghost" type="submit"><?= $webhook['status'] === 'active' ? 'Disable' : 'Enable' ?></button>
+                                <button class="button button--ghost" type="submit"><?= $e($t($webhook['status'] === 'active' ? 'Disable' : 'Enable')) ?></button>
                             </form>
                             <form method="post" action="/admin/webhooks/<?= (int) $webhook['id'] ?>/delete" data-confirm="<?= $e($t('Delete this webhook and its delivery history?')) ?>">
                                 <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
@@ -97,11 +103,11 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                             </div>
                             <small>
                                 <?php if ($delivery['delivered_at'] !== null): ?>
-                                    delivered <?= $e($delivery['delivered_at']) ?>
+                                    <?= $e($t('Delivered at')) ?> <?= $e($delivery['delivered_at']) ?>
                                 <?php elseif ($delivery['failed_at'] !== null): ?>
-                                    failed <?= $e($delivery['failed_at']) ?> · <?= $e($delivery['last_error']) ?>
+                                    <?= $e($t('Failed at')) ?> <?= $e($delivery['failed_at']) ?> · <?= $e($delivery['last_error']) ?>
                                 <?php else: ?>
-                                    retry <?= $e($delivery['next_attempt_at'] ?? 'pending') ?>
+                                    <?= $e($t('Next retry')) ?> <?= $e($delivery['next_attempt_at'] ?? $t('Pending')) ?>
                                 <?php endif; ?>
                             </small>
                         </div>

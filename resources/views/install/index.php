@@ -22,12 +22,26 @@ $fullDatabaseReinstall = !empty($defaults['full_database_reinstall']);
         data-requirements-ok="<?= $requirements['ok'] ? '1' : '0' ?>"
     >
         <aside class="card install-sidebar" aria-label="<?= $e($t('Installation progress')) ?>">
-            <div class="eyebrow"><?= $e($t('OpenWiki setup')) ?></div>
-            <h1><?= $e($t('Installation')) ?></h1>
-            <p class="muted"><?= $e($t('Configure a new OpenWiki instance directly in the browser.')) ?></p>
+            <div class="install-sidebar__top">
+                <div class="install-brand-lockup">
+                    <span class="install-brand-mark" aria-hidden="true"><img src="/assets/openwiki-favicon-32.png" width="30" height="30" alt=""></span>
+                    <div>
+                        <span><?= $e($t('Setup center')) ?></span>
+                        <strong>OpenWiki</strong>
+                    </div>
+                </div>
+                <div class="eyebrow"><?= $e($t('OpenWiki setup')) ?></div>
+                <h1><?= $e($t('Installation')) ?></h1>
+                <p><?= $e($t('Guided setup for a secure knowledge base.')) ?></p>
+            </div>
+
+            <div class="install-progress-label">
+                <span><?= $e($t('Four simple steps')) ?></span>
+                <strong data-sidebar-progress>1 / 4</strong>
+            </div>
 
             <ol class="install-steps">
-                <li class="is-active" data-wizard-indicator="1">
+                <li class="is-active" data-wizard-indicator="1" aria-current="step">
                     <span>1</span>
                     <div><strong><?= $e($t('Requirements')) ?></strong><small><?= $e($t('Runtime and permissions')) ?></small></div>
                 </li>
@@ -46,7 +60,7 @@ $fullDatabaseReinstall = !empty($defaults['full_database_reinstall']);
             </ol>
 
             <div class="install-bootstrap-note">
-                <span class="muted"><?= $e($t('Initial administrator')) ?></span>
+                <span><?= $e($t('Initial administrator')) ?></span>
                 <strong><?= $e($t('Your own account')) ?></strong>
                 <small><?= $e($t('Choose your administrator credentials in the final step.')) ?></small>
             </div>
@@ -58,7 +72,10 @@ $fullDatabaseReinstall = !empty($defaults['full_database_reinstall']);
                     <div class="eyebrow"><?= $e($t('First-run wizard')) ?></div>
                     <h2><?= $e($t('Install OpenWiki')) ?></h2>
                 </div>
-                <span class="install-badge"><?= $e($t('Fresh instance')) ?></span>
+                <div class="install-card__meta">
+                    <span class="install-badge"><?= $e($t('Fresh instance')) ?></span>
+                    <span class="install-step-counter"><span><?= $e($t('Step')) ?></span> <strong data-current-step>1</strong><span>/4</span></span>
+                </div>
             </div>
 
             <?php if (!empty($installError)): ?>

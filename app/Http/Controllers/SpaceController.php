@@ -7,6 +7,7 @@ namespace OpenWiki\Http\Controllers;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
+use OpenWiki\Admin\MissionControlService;
 use OpenWiki\Http\Controller;
 use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Permissions\SpaceAccessService;
@@ -80,6 +81,34 @@ final class SpaceController extends Controller
     public function settings(Request $request, string $spaceKey): Response
     {
         return $this->settingsOperation($request, $spaceKey, 'show');
+    }
+
+    public function missionControl(Request $request, string $spaceKey): Response
+    {
+        if (($failure = $this->requireAuth($request)) !== null) return $failure;
+
+        $space = (new SpaceRepository($this->app->database()))->findByKey($spaceKey);
+        if ($space === null) return $this->render('errors/404', ['title' => 'Space not found'], 404);
+        if (!(new SpaceAccessService($this->app))->canView($space) || !$this->spaceSettingsAllowed($space)) {
+            return $this->render('errors/403', ['title' => 'Permission denied'], 403);
+        }
+        $space['owner_username'] = $this->app->database()->fetchOne(
+            'SELECT username FROM users WHERE id = ? AND deleted_at IS NULL',
+            [(int) $space['owner_id']]
+        )['username'] ?? null;
+
+        $visiblePages = (new PageAclService($this->app))->visiblePages(
+            $space,
+            fn (): array => (new PageRepository($this->app->database()))->tree((int) $space['id'])
+        );
+        $missionControl = (new MissionControlService($this->app->database()))->spaceOverview($space, $visiblePages);
+
+        return $this->render('spaces/mission-control', [
+            'title' => 'Mission Control',
+            'space' => $space,
+            'spaceTab' => 'mission',
+            'missionControl' => $missionControl,
+        ] + $this->spaceNavigation($space));
     }
 
     public function tree(Request $request, string $spaceKey): Response

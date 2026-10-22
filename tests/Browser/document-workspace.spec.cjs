@@ -84,12 +84,26 @@ test('all eight starter templates open in Visual without a lossy transformation'
 
 test('slash and block plus insert, transform, duplicate and undo using keyboard and context tools', async ({page}) => {
     await page.goto(createUrl()); await page.locator('[data-document-title]').fill(unique('Blocks workspace'));
+    await expect(page.locator('.editor-toolbar-group')).toHaveCount(5);
+    await page.locator('.format-menu > summary').click(); await expect(page.locator('.format-menu-content')).toBeVisible();
+    await page.locator('.format-menu > summary').click(); await expect(page.locator('.format-menu-content')).toBeHidden();
+    const emptyBlock = editor(page).locator('.empty-document');
+    await expect(emptyBlock).toHaveAttribute('data-placeholder', 'Zacznij pisać lub wpisz /, aby wstawić element');
+    await editor(page).click(); const blockTools = page.locator('[data-block-tools]'); await expect(blockTools).toBeVisible();
+    await expect(page.locator('[data-block-add] svg, [data-block-drag] svg, [data-block-menu] summary svg')).toHaveCount(3);
+    expect(await blockTools.evaluate((element) => ({height: getComputedStyle(element).height, radius: getComputedStyle(element).borderRadius}))).toEqual({height: '34px', radius: '4px'});
+    await expect(page.locator('[data-block-add]')).toHaveCSS('width', '34px');
+    expect(await emptyBlock.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe('2px');
     await editor(page).fill('/tab'); await expect(page.locator('[data-command-menu]')).toBeVisible();
+    await expect(page.locator('[data-command-menu] .command-category')).toHaveCount(1);
     await editor(page).press('Enter'); await expect(page.locator('[data-table-dialog]')).toBeVisible();
     await page.locator('[data-table-insert]').click(); await expect(editor(page).locator('table')).toHaveCount(1);
     await editor(page).press('ControlOrMeta+End'); await editor(page).press('ArrowDown'); await editor(page).press('Enter');
     await page.keyboard.type('Context paragraph'); await editor(page).locator('p').filter({hasText: 'Context paragraph'}).hover();
-    await page.locator('[data-block-add]').click(); await page.locator('[data-command-search]').fill('kod');
+    await page.locator('[data-block-add]').click();
+    await page.waitForTimeout(180); await expect(page.locator('[data-command-menu]')).toBeVisible(); await expect(blockTools).toBeVisible();
+    await page.setViewportSize({width: 1200, height: 720}); await expect(page.locator('[data-command-menu]')).toBeVisible(); await expect(blockTools).toBeVisible();
+    await page.locator('[data-command-search]').fill('kod');
     await page.locator('[data-command-search]').press('Enter'); await expect(page.locator('[data-code-dialog]')).toBeVisible();
     await page.locator('[data-code-language]').fill('php'); await page.locator('[data-code-insert]').click(); await page.keyboard.type('echo "safe";');
     await expect(editor(page).locator('code')).toContainText('echo "safe";');

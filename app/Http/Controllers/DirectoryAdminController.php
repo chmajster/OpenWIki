@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OpenWiki\Http\Controllers;
 
 use OpenWiki\Admin\DirectoryAdminService;
+use OpenWiki\Admin\MissionControlService;
 use OpenWiki\Audit\AuditLogger;
 use OpenWiki\Auth\LdapService;
 use OpenWiki\Auth\MfaService;
@@ -38,6 +39,9 @@ final class DirectoryAdminController extends Controller
             $row = $this->app->database()->fetchOne($sql);
             $counts[$key] = (int) ($row['total'] ?? 0);
         }
+        $counts['active_spaces'] = (int) ($this->app->database()->fetchOne(
+            'SELECT COUNT(*) AS total FROM spaces WHERE deleted_at IS NULL AND status = "active"'
+        )['total'] ?? 0);
 
         $counts['backups'] = count(
             (new BackupService($this->app->database(), $this->app->basePath()))->list()
@@ -61,9 +65,16 @@ final class DirectoryAdminController extends Controller
         $cronStale = $cronTimestamp === false || (time() - $cronTimestamp) > 600;
         $counts['system'] = $pendingMigrations + ($cronStale ? 1 : 0);
 
+        $missionControl = (new MissionControlService($this->app->database()))->siteOverview(
+            $counts['system'],
+            $this->app->auth()->can('page.view') || $this->app->auth()->can('*'),
+            $this->app->auth()->can('*')
+        );
+
         return $this->render('admin/dashboard', [
-            'title' => 'Administration',
+            'title' => 'Mission Control',
             'counts' => $counts,
+            'missionControl' => $missionControl,
         ]);
     }
 

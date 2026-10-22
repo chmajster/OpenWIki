@@ -88,7 +88,7 @@ final class SearchQuery
                 $fileVersion = 'CASE WHEN ' . $legacy . ' THEN a.current_version ELSE pa.version_number END';
                 $extra = ', ' . $title . ' AS name, ' . $body . ' AS mime_type, CASE WHEN ' . $legacy . ' THEN a.size_bytes ELSE av.size_bytes END AS size_bytes, CASE WHEN ' . $legacy . ' THEN a.current_version ELSE pa.version_number END AS attachment_version';
             }
-            $id = 'a.id'; $created = 'a.created_at'; $match = '(' . $title . " LIKE ? ESCAPE '!' OR " . $body . " LIKE ? ESCAPE '!')"; $matchParams = [$like, $like]; $extra .= ', p.title AS page_title,p.slug';
+            $id = 'a.id'; $created = 'a.created_at'; $match = '(' . $title . " LIKE ? ESCAPE '!' OR " . $body . " LIKE ? ESCAPE '!')"; $matchParams = [$like, $like]; $extra .= ', p.title AS page_title,p.slug,u.username AS author';
         } elseif ($type === 'tag') {
             if ($ids === null) {
                 if ($working) {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use OpenWiki\Auth\MfaService;
 use OpenWiki\Auth\UserSessionService;
 use OpenWiki\Core\Application;
+use OpenWiki\Core\ApplicationErrorResponse;
 use OpenWiki\Core\Request;
 use OpenWiki\Core\Response;
 use OpenWiki\Core\Session;
@@ -114,12 +115,5 @@ try {
     error_log('[OpenWiki] ' . $exception->getMessage() . "\n" . $exception->getTraceAsString());
 
     $debug = \OpenWiki\Core\Env::bool('APP_DEBUG', false);
-    $message = $debug
-        ? htmlspecialchars($exception->getMessage(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
-        : 'An unexpected error occurred.';
-
-    Response::html(
-        '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>OpenWiki error</title></head><body><main><h1>Application error</h1><p>' . $message . '</p></main></body></html>',
-        500
-    )->send();
+    ApplicationErrorResponse::fromThrowable($exception, $debug)->send();
 }

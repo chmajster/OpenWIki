@@ -11,18 +11,19 @@ $field = static function (string $key, mixed $default = '') use ($old, $record):
 $roleIds = array_map('intval', (array) ($old['role_ids'] ?? ($record['role_ids'] ?? [])));
 $groupIds = array_map('intval', (array) ($old['group_ids'] ?? ($record['group_ids'] ?? [])));
 $isEdit = $record !== null;
+$statusLabels = ['active' => 'Active', 'disabled' => 'Disabled', 'locked' => 'Locked'];
 ?>
-<section class="content-container">
+<section class="content-container admin-page">
     <div class="page-heading">
         <div>
             <div class="eyebrow"><?= $e($t('Administration · Users')) ?></div>
-            <h1><?= $isEdit ? 'Edit ' . $e($record['username']) : 'Create user' ?></h1>
+            <h1><?= $isEdit ? $e(strtr($t('Edit :name'), [':name' => $record['username']])) : $e($t('Create user')) ?></h1>
         </div>
         <a class="button button--ghost" href="/admin/users"><?= $e($t('Back to users')) ?></a>
     </div>
 
     <?php if (!empty($formError)): ?>
-        <div class="alert alert--error" role="alert"><?= $e($formError) ?></div>
+        <div class="alert alert--error" role="alert"><?= $e($t($formError)) ?></div>
     <?php endif; ?>
 
     <section class="card form-card">
@@ -44,7 +45,7 @@ $isEdit = $record !== null;
                 <label><?= $e($t('Status')) ?>
                     <select name="status">
                         <?php foreach (['active','disabled','locked'] as $status): ?>
-                            <option value="<?= $status ?>" <?= $field('status', 'active') === $status ? 'selected' : '' ?>><?= ucfirst($status) ?></option>
+                        <option value="<?= $status ?>" <?= $field('status', 'active') === $status ? 'selected' : '' ?>><?= $e($t($statusLabels[$status])) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </label>
@@ -54,14 +55,14 @@ $isEdit = $record !== null;
                     </label>
                 <?php else: ?>
                     <label><?= $e($t('Authentication source')) ?>
-                        <input value="<?= $e($record['auth_source']) ?>" disabled>
+                        <input value="<?= $e($t($record['auth_source'] === 'ldap' ? 'LDAP' : 'Local')) ?>" disabled>
                     </label>
                 <?php endif; ?>
             </div>
 
-            <label class="check-row">
+            <label class="admin-form-checkbox">
                 <input type="checkbox" name="force_password_change" value="1" <?= !empty($field('force_password_change')) ? 'checked' : '' ?>>
-                <span><?= $e($t('Require password change on next sign-in')) ?></span>
+                <span><?= $e($t('Require password change on next sign-in')) ?><small><?= $e($t('The user must choose a new password after the next sign-in.')) ?></small></span>
             </label>
 
             <fieldset>
@@ -88,7 +89,7 @@ $isEdit = $record !== null;
                 </div>
             </fieldset>
 
-            <button class="button button--primary" type="submit"><?= $isEdit ? 'Save changes' : 'Create user' ?></button>
+            <div class="form-actions"><button class="button button--primary" type="submit"><?= $e($t($isEdit ? 'Save changes' : 'Create user')) ?></button></div>
         </form>
     </section>
 

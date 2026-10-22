@@ -29,8 +29,10 @@ test('rules can be created, edited in place, cancelled and deleted with actual a
     const target = await createPage(request), path = pathFor(target);
     await login(page); await page.goto(path + '/permissions');
     await expect(page.locator('.permissions-empty')).toContainText('No direct rules yet');
-    await page.getByRole('link', {name: 'Add the first rule'}).click();
+    await page.getByRole('link', {name: 'Add rule', exact: true}).click();
     await expect(page).toHaveURL(path + '/permissions#page-rule-form');
+    await expect(page.locator('[data-page-rule-form] [name=principal]')).toBeFocused();
+    await expect(page.locator('[data-page-rule-form]')).toBeInViewport();
     await saveRule(page, 'user:' + fixture().users[2].id, 'page.edit', 'deny', false);
     const row = page.locator('[data-permission-rule]');
     await expect(row).toHaveCount(1); await expect(row).toContainText('Deny'); await expect(row).toContainText('This page only');

@@ -1,7 +1,7 @@
 <?php
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 ?>
-<section class="content-container">
+<section class="content-container admin-page">
     <div class="page-heading">
         <div>
             <div class="eyebrow"><?= $e($t('Administration')) ?></div>
@@ -12,17 +12,18 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
     <section class="card panel">
         <div class="table-scroll">
             <table>
-                <thead><tr><th><?= $e($t('Role')) ?></th><th><?= $e($t('Type')) ?></th><th><?= $e($t('Users')) ?></th><th><?= $e($t('Permissions')) ?></th><th></th></tr></thead>
+                <thead><tr><th><?= $e($t('Role')) ?></th><th><?= $e($t('Type')) ?></th><th><?= $e($t('Users')) ?></th><th><?= $e($t('Permissions')) ?></th><th><?= $e($t('Actions')) ?></th></tr></thead>
                 <tbody>
                 <?php foreach ($roles as $role): ?>
                     <tr>
                         <td><strong><?= $e($role['name']) ?></strong><br><small><?= $e($role['slug']) ?></small></td>
-                        <td><?= (int) $role['is_system'] === 1 ? 'System' : 'Custom' ?></td>
+                        <td><span class="status-pill"><?= $e($t((int) $role['is_system'] === 1 ? 'System' : 'Custom')) ?></span></td>
                         <td><?= (int) $role['user_count'] ?></td>
                         <td><?= (int) $role['permission_count'] ?></td>
                         <td><a class="button button--ghost" href="/admin/roles/<?= (int) $role['id'] ?>/edit"><?= $e($t('Edit')) ?></a></td>
                     </tr>
                 <?php endforeach; ?>
+                <?php if ($roles === []): ?><tr><td colspan="5"><div class="empty-state"><?= $e($t('No roles have been created yet.')) ?></div></td></tr><?php endif; ?>
                 </tbody>
             </table>
         </div>

@@ -4,6 +4,28 @@ document.querySelectorAll('[data-documentation-tree]').forEach(tree => {
     let expanded = new Set(), searchTimer, generation = 0;
     try { expanded = new Set(JSON.parse(localStorage.getItem(key) || '[]')); } catch {}
     const activePath = new Set(JSON.parse(tree.dataset.activePath || '[]'));
+    const createTreeIcon = (className, paths) => {
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.classList.add('ui-icon', className);
+        icon.setAttribute('width', '16');
+        icon.setAttribute('height', '16');
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('fill', 'none');
+        icon.setAttribute('stroke', 'currentColor');
+        icon.setAttribute('stroke-width', '1.8');
+        icon.setAttribute('stroke-linecap', 'round');
+        icon.setAttribute('stroke-linejoin', 'round');
+        icon.setAttribute('aria-hidden', 'true');
+        paths.forEach(d => {
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', d);
+            icon.append(path);
+        });
+        return icon;
+    };
+    const createPageIcon = () => createTreeIcon('page-tree__icon', [
+        'M14 3H5v18h14V8Z', 'M14 3v5h5', 'M8 12h8', 'M8 16h6'
+    ]);
     const remember = () => { try { localStorage.setItem(key, JSON.stringify([...expanded])); } catch {} };
     const visible = () => [...tree.querySelectorAll('[role=treeitem]')].filter(item => !item.closest('ul[hidden]'));
     const focus = item => { tree.querySelectorAll('[role=treeitem]').forEach(node => node.tabIndex = -1); if (item) { item.tabIndex = 0; item.focus(); } };
@@ -20,13 +42,17 @@ document.querySelectorAll('[data-documentation-tree]').forEach(tree => {
             for (const page of body.data.items) {
                 const item = document.createElement('li'); item.role = 'treeitem'; item.tabIndex = -1; item.dataset.pageId = page.id; item.dataset.page = JSON.stringify(page);
                 const row = document.createElement('div'); row.className = 'tree-row';
-                const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'tree-toggle'; toggle.textContent = page.has_children ? '▸' : '·'; toggle.disabled = !page.has_children || Boolean(search.value.trim()); toggle.setAttribute('aria-label', `Rozwiń: ${page.title}`);
-                const link = document.createElement('a'); link.className = 'page-tree__link'; link.href = page.url; link.textContent = page.title; link.title = page.title; link.tabIndex = -1;
+                const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = `tree-toggle${page.has_children ? '' : ' tree-toggle--leaf'}`; toggle.disabled = !page.has_children || Boolean(search.value.trim());
+                if (page.has_children) { toggle.append(createTreeIcon('tree-toggle__icon', ['M9 18l6-6-6-6'])); toggle.setAttribute('aria-label', `Rozwiń: ${page.title}`); }
+                const link = document.createElement('a'); link.className = 'page-tree__link'; link.href = page.url; link.title = page.title; link.tabIndex = -1;
+                const title = document.createElement('span'); title.className = 'page-tree__title'; title.textContent = page.title;
+                link.append(createPageIcon(), title);
                 if (String(page.id) === tree.dataset.activePage) { link.classList.add('is-active'); link.setAttribute('aria-current', 'page'); }
                 row.append(toggle, link); item.append(row); group.append(item);
-                if (page.can_create && tree.closest('[data-wiki-editor]')) {
+                if (page.can_create) {
                     const create = document.createElement('a'); create.className = 'tree-create'; create.href = tree.dataset.url.replace(/\/tree$/, '/pages/create') + '?parent=' + page.id;
-                    create.textContent = '+'; create.setAttribute('aria-label', 'Utwórz podstronę: ' + page.title); row.append(create);
+                    create.setAttribute('aria-label', 'Utwórz podstronę: ' + page.title);
+                    create.append(createTreeIcon('tree-create__icon', ['M12 5v14', 'M5 12h14'])); row.append(create);
                 }
                 if (page.has_children) {
                     const children = document.createElement('ul'); children.role = 'group'; children.className = 'page-tree'; children.hidden = true; item.append(children); item.setAttribute('aria-expanded', 'false');
@@ -54,7 +80,7 @@ document.querySelectorAll('[data-documentation-tree]').forEach(tree => {
     };
     const expand = async (item, force = false, current = generation) => {
         const children = item.querySelector(':scope > ul'); if (!children) return;
-        const open = force || children.hidden; children.hidden = !open; item.setAttribute('aria-expanded', String(open)); item.querySelector('.tree-toggle').textContent = open ? '▾' : '▸';
+        const open = force || children.hidden; children.hidden = !open; item.setAttribute('aria-expanded', String(open));
         if (open) { expanded.add(item.dataset.pageId); if (!children.children.length) await load(children, item.dataset.pageId, 0, current); } else expanded.delete(item.dataset.pageId); remember();
     };
     tree.addEventListener('keydown', async event => {

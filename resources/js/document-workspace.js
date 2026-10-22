@@ -38,14 +38,44 @@ export function setupDocumentWorkspace({root, editor, form, requestJson, snapsho
     try { preferences = JSON.parse(localStorage.getItem(preferenceKey) || '{}'); } catch { /* Storage is optional. */ }
     const store = () => { try { localStorage.setItem(preferenceKey, JSON.stringify(preferences)); } catch { /* Draft storage has its own feedback. */ } };
     const mobile = window.matchMedia('(max-width: 900px)');
-    const tree = q('[data-workspace-tree]'), templates = q('[data-workspace-templates]');
+    const tree = q('[data-workspace-tree]'), treeResize = q('[data-tree-resize]'), templates = q('[data-workspace-templates]');
+    let treeWidth = Number(preferences.treeWidth) || 236;
+    const clampTreeWidth = value => Math.max(200, Math.min(420, Math.round(value)));
+    const setTreeWidth = (value, persist = false) => {
+        treeWidth = clampTreeWidth(value); root.style.setProperty('--editor-tree-width', treeWidth + 'px');
+        treeResize.setAttribute('aria-valuenow', String(treeWidth));
+        if (persist) { preferences.treeWidth = treeWidth; store(); }
+    };
+    setTreeWidth(treeWidth);
     const showTree = value => {
         tree.hidden = !value; root.dataset.treeOpen = String(value);
+        treeResize.hidden = !value || mobile.matches;
         q('[data-toggle-tree]').setAttribute('aria-expanded', String(value));
     };
     showTree(!mobile.matches && preferences.tree !== false);
     q('[data-toggle-tree]').onclick = () => { showTree(tree.hidden); preferences.tree = !tree.hidden; store(); };
     mobile.addEventListener('change', () => showTree(!mobile.matches && preferences.tree !== false));
+    let treePointer = null;
+    treeResize.addEventListener('pointerdown', event => {
+        if (mobile.matches || event.button !== 0) return;
+        treePointer = event.pointerId; treeResize.setPointerCapture(treePointer); root.dataset.treeResizing = 'true'; event.preventDefault();
+    });
+    treeResize.addEventListener('pointermove', event => { if (event.pointerId === treePointer) setTreeWidth(event.clientX); });
+    const finishTreeResize = event => {
+        if (event.pointerId !== treePointer) return;
+        treePointer = null; delete root.dataset.treeResizing; setTreeWidth(treeWidth, true);
+    };
+    treeResize.addEventListener('pointerup', finishTreeResize); treeResize.addEventListener('pointercancel', finishTreeResize);
+    treeResize.addEventListener('dblclick', () => setTreeWidth(236, true));
+    treeResize.addEventListener('keydown', event => {
+        const amount = event.shiftKey ? 40 : 10;
+        if (event.key === 'ArrowLeft') setTreeWidth(treeWidth - amount, true);
+        else if (event.key === 'ArrowRight') setTreeWidth(treeWidth + amount, true);
+        else if (event.key === 'Home') setTreeWidth(200, true);
+        else if (event.key === 'End') setTreeWidth(420, true);
+        else return;
+        event.preventDefault();
+    });
     let manualTemplates = false;
     const showTemplates = value => { templates.hidden = !value; root.dataset.templatesOpen = String(value); };
     showTemplates(root.dataset.isEdit !== '1' && !root.dataset.initialTemplate && !mobile.matches);
@@ -58,6 +88,12 @@ export function setupDocumentWorkspace({root, editor, form, requestJson, snapsho
     const setWidth = () => { root.dataset.documentWidth = width.value; preferences.width = width.value; store(); };
     width.onchange = setWidth; setWidth();
     const closeMenus = () => root.querySelectorAll('[data-close-on-escape]').forEach(details => { details.open = false; });
+    document.addEventListener('keydown', event => {
+        const editing = event.target instanceof Element && event.target.closest('input,textarea,select,[contenteditable=true]');
+        if (event.key === '[' && !event.ctrlKey && !event.metaKey && !event.altKey && !editing) {
+            event.preventDefault(); showTree(tree.hidden); preferences.tree = !tree.hidden; store(); return;
+        }
+    });
     root.addEventListener('keydown', event => {
         if (event.key === 'Escape' && !event.target.closest('dialog')) { closeMenus(); if (mobile.matches) { showTree(false); showTemplates(false); } }
     });

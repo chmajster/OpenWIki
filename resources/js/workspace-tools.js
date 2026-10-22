@@ -63,15 +63,41 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
         if (name === 'inlineCode') focus().toggleCode().run();
         if (name === 'separator') focus().setHorizontalRule().run();
         if (name === 'clearFormat') focus().unsetAllMarks().clearNodes().run();
+        button.closest('.format-menu')?.removeAttribute('open');
     });
-    for (const [selector, attribute] of [['[data-text-color]', 'data-text-color'], ['[data-highlight]', 'data-highlight']]) q(selector).onchange = (event) => {
+    root.querySelectorAll('[data-editor-emoji]').forEach((button) => {
+        button.onmousedown = (event) => event.preventDefault();
+        button.onclick = () => {
+            if (!canEdit()) return;
+            focus().insertContent(button.dataset.editorEmoji).run();
+            button.closest('.editor-toolbar-picker')?.removeAttribute('open');
+        };
+    });
+    const toolbarPopovers = [...root.querySelectorAll('.editor-toolbar-picker, .editor-toolbar .format-menu')];
+    toolbarPopovers.forEach((popover) => popover.addEventListener('toggle', () => {
+        if (popover.open) toolbarPopovers.forEach((other) => { if (other !== popover) other.open = false; });
+    }));
+    root.querySelectorAll('[data-text-color-choice]').forEach((button) => {
+        button.onmousedown = (event) => event.preventDefault();
+        button.onclick = () => {
+            if (!canEdit()) return;
+            focus().setMark('controlledStyle', {'data-text-color': button.dataset.textColorChoice || null}).run();
+            button.closest('.editor-toolbar-picker')?.removeAttribute('open');
+        };
+    });
+    q('[data-highlight]').onchange = (event) => {
+        const attribute = 'data-highlight';
         if (canEdit()) focus().setMark('controlledStyle', {[attribute]: event.target.value || null}).run();
+        event.currentTarget.closest('.editor-toolbar-picker')?.removeAttribute('open');
     };
-    q('[data-text-align]').onchange = (event) => {
-        if (!canEdit()) return;
-        const type = editor.isActive('tableHeader') ? 'tableHeader' : editor.isActive('tableCell') ? 'tableCell' : editor.isActive('heading') ? 'heading' : 'paragraph';
-        focus().updateAttributes(type, {'data-align': event.target.value}).run();
-    };
+    const alignmentType = () => editor.isActive('tableHeader') ? 'tableHeader' : editor.isActive('tableCell') ? 'tableCell' : editor.isActive('heading') ? 'heading' : 'paragraph';
+    root.querySelectorAll('[data-text-align-choice]').forEach((button) => {
+        button.onmousedown = (event) => event.preventDefault();
+        button.onclick = () => {
+            if (canEdit()) focus().updateAttributes(alignmentType(), {'data-align': button.dataset.textAlignChoice}).run();
+            button.closest('[data-align-picker]')?.removeAttribute('open');
+        };
+    });
     q('[data-cell-color]').onchange = (event) => { if (canEdit()) focus().setCellAttribute('data-cell-color', event.target.value || null).run(); };
     root.querySelectorAll('[data-table-move]').forEach((button) => button.onclick = () => {
         if (!canEdit() || !editor.isActive('table')) return;
@@ -196,7 +222,15 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
         q('[data-code-tools]').hidden = !editor.isActive('codeBlock') || !canEdit();
         q('[data-code-numbers]').checked = editor.getAttributes('codeBlock')['data-line-numbers'] === 'true';
         q('[data-code-wrap]').checked = editor.getAttributes('codeBlock')['data-code-wrap'] === 'true';
-        root.querySelectorAll('[data-advanced-command], [data-text-color], [data-highlight], [data-text-align], [data-open-block], [data-open-diagram], [data-block-action], [data-cell-color], [data-column-width-apply], [data-table-move]').forEach((control) => { control.disabled = !canEdit(); });
+        const colorValue = editor.getAttributes('controlledStyle')['data-text-color'] || '';
+        const allowedColors = new Set(['red', 'orange', 'green', 'blue', 'purple', 'gray']);
+        const activeColor = allowedColors.has(colorValue) ? colorValue : '';
+        root.querySelectorAll('[data-text-color-choice]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.textColorChoice === activeColor)));
+        q('.editor-toolbar-color-mark').style.setProperty('--editor-selected-text-color', activeColor ? `var(--doc-${activeColor})` : 'var(--muted)');
+        const currentAlignment = editor.getAttributes(alignmentType())['data-align'] || 'left';
+        const activeAlignment = ['left', 'center', 'right', 'justify'].includes(currentAlignment) ? currentAlignment : 'left';
+        root.querySelectorAll('[data-text-align-choice]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.textAlignChoice === activeAlignment)));
+        root.querySelectorAll('[data-advanced-command], [data-editor-emoji], [data-text-color-choice], [data-highlight], [data-text-align-choice], [data-open-block], [data-open-diagram], [data-block-action], [data-cell-color], [data-column-width-apply], [data-table-move]').forEach((control) => { control.disabled = !canEdit(); });
     };
     editor.on('transaction', refresh); refresh();
     q('[data-text-context]').onmousedown = (event) => event.preventDefault();
@@ -243,12 +277,17 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
     };
     const renderMenu = () => {
         options.replaceChildren(); menu.hidden = false;
-        candidates.forEach(([label, action, category = 'Podstawowe', description = 'Wstaw lub przekształć zaznaczony blok', icon = '¶'], index) => {
-            const button = document.createElement('button'); button.type = 'button'; button.role = 'option'; button.id = 'editor-command-' + index; button.setAttribute('aria-selected', String(index === active));
-            const symbol = document.createElement('span'); symbol.textContent = icon; symbol.setAttribute('aria-hidden', 'true');
-            const name = document.createElement('span'); name.textContent = label;
-            const help = document.createElement('small'); help.textContent = category + ' · ' + description;
-            button.append(symbol, name, help); button.onmousedown = event => event.preventDefault(); button.onclick = () => choose(action); options.append(button);
+        const groups = new Map();
+        candidates.forEach((command, index) => { const category = command[2] || 'Podstawowe'; if (!groups.has(category)) groups.set(category, []); groups.get(category).push({command, index}); });
+        groups.forEach((items, category) => {
+            const heading = document.createElement('div'); heading.className = 'command-category'; heading.textContent = category; heading.setAttribute('role', 'presentation'); options.append(heading);
+            items.forEach(({command: [label, action, , description = 'Wstaw lub przekształć zaznaczony blok', icon = '¶'], index}) => {
+                const button = document.createElement('button'); button.type = 'button'; button.role = 'option'; button.id = 'editor-command-' + index; button.setAttribute('aria-selected', String(index === active));
+                const symbol = document.createElement('span'); symbol.textContent = icon; symbol.setAttribute('aria-hidden', 'true');
+                const name = document.createElement('span'); name.textContent = label;
+                const help = document.createElement('small'); help.textContent = description;
+                button.append(symbol, name, help); button.onmousedown = event => event.preventDefault(); button.onclick = () => choose(action); options.append(button);
+            });
         });
         if (!candidates.length) { const empty = document.createElement('p'); empty.textContent = 'Brak pasujących elementów.'; options.append(empty); }
         search.setAttribute('aria-activedescendant', candidates.length ? 'editor-command-' + active : '');
@@ -291,7 +330,7 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
         if (menu.hidden || event.target.closest('dialog')) return;
         if (['ArrowUp', 'ArrowDown', 'Enter'].includes(event.key)) {
             event.preventDefault(); event.stopPropagation();
-            if (event.key === 'Enter') options.querySelectorAll('button')[active]?.click();
+            if (event.key === 'Enter') options.querySelector('[aria-selected=true]')?.click();
             else if (candidates.length) { active = (active + (event.key === 'ArrowUp' ? -1 : 1) + candidates.length) % candidates.length; renderMenu(); }
         }
     }, true);
@@ -301,15 +340,19 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
     const placeHandles = pos => {
         const coordinates = editor.view.coordsAtPos(Math.min(pos + 1, editor.state.doc.content.size));
         const narrow = window.innerWidth < 900;
-        handles.style.left = Math.max(2, editor.view.dom.getBoundingClientRect().left - (narrow ? 0 : 102)) + 'px';
-        handles.style.top = Math.max(65, coordinates.top - (narrow ? 30 : 0)) + 'px'; handles.hidden = !canEdit() || coordinates.bottom < 65 || coordinates.top > window.innerHeight;
+        const editorLeft = editor.view.dom.getBoundingClientRect().left;
+        handles.style.left = Math.max(2, editorLeft - (narrow ? 0 : handles.offsetWidth + 8)) + 'px';
+        handles.style.top = Math.max(65, coordinates.top - (narrow ? handles.offsetHeight + 4 : 3)) + 'px'; handles.hidden = !canEdit() || coordinates.bottom < 65 || coordinates.top > window.innerHeight;
         const panel = q('.block-action-menu'), above = coordinates.top > window.innerHeight - 300;
         panel.style.top = above ? 'auto' : '100%'; panel.style.bottom = above ? '100%' : 'auto';
     };
-    editor.on('selectionUpdate', () => {
+    const placeSelectedHandles = () => {
         const block = selectedBlock(); if (!block) { handles.hidden = true; return; }
         hovered = block.pos; placeHandles(hovered);
-    });
+    };
+    editor.on('selectionUpdate', placeSelectedHandles);
+    editor.on('focus', placeSelectedHandles);
+    requestAnimationFrame(placeSelectedHandles);
     editor.view.dom.addEventListener('pointermove', event => {
         if (manual || q('[data-block-menu]').open) return;
         const target = editor.view.posAtCoords({left: event.clientX, top: event.clientY}); if (!target) return;
@@ -322,6 +365,9 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
     });
     q('[data-block-add]').onclick = () => {
         const block = selectedBlock(); if (!block || !canEdit()) return;
+        // Selecting the hovered block on pointer down schedules slash-menu detection.
+        // Cancel that stale callback so it cannot close the manually opened picker.
+        clearTimeout(menuTimer); menuTimer = null; ++querySequence;
         manual = true; range = null; insertion = block.pos + block.node.nodeSize; search.value = ''; active = 0; candidates = commands;
         renderMenu(); positionMenu(block.pos); search.focus();
     };
@@ -336,6 +382,12 @@ export function setupWorkspace(root, editor, canEdit, requestJson, snapshot) {
     };
     document.addEventListener('pointerdown', event => { if (!menu.hidden && !menu.contains(event.target) && !handles.contains(event.target)) dismissMenu(); });
     window.addEventListener('scroll', () => { if (hovered !== null && editor.state.doc.nodeAt(hovered)) placeHandles(hovered); else handles.hidden = true; q('[data-text-context]').hidden = true; if (!menu.hidden && range) positionMenu(range.to); }, true);
-    window.addEventListener('resize', () => { handles.hidden = true; dismissMenu(); });
+    window.addEventListener('resize', () => {
+        if (hovered !== null && editor.state.doc.nodeAt(hovered)) placeHandles(hovered); else handles.hidden = true;
+        if (!menu.hidden) {
+            const position = range?.to ?? (insertion !== null ? Math.min(insertion, editor.state.doc.content.size) : hovered);
+            if (position !== null) positionMenu(position);
+        }
+    });
     return refresh;
 }

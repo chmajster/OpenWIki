@@ -2,7 +2,7 @@
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $selected = array_map('intval', $policy['role_ids'] ?? []);
 ?>
-<section class="content-container">
+<section class="content-container admin-page">
     <div class="page-heading">
         <div>
             <div class="eyebrow"><?= $e($t('Administration')) ?></div>
@@ -14,9 +14,9 @@ $selected = array_map('intval', $policy['role_ids'] ?? []);
     <form class="card form-card form-stack" method="post" action="/admin/mfa">
         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
 
-        <label>
+        <label class="admin-form-checkbox">
             <input type="checkbox" name="enforce_global" value="1" <?= !empty($policy['enforce_global']) ? 'checked' : '' ?>>
-            <?= $e($t('Require MFA for every user')) ?>
+            <span><?= $e($t('Require MFA for every user')) ?><small><?= $e($t('Users will be asked to enroll an authenticator before continuing.')) ?></small></span>
         </label>
 
         <fieldset>
@@ -25,9 +25,10 @@ $selected = array_map('intval', $policy['role_ids'] ?? []);
                 <?php foreach ($roles as $role): ?>
                     <label>
                         <input type="checkbox" name="role_ids[]" value="<?= (int) $role['id'] ?>" <?= in_array((int) $role['id'], $selected, true) ? 'checked' : '' ?>>
-                        <?= $e($role['name']) ?> <small><?= $e($role['slug']) ?></small>
+                        <span><?= $e($role['name']) ?><small><?= $e($role['slug']) ?></small></span>
                     </label>
                 <?php endforeach; ?>
+                <?php if ($roles === []): ?><p class="empty-state"><?= $e($t('No roles are available for MFA enforcement.')) ?></p><?php endif; ?>
             </div>
         </fieldset>
 

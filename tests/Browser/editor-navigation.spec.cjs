@@ -32,6 +32,18 @@ for (const width of [360, 768, 1440]) test('shared editor navbar and sticky cont
     await expect(page.locator('.topbar .brand')).toHaveAttribute('href', '/');
     await expect(page.locator('.topbar .notification-link')).toHaveAttribute('href', '/notifications');
     await expect(page.locator('.topbar .shell-create')).toHaveAttribute('href', createUrl());
+    if (width === 1440) {
+        const treeResize = page.locator('[data-tree-resize]');
+        await expect(treeResize).toBeVisible();
+        const initialTreeWidth = Number(await treeResize.getAttribute('aria-valuenow'));
+        await treeResize.focus(); await page.keyboard.press('ArrowRight');
+        await expect(treeResize).toHaveAttribute('aria-valuenow', String(initialTreeWidth + 10));
+        await page.reload();
+        await expect(page.locator('[data-tree-resize]')).toHaveAttribute('aria-valuenow', String(initialTreeWidth + 10));
+        await page.locator('.workspace-header').click(); await page.keyboard.press('[');
+        await expect(page.locator('[data-workspace-tree]')).toBeHidden();
+        await page.keyboard.press('['); await expect(page.locator('[data-workspace-tree]')).toBeVisible();
+    }
     await page.locator('[data-document-title]').fill(unique('Shared navigation'));
     await editor(page).fill('Documentation stays below its editing controls. '.repeat(500));
     for (const theme of ['light', 'dark']) {

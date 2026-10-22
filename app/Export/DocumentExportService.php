@@ -6,6 +6,7 @@ namespace OpenWiki\Export;
 
 use OpenWiki\Attachments\AttachmentService;
 use OpenWiki\Core\Application;
+use OpenWiki\Core\Env;
 use OpenWiki\Wiki\MacroService;
 use ZipArchive;
 
@@ -18,28 +19,52 @@ final class DocumentExportService
     public function pageHtml(array $page, array $space): string
     {
         $rendered = (new MacroService($this->app))->renderPage($page, $space);
-        $title = $this->escape((string) $page['title']);
-        $spaceName = $this->escape((string) $space['name']);
+        $metadata = $this->pageMetadata($page, $space);
+        $title = $this->escape($metadata['title']);
+        $spaceName = $this->escape($metadata['space']);
+        $pageUrl = $this->escape($metadata['url']);
+        $author = $this->escape($metadata['author']);
+        $updatedAt = $this->escape($metadata['updated_at']);
+        $status = $this->escape($metadata['status_label']);
 
-        return '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        return '<!doctype html><html lang="pl"><head><meta charset="utf-8">'
             . '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            . '<meta name="author" content="' . $author . '">'
+            . '<meta name="dateModified" content="' . $updatedAt . '">'
+            . '<meta name="description" content="' . $this->escape($metadata['space'] . ' · rewizja ' . $metadata['version']) . '">'
+            . '<link rel="canonical" href="' . $pageUrl . '">'
             . '<title>' . $title . '</title>'
-            . '<style>body{font-family:system-ui,sans-serif;max-width:980px;margin:40px auto;padding:0 24px;line-height:1.6}'
+            . '<style>body{font-family:system-ui,sans-serif;max-width:980px;margin:40px auto;padding:0 24px;line-height:1.6;color:#172b4d}'
             . 'pre{white-space:pre-wrap;background:#f4f4f4;padding:12px}table{border-collapse:collapse;width:100%}'
-            . 'td,th{border:1px solid #ccc;padding:6px;text-align:left}small{color:#666}</style>'
-            . '</head><body><header><p><small>' . $spaceName . '</small></p><h1>'
-            . $title . '</h1></header><main>' . $rendered['html']
+            . 'td,th{border:1px solid #ccc;padding:6px;text-align:left}small{color:#626f86}'
+            . '.export-meta{display:flex;flex-wrap:wrap;gap:8px 18px;margin:12px 0 24px;padding:14px 0;border-top:1px solid #dfe1e6;border-bottom:1px solid #dfe1e6;font-size:13px}'
+            . '.export-meta span{color:#626f86}.export-meta strong{color:#172b4d}.export-meta a{color:#0c66e4;overflow-wrap:anywhere}</style>'
+            . '</head><body><header><p><small>Przestrzeń · ' . $spaceName . '</small></p><h1>'
+            . $title . '</h1><div class="export-meta">'
+            . '<span>Autor: <strong>' . $author . '</strong></span>'
+            . '<span>Rewizja: <strong>' . (int) $metadata['version'] . '</strong></span>'
+            . '<span>Status: <strong>' . $status . '</strong></span>'
+            . '<span>Ostatnia zmiana: <strong><time datetime="' . $this->escape(str_replace(' ', 'T', $metadata['updated_at']) . 'Z') . '">' . $updatedAt . '</time></strong></span>'
+            . '<span>Oryginał: <a href="' . $pageUrl . '">' . $pageUrl . '</a></span>'
+            . '</div></header><main>' . $rendered['html']
             . '</main></body></html>';
     }
 
-    public function pageMarkdown(array $page): string
+    public function pageMarkdown(array $page, array $space): string
     {
+        $metadata = $this->pageMetadata($page, $space);
         $markdown = trim((string) ($page['content_markdown'] ?? ''));
         if ($markdown === '') {
             $markdown = $this->htmlToMarkdown((string) $page['content_html']);
         }
 
-        return '# ' . (string) $page['title'] . "\n\n" . trim($markdown) . "\n";
+        return '# ' . $metadata['title'] . "\n\n"
+            . '> **Autor:** ' . $metadata['author'] . "  \n"
+            . '> **Przestrzeń:** ' . $metadata['space'] . ' (' . $metadata['space_key'] . ")  \n"
+            . '> **Rewizja:** ' . $metadata['version'] . ' · ' . $metadata['status_label'] . "  \n"
+            . '> **Ostatnia zmiana:** ' . $metadata['updated_at'] . "  \n"
+            . '> **Oryginał:** [' . $metadata['title'] . '](' . $metadata['url'] . ")\n\n---\n\n"
+            . trim($markdown) . "\n";
     }
 
     public function pagePdf(array $page, array $space): string
@@ -55,10 +80,8 @@ final class DocumentExportService
         $text = preg_replace('/[ \t]+/u', ' ', $text) ?? $text;
         $text = preg_replace('/\n{3,}/u', "\n\n", $text) ?? $text;
 
-        return (new PdfTextExporter())->build(
-            (string) $page['title'],
-            trim($text)
-        );
+        $metadata = $this->pageMetadata($page, $space);
+        return (new PdfTextExporter())->build($metadata['title'], trim($text), $metadata);
     }
 
     public function spaceArchive(array $space, array $pages): array
@@ -105,21 +128,29 @@ final class DocumentExportService
                 if (!$zip->addFromString($htmlPath, $this->pageHtml($page, $space))) {
                     throw new \RuntimeException('Unable to add HTML page to Space export.');
                 }
-                if (!$zip->addFromString($markdownPath, $this->pageMarkdown($page))) {
+                if (!$zip->addFromString($markdownPath, $this->pageMarkdown($page, $space))) {
                     throw new \RuntimeException('Unable to add Markdown page to Space export.');
                 }
 
+                $pageMetadata = $this->pageMetadata($page, $space);
                 $manifest['pages'][] = [
                     'id' => (int) $page['id'],
                     'parent_id' => $page['parent_id'] === null ? null : (int) $page['parent_id'],
                     'title' => $page['title'],
                     'slug' => $page['slug'],
                     'status' => $page['status'],
+                    'author' => $pageMetadata['author'],
+                    'version' => $pageMetadata['version'],
+                    'updated_at' => $pageMetadata['updated_at'],
+                    'source_url' => $pageMetadata['url'],
                     'html' => $htmlPath,
                     'markdown' => $markdownPath,
                 ];
                 $indexItems[] = '<li><a href="' . $this->escape($htmlPath) . '">'
-                    . $this->escape((string) $page['title']) . '</a></li>';
+                    . $this->escape((string) $page['title']) . '</a> <small>Autor: '
+                    . $this->escape($pageMetadata['author']) . ' · rewizja '
+                    . (int) $pageMetadata['version'] . ' · <a href="'
+                    . $this->escape($pageMetadata['url']) . '">strona w OpenWiki</a></small></li>';
 
                 $visibleFiles = (new \OpenWiki\Attachments\AttachmentVisibility($this->app->database()))->forPage($attachments->listForPage((int) $page['id'], true), $this->app->auth()->user()['id'] ?? null, $this->app->auth()->can('*'), null, true);
                 foreach ($visibleFiles as $attachment) {
@@ -133,7 +164,7 @@ final class DocumentExportService
                 }
             }
 
-            $index = '<!doctype html><html><head><meta charset="utf-8"><title>'
+            $index = '<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>'
                 . $this->escape((string) $space['name'])
                 . '</title></head><body><h1>' . $this->escape((string) $space['name'])
                 . '</h1><ul>' . implode('', $indexItems) . '</ul></body></html>';
@@ -199,6 +230,33 @@ final class DocumentExportService
         $markdown = preg_replace('/\n{3,}/u', "\n\n", $markdown) ?? $markdown;
 
         return trim($markdown);
+    }
+
+    private function pageMetadata(array $page, array $space): array
+    {
+        $spaceKey = (string) ($space['space_key'] ?? '');
+        $slug = (string) ($page['slug'] ?? '');
+        $path = '/spaces/' . rawurlencode($spaceKey) . '/pages/' . rawurlencode($slug);
+        $baseUrl = rtrim(trim((string) Env::get('APP_URL', '')), '/');
+        $status = (string) ($page['status'] ?? 'unknown');
+        $statusLabel = match ($status) {
+            'published' => 'Opublikowana',
+            'draft' => 'Szkic',
+            'archived' => 'Zarchiwizowana',
+            default => $status,
+        };
+
+        return [
+            'title' => (string) ($page['title'] ?? $slug),
+            'author' => (string) ($page['author_username'] ?? 'Nieznany'),
+            'space' => (string) ($space['name'] ?? $spaceKey),
+            'space_key' => $spaceKey,
+            'status' => $status,
+            'status_label' => $statusLabel,
+            'version' => (int) ($page['version'] ?? 1),
+            'updated_at' => (string) ($page['updated_at'] ?? $page['created_at'] ?? ''),
+            'url' => $baseUrl === '' ? $path : $baseUrl . $path,
+        ];
     }
 
     private function safeFileName(string $value): string

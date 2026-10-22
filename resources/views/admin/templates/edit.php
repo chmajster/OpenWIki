@@ -8,11 +8,11 @@ $value = static function (string $key, mixed $default = '') use ($old, $record):
 $markdown = (string) $value('content_markdown', '');
 $format = (string) ($old['content_format'] ?? ($markdown !== '' ? 'markdown' : 'visual'));
 ?>
-<section class="content-container">
+<section class="content-container admin-page">
     <div class="page-heading">
         <div>
             <div class="eyebrow"><?= $e($t('Administration')) ?></div>
-            <h1><?= $e($record === null ? 'Create template' : $record['name']) ?></h1>
+            <h1><?= $e($record === null ? $t('Create template') : $record['name']) ?></h1>
             <?php if ($isSystem): ?><p class="muted"><?= $e($t('System template · read-only')) ?></p><?php endif; ?>
         </div>
         <a class="button button--ghost" href="/admin/templates"><?= $e($t('Back to templates')) ?></a>
@@ -36,7 +36,7 @@ $format = (string) ($old['content_format'] ?? ($markdown !== '' ? 'markdown' : '
         <label><?= $e($t('Content format')) ?>
             <select name="content_format" <?= $isSystem ? 'disabled' : '' ?>>
                 <option value="visual" <?= $format === 'visual' ? 'selected' : '' ?>><?= $e($t('HTML / Visual')) ?></option>
-                <option value="markdown" <?= $format === 'markdown' ? 'selected' : '' ?>>Markdown</option>
+                <option value="markdown" <?= $format === 'markdown' ? 'selected' : '' ?>><?= $e($t('Markdown')) ?></option>
             </select>
         </label>
 

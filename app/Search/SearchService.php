@@ -60,6 +60,7 @@ final class SearchService
                 $result = ['type' => $type, 'id' => $id, 'key' => $key, 'result_key' => $key, 'title' => $row['title'], 'snippet' => $snippet,
                     'relevance' => (int) $row['relevance'], 'created_at' => $row['created_at'], 'updated_at' => $row['updated_at'],
                     'working' => (bool) $row['working'], 'revision' => (int) $row['revision'], 'url' => null, 'meta' => ''];
+                if (in_array($type, ['page', 'comment', 'attachment'], true) && isset($row['author']) && (string) $row['author'] !== '') $result['author'] = (string) $row['author'];
                 if ($space !== null) $result['space'] = ['id' => (int) $space['id'], 'key' => $space['space_key'], 'name' => $space['name']];
                 if ($pageId !== 0) {
                     $result['page_id'] = $pageId; $result['path'] = $access->path($pageId);

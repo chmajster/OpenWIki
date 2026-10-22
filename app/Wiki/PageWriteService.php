@@ -8,6 +8,7 @@ use OpenWiki\Audit\AuditLogger;
 use OpenWiki\Core\Database;
 use OpenWiki\Core\Request;
 use OpenWiki\Images\InlineImageService;
+use OpenWiki\Permissions\PageAclService;
 use OpenWiki\Repositories\PageRepository;
 use OpenWiki\Webhooks\WebhookService;
 
@@ -237,6 +238,7 @@ final class PageWriteService
                     $id = (int) $current['id'];
                     $version = $repository->update($current, $data)['version'];
                 }
+                $this->saveAccessRule($id, $input, $userId, $request, $can);
                 if ($hasInlineImages) {
                     $materialized = $inlineImages->materializeDataImages($data['content_html'], $id, $userId);
                     $assetUrls += $materialized['urls'];
@@ -337,6 +339,59 @@ final class PageWriteService
                 throw new \InvalidArgumentException('A page with that slug already exists in this space.', 0, $exception);
             }
             throw $exception;
+        }
+    }
+
+    private function saveAccessRule(int $pageId, array $input, int $userId, ?Request $request, ?callable $can): void
+    {
+        $principal = $input['access_principal'] ?? '';
+        if (!is_string($principal)) throw new \InvalidArgumentException('Wybierz prawidłowego odbiorcę reguły dostępu.');
+        $principal = trim($principal);
+        if ($principal === '') return;
+        if (!preg_match('/^(user|group|role):([1-9][0-9]*)$/D', $principal, $parts)) {
+            throw new \InvalidArgumentException('Wybierz prawidłową osobę, grupę lub rolę.');
+        }
+        $principalId = filter_var($parts[2], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $permission = $input['access_permission'] ?? 'page.view';
+        if ($principalId === false || !in_array($permission, ['page.view', 'page.edit'], true)) {
+            throw new \InvalidArgumentException('Nieprawidłowy odbiorca lub poziom dostępu.');
+        }
+        $page = $this->database->fetchOne('SELECT * FROM pages WHERE id = ? AND deleted_at IS NULL', [$pageId]);
+        if ($page === null || $can === null || !$can('page.edit', $page)) {
+            throw new \DomainException('Nie masz prawa zarządzać dostępem do tej strony.');
+        }
+
+        $inheritToChildren = filter_var($input['access_inherit_to_children'] ?? false, FILTER_VALIDATE_BOOL);
+        $before = $this->database->fetchOne(
+            'SELECT id, effect, inherit_to_children FROM page_acl
+             WHERE page_id = ? AND principal_type = ? AND principal_id = ? AND permission = ? LIMIT 1',
+            [$pageId, $parts[1], (int) $principalId, $permission]
+        );
+        $ruleId = (new PageAclService($this->database))->addRule(
+            $pageId, $parts[1], (int) $principalId, $permission, 'allow', $inheritToChildren
+        );
+        $updatedPage = $this->database->fetchOne('SELECT * FROM pages WHERE id = ?', [$pageId]);
+        if ($updatedPage === null || !$can('page.edit', $updatedPage)) {
+            throw new \DomainException('Ta reguła odebrałaby Ci możliwość zarządzania stroną. Dodaj siebie do odbiorców albo wybierz inną regułę.');
+        }
+        $after = [
+            'rule_id' => $ruleId,
+            'principal_type' => $parts[1],
+            'principal_id' => (int) $principalId,
+            'permission' => $permission,
+            'effect' => 'allow',
+            'inherit_to_children' => $inheritToChildren,
+        ];
+        if ($before === null || $before['effect'] !== 'allow' || (bool) $before['inherit_to_children'] !== $inheritToChildren) {
+            (new AuditLogger($this->database))->log(
+                'PAGE_ACL_RULE_SAVED', 'page', $pageId, $userId,
+                $request ?? new Request('CLI', '/', [], [], [], []),
+                $before === null ? null : [
+                    'rule_id' => (int) $before['id'], 'effect' => $before['effect'],
+                    'inherit_to_children' => (bool) $before['inherit_to_children'],
+                ],
+                $after
+            );
         }
     }
 }

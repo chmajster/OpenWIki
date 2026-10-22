@@ -9,7 +9,7 @@ $collaborationConfig = ['page' => (int) $page['id'], 'revision' => $collaboratio
     'can_create_task' => $collaborationMutable && $app->auth()->can('task.create')];
 ?>
 <section class="collaboration" data-collaboration data-config="<?= $e(json_encode($collaborationConfig, JSON_THROW_ON_ERROR)) ?>">
-    <div class="collaboration-actions">
+    <div class="collaboration-actions collaboration-toolbar">
         <button type="button" class="button button--ghost" data-discussions-open><?= $e($t('Discussions')) ?></button>
         <?php if ($collaborationConfig['can_comment']): ?><button type="button" class="button" data-comment-selection disabled><?= $e($t('Add comment to selection')) ?></button><?php endif; ?>
         <?php if ($collaborationConfig['can_create_task']): ?><button type="button" class="button button--ghost" data-task-create><?= $e($t('Create task')) ?></button><?php endif; ?>

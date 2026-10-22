@@ -29,12 +29,23 @@ final class View
         $data['e'] = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $data['flashSuccess'] = Session::pullFlash('success');
         $data['flashError'] = Session::pullFlash('error');
+        // Preserve the render argument as the authoritative view name.
+        $data['template'] = $template;
+        // The page editor uses its own full-screen shell and stylesheet.
+        if ($template === 'pages/editor') {
+            $data['editorWorkspace'] = true;
+        }
 
-        extract($data, EXTR_SKIP);
+        // Render the content view in its own scope so loop variables declared
+        // by a view cannot overwrite render state (for example, $template).
+        $content = (static function (string $__viewFile, array $__viewData): string {
+            $data = $__viewData;
+            extract($__viewData, EXTR_SKIP);
 
-        ob_start();
-        require $file;
-        $content = (string) ob_get_clean();
+            ob_start();
+            require $__viewFile;
+            return (string) ob_get_clean();
+        })($file, $data);
 
         if (!$withLayout) {
             return $content;
@@ -45,8 +56,14 @@ final class View
             return $content;
         }
 
-        ob_start();
-        require $layout;
-        return (string) ob_get_clean();
+        return (static function (string $__layoutFile, array $__layoutData, string $__content): string {
+            $data = $__layoutData;
+            $content = $__content;
+            extract($__layoutData, EXTR_SKIP);
+
+            ob_start();
+            require $__layoutFile;
+            return (string) ob_get_clean();
+        })($layout, $data, $content);
     }
 }

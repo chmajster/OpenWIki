@@ -49,7 +49,7 @@ final class ImportExportController extends Controller
                 $page['slug'] . '.html'
             ),
             'markdown', 'md' => Response::download(
-                $service->pageMarkdown($page),
+                $service->pageMarkdown($page, $space),
                 'text/markdown; charset=UTF-8',
                 $page['slug'] . '.md'
             ),

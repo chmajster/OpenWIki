@@ -64,6 +64,13 @@ test('space content links, filters, counts, and navigation use exactly the selec
     for (let i = 0; i < 13; i++) await document(request, target, 'Guide ' + String(i).padStart(2, '0'));
     await document(request, other, 'Guide outsider');
     await login(page); await page.goto('/spaces/' + target.key);
+    const actionMenu = page.locator('.space-action-menu__items');
+    await expect(actionMenu).toBeHidden();
+    await page.locator('.space-action-menu > summary').click();
+    await expect(actionMenu).toBeVisible();
+    await expect(actionMenu.locator('.space-action-menu__heading strong')).toHaveText(target.name);
+    expect((await actionMenu.boundingBox()).width).toBeGreaterThanOrEqual(250);
+    await page.keyboard.press('Escape'); await expect(actionMenu).toBeHidden();
     await page.locator('.space-action-menu > summary').click(); await page.getByRole('button', {name: 'Watch space', exact: true}).click();
     await page.locator('.space-action-menu > summary').click(); await expect(page.getByRole('button', {name: 'Stop watching', exact: true})).toBeVisible(); await page.keyboard.press('Escape');
     await page.locator('.workspace-tabs').getByRole('link', {name: 'Content', exact: true}).click();

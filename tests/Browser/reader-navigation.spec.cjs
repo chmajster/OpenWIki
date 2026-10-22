@@ -69,6 +69,9 @@ test('outline follows sections and remains usable on a narrow screen', async ({p
     await expect(outline.locator('a[href="#implementation"]')).toHaveAttribute('aria-current', 'location');
     await expect(outline.getByRole('link', {name: 'Attachments'})).toHaveAttribute('href', '#attachments');
     await expect(outline.getByRole('link', {name: 'Comments'})).toHaveAttribute('href', '#comments');
+    await expect(page.locator('.attachments-section .page-support-heading')).toBeVisible();
+    await expect(page.locator('.comments-section .page-support-heading')).toBeVisible();
+    await expect(page.locator('.page-comment-form textarea')).toBeVisible();
 
     await page.screenshot({path: 'storage/temp/reader-outline-desktop.png', fullPage: true});
 

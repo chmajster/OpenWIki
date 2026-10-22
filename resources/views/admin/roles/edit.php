@@ -7,16 +7,16 @@ $permissionIds = array_map('intval', (array) ($old['permission_ids'] ?? ($record
 $isEdit = $record !== null;
 $isSystem = $isEdit && (int) $record['is_system'] === 1;
 ?>
-<section class="content-container">
+<section class="content-container admin-page">
     <div class="page-heading">
         <div>
             <div class="eyebrow"><?= $e($t('Administration · Roles')) ?></div>
-            <h1><?= $isEdit ? 'Edit ' . $e($record['name']) : 'Create role' ?></h1>
+            <h1><?= $isEdit ? $e(strtr($t('Edit :name'), [':name' => $record['name']])) : $e($t('Create role')) ?></h1>
         </div>
         <a class="button button--ghost" href="/admin/roles"><?= $e($t('Back to roles')) ?></a>
     </div>
 
-    <?php if (!empty($formError)): ?><div class="alert alert--error"><?= $e($formError) ?></div><?php endif; ?>
+    <?php if (!empty($formError)): ?><div class="alert alert--error" role="alert"><?= $e($t($formError)) ?></div><?php endif; ?>
 
     <section class="card form-card">
         <form method="post" action="<?= $e($formAction) ?>" class="form-stack">

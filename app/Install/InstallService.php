@@ -148,11 +148,13 @@ final class InstallService
         if ($state !== null && (!is_array($state) || ($state['target'] ?? '') !== $target || !preg_match('/^[a-f0-9]{64}$/D', (string) ($state['key'] ?? '')))) {
             throw new \RuntimeException('An unfinished installation uses different database credentials. Use the original connection settings to resume.');
         }
-        // Never turn a lost installation marker into an unauthenticated account reset.
+        // A missing marker must not silently turn a normal installation into an
+        // account reset. Full reinstall is the explicit destructive opt-in: it
+        // still requires working database credentials before anything is dropped.
         $environment = RuntimePaths::configuration($this->basePath);
         if ($state === null && is_file($environment) && preg_match('/^APP_KEY[ \t]*=[ \t]*(.*)$/m', (string) file_get_contents($environment), $existingKey)
-            && trim($existingKey[1], " \t\r\n\"'") !== '') {
-            throw new \RuntimeException('Existing application configuration found. Restore its installation marker instead of reinstalling.');
+            && trim($existingKey[1], " \t\r\n\"'") !== '' && !$config['full_database_reinstall']) {
+            throw new \RuntimeException('Existing application configuration found. Enable full database reinstall to replace it, or restore its installation marker.');
         }
 
         $databaseName = $config['database']['database'];

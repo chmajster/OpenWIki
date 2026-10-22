@@ -9,19 +9,21 @@
                 <?php endif; ?>
             </div>
             <div class="page-actions">
-                <details class="space-action-menu" data-close-on-escape><summary class="button button--secondary"><?= $e($t('More actions')) ?></summary><div class="menu-items">
-                <?php if ($canSettings): ?><a class="button button--secondary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/settings"><?= $e($t('Space settings')) ?></a><?php endif; ?>
+                <details class="space-action-menu" data-close-on-escape><summary class="button button--secondary"><?= $e($t('More actions')) ?><?= $uiIcon('chevron') ?></summary><div class="menu-items space-action-menu__items">
+                <div class="space-action-menu__heading"><span><?= $e($t('Space actions')) ?></span><strong><?= $e($space['name']) ?></strong></div>
+                <?php if ($canSettings): ?><a class="space-action-menu__item" href="/spaces/<?= rawurlencode($space['space_key']) ?>/settings"><?= $uiIcon('settings') ?><span><?= $e($t('Space settings')) ?></span></a><?php endif; ?>
                 <?php if ($currentUser !== null): ?>
-                    <a class="button button--ghost" href="/?attention=1&amp;space=<?= (int)$space['id'] ?>"><?= $e($t('Documents needing attention')) ?></a>
-                    <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/watch">
+                    <a class="space-action-menu__item" href="/?attention=1&amp;space=<?= (int)$space['id'] ?>"><?= $uiIcon('check') ?><span><?= $e($t('Documents needing attention')) ?></span></a>
+                    <form class="inline-form space-action-menu__form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/watch">
                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                         <input type="hidden" name="enabled" value="<?= $isWatchingSpace ? '0' : '1' ?>">
-                        <button class="button button--ghost" type="submit"><?= $e($t($isWatchingSpace ? 'Stop watching' : 'Watch space')) ?></button>
+                        <button class="space-action-menu__item" type="submit"><?= $uiIcon('eye') ?><span><?= $e($t($isWatchingSpace ? 'Stop watching' : 'Watch space')) ?></span></button>
                     </form>
                 <?php endif; ?>
-                <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/export"><?= $e($t('Export ZIP')) ?></a>
+                <?php if ($canSettings || $currentUser !== null): ?><div class="space-action-menu__divider" aria-hidden="true"></div><?php endif; ?>
+                <a class="space-action-menu__item" href="/spaces/<?= rawurlencode($space['space_key']) ?>/export"><?= $uiIcon('download') ?><span><?= $e($t('Export ZIP')) ?></span></a>
                 <?php if ($canCreatePage): ?>
-                    <a class="button button--ghost" href="/spaces/<?= rawurlencode($space['space_key']) ?>/import"><?= $e($t('Import')) ?></a>
+                    <a class="space-action-menu__item" href="/spaces/<?= rawurlencode($space['space_key']) ?>/import"><?= $uiIcon('upload') ?><span><?= $e($t('Import')) ?></span></a>
                 <?php endif; ?>
                 </div></details>
                 <?php if ($canCreatePage): ?><a class="button button--primary" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create"><?= $e($t('Create page')) ?></a><?php endif; ?>

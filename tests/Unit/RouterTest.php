@@ -26,4 +26,15 @@ final class RouterTest extends TestCase
 
         self::assertSame(['IT', 'linux-networking'], $seen);
     }
+
+    public function testHeadRequestsUseGetRoutes(): void
+    {
+        $app = Application::boot(dirname(__DIR__, 2));
+        $app->router()->get('/', static fn (Request $request): Response => Response::html('home'));
+
+        $response = $app->router()->dispatch(new Request('HEAD', '/', [], [], [], []), $app);
+
+        self::assertSame(200, $response->status());
+        self::assertSame('home', $response->body());
+    }
 }

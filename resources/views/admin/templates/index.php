@@ -1,7 +1,7 @@
 <?php
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 ?>
-<section class="content-container">
+<section class="content-container admin-page">
     <div class="page-heading">
         <div>
             <div class="eyebrow"><?= $e($t('Administration')) ?></div>
@@ -23,18 +23,19 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                         <strong><?= $e($template['name']) ?></strong>
                         <div><?= $e($template['description'] ?? '') ?></div>
                         <small>
-                            <?= $template['is_system'] ? 'System' : 'Custom' ?>
+                            <?= $e($t($template['is_system'] ? 'System' : 'Custom')) ?>
                             <?php if (!$template['is_system'] && !empty($template['creator_username'])): ?>
                                 · <?= $e($template['creator_username']) ?>
                             <?php endif; ?>
-                            · updated <?= $e($template['updated_at']) ?>
+                            · <?= $e($t('Updated')) ?> <?= $e($template['updated_at']) ?>
                         </small>
                     </div>
                     <a class="button button--ghost" href="/admin/templates/<?= (int) $template['id'] ?>/edit">
-                        <?= $template['is_system'] ? 'View' : 'Edit' ?>
+                        <?= $e($t($template['is_system'] ? 'View' : 'Edit')) ?>
                     </a>
                 </div>
             <?php endforeach; ?>
+            <?php if ($templates === []): ?><div class="empty-state"><?= $e($t('No templates are available.')) ?></div><?php endif; ?>
         </div>
     </div>
 </section>

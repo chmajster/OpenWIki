@@ -43,6 +43,18 @@ final class SearchCompletenessTest extends TestCase
         return SearchInput::fromRequest(new Request('GET', '/search', $extra + ['q' => $query, 'type' => 'page'], [], [], []));
     }
 
+    public function testPageSearchResultsIncludeThePageAuthor(): void
+    {
+        $this->fixture(function (Database $db, int $reader, int $owner, int $space): void {
+            $this->page($db, $space, $owner, 'Authored document', 'Searchable content');
+
+            $result = (new SearchService($db))->search($this->input('Authored'), $reader, ['page.view']);
+
+            self::assertCount(1, $result['data']);
+            self::assertSame('needle-owner', $result['data'][0]['author']);
+        });
+    }
+
     public function testAllVisibleHitsBeyondHiddenCandidatesHaveStablePaginationAndFreshAcl(): void
     {
         $this->fixture(function (Database $db, int $reader, int $owner, int $space): void {
