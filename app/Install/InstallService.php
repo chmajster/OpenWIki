@@ -72,6 +72,7 @@ final class InstallService
         if (is_file(RuntimePaths::storage($this->basePath, 'installed.lock'))) throw new \RuntimeException('OpenWiki is already installed.');
         $config = $this->databaseConfig($input);
         $createDatabase = filter_var($input['create_database'] ?? false, FILTER_VALIDATE_BOOL);
+        $fullReinstall = filter_var($input['full_database_reinstall'] ?? false, FILTER_VALIDATE_BOOL);
 
         try {
             $database = Database::connect($config, true);
@@ -79,14 +80,17 @@ final class InstallService
             $tables = $database->fetchAll('SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()');
             $statePath = RuntimePaths::storage($this->basePath, 'installation.json');
             $state = is_file($statePath) ? json_decode((string) file_get_contents($statePath), true) : [];
-            if ($tables !== [] && ($state['target'] ?? '') !== hash('sha256', json_encode($config, JSON_THROW_ON_ERROR))) {
+            if (!$fullReinstall && $tables !== [] && ($state['target'] ?? '') !== hash('sha256', json_encode($config, JSON_THROW_ON_ERROR))) {
                 throw new \RuntimeException('The database is not empty. Choose a new, empty database. Existing data has not been changed.');
             }
 
             return [
                 'ok' => true,
                 'database_exists' => true,
-                'message' => 'Database connection successful.',
+                'database_action' => $fullReinstall ? 'recreate' : 'use',
+                'message' => $fullReinstall
+                    ? 'Database connection successful. Full reinstall will drop and recreate this database during installation.'
+                    : 'Database connection successful.',
             ];
         } catch (\RuntimeException $exception) {
             $previous = $exception->getPrevious();
@@ -94,7 +98,7 @@ final class InstallService
                 ? (int) ($previous->errorInfo[1] ?? 0)
                 : 0;
 
-            if (!$createDatabase || $mysqlError !== 1049) {
+            if ((!$createDatabase && !$fullReinstall) || $mysqlError !== 1049) {
                 throw $exception;
             }
         }
@@ -105,6 +109,7 @@ final class InstallService
         return [
             'ok' => true,
             'database_exists' => false,
+            'database_action' => 'create',
             'message' => 'Server connection successful. The database does not exist yet and will be created during installation.',
         ];
     }
@@ -150,20 +155,30 @@ final class InstallService
             throw new \RuntimeException('Existing application configuration found. Restore its installation marker instead of reinstalling.');
         }
 
-        $server = Database::connect($config['database'], false);
-        if ($config['create_database']) {
-            $databaseName = $config['database']['database'];
-            $server->pdo()->exec(
-                'CREATE DATABASE IF NOT EXISTS `' . $databaseName . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
-            );
-        }
-
-        $database = Database::connect($config['database'], true);
+        $databaseName = $config['database']['database'];
         $lockName = 'openwiki-install-' . substr(hash('sha256', $config['database']['database']), 0, 40);
-        if ((int) ($database->fetchOne('SELECT GET_LOCK(?, 0) AS acquired', [$lockName])['acquired'] ?? 0) !== 1) {
+        $server = Database::connect($config['database'], false);
+        if ((int) ($server->fetchOne('SELECT GET_LOCK(?, 0) AS acquired', [$lockName])['acquired'] ?? 0) !== 1) {
             throw new \RuntimeException('Another installer is using this database. Wait and retry.');
         }
         try {
+            if ($config['full_database_reinstall']) {
+                // Verify CREATE permission before the destructive statement so a DROP-only
+                // account cannot remove a database that it is unable to recreate.
+                $server->pdo()->exec(
+                    'CREATE DATABASE IF NOT EXISTS `' . $databaseName . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
+                );
+                $server->pdo()->exec('DROP DATABASE IF EXISTS `' . $databaseName . '`');
+                $server->pdo()->exec(
+                    'CREATE DATABASE `' . $databaseName . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
+                );
+            } elseif ($config['create_database']) {
+                $server->pdo()->exec(
+                    'CREATE DATABASE IF NOT EXISTS `' . $databaseName . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
+                );
+            }
+
+            $database = Database::connect($config['database'], true);
             $tables = $database->fetchAll('SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()');
             if ($state === null && $tables !== []) {
                 throw new \RuntimeException('The database is not empty. Choose a new, empty database. Existing data has not been changed.');
@@ -217,7 +232,7 @@ final class InstallService
             $this->writePrivateFile(RuntimePaths::storage($this->basePath, 'installed.lock'), $lockData . PHP_EOL);
             @unlink($statePath);
         } finally {
-            try { $database->fetchOne('SELECT RELEASE_LOCK(?)', [$lockName]); }
+            try { $server->fetchOne('SELECT RELEASE_LOCK(?)', [$lockName]); }
             catch (\Throwable) { /* Disconnecting also releases the named lock. */ }
         }
     }
@@ -271,6 +286,7 @@ final class InstallService
             'app' => ['name' => $appName, 'url' => $appUrl, 'timezone' => $timezone],
             'database' => $databaseConfig,
             'create_database' => filter_var($input['create_database'] ?? false, FILTER_VALIDATE_BOOL),
+            'full_database_reinstall' => filter_var($input['full_database_reinstall'] ?? false, FILTER_VALIDATE_BOOL),
             'admin' => [
                 'username' => $username,
                 'email' => $email,
@@ -292,6 +308,9 @@ final class InstallService
         $databaseName = trim((string) ($input['db_database'] ?? ''));
         if (!preg_match('/^[A-Za-z0-9_]{1,64}$/D', $databaseName)) {
             throw new \InvalidArgumentException('Database name may contain only letters, numbers and underscore.');
+        }
+        if (in_array(strtolower($databaseName), ['information_schema', 'mysql', 'performance_schema', 'sys'], true)) {
+            throw new \InvalidArgumentException('System database names cannot be used for OpenWiki installation.');
         }
 
         $port = filter_var(

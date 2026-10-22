@@ -802,6 +802,14 @@ textarea { resize: vertical; }
     padding: 24px;
     position: sticky;
     top: 84px;
+    overflow: hidden;
+}
+.install-sidebar::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 4px;
+    background: linear-gradient(90deg, var(--accent), var(--success));
 }
 .install-sidebar h1 {
     margin: 6px 0 8px;
@@ -877,6 +885,7 @@ textarea { resize: vertical; }
     min-width: 0;
     width: 100%;
     padding: 28px;
+    border-top: 4px solid var(--accent);
 }
 .install-card__header {
     display: flex;
@@ -975,6 +984,23 @@ textarea { resize: vertical; }
     border: 1px solid var(--border);
     border-radius: 9px;
     background: var(--surface-2);
+    cursor: pointer;
+    transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+}
+.install-checkbox:hover {
+    border-color: var(--accent);
+}
+.install-checkbox:has(input:focus-visible) {
+    box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.install-checkbox:has(input:checked) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+.install-checkbox input {
+    flex: 0 0 auto;
+    margin-top: 3px;
+    accent-color: var(--accent);
 }
 .install-checkbox span {
     display: grid;
@@ -984,6 +1010,47 @@ textarea { resize: vertical; }
     color: var(--muted);
     font-weight: 400;
     line-height: 1.4;
+}
+.install-fieldset {
+    min-width: 0;
+    margin: 0;
+    background: color-mix(in srgb, var(--surface-2) 62%, var(--surface));
+}
+.install-fieldset legend {
+    color: var(--text);
+    font-size: .9rem;
+}
+.install-fieldset__description {
+    margin: -3px 0 3px;
+    color: var(--muted);
+    font-size: .82rem;
+    line-height: 1.5;
+}
+.database-options {
+    gap: 10px !important;
+}
+.install-checkbox--danger:has(input:checked) {
+    border-color: var(--danger-border);
+    background: var(--danger-soft);
+}
+.install-checkbox--danger input {
+    accent-color: var(--danger);
+}
+.database-danger-note {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px 12px;
+    align-items: baseline;
+    padding: 12px 14px;
+    border: 1px solid var(--danger-border);
+    border-radius: 9px;
+    color: var(--danger-text);
+    background: var(--danger-soft);
+    font-size: .82rem;
+    line-height: 1.5;
+}
+.database-danger-note strong {
+    white-space: nowrap;
 }
 .timezone-picker {
     display: grid;
@@ -1167,6 +1234,12 @@ textarea { resize: vertical; }
     }
     .database-test__actions .button {
         width: 100%;
+    }
+    .database-danger-note {
+        grid-template-columns: 1fr;
+    }
+    .database-danger-note strong {
+        white-space: normal;
     }
 }
 

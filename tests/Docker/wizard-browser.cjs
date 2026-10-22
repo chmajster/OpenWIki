@@ -17,6 +17,8 @@ const {chromium, expect} = require('@playwright/test');
             await expect(page.locator('[name="db_host"]')).toHaveValue('db');
             await expect(page.locator('[name="db_password"]')).toHaveValue('');
             await expect(page.locator('[name="create_database"]')).toBeDisabled();
+            await expect(page.locator('[name="full_database_reinstall"]')).toBeChecked();
+            await expect(page.locator('[name="full_database_reinstall"]')).toBeEnabled();
             await page.locator('[data-database-test-button]').click();
             await expect(page.locator('[data-database-next]')).toBeEnabled({timeout: 15000});
             await page.locator('[data-database-next]').click();
