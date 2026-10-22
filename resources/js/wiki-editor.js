@@ -201,7 +201,7 @@ if (editorRoot) {
     const recoveryTime = data => Date.parse(/T/.test(data.savedAt) ? data.savedAt : data.savedAt?.replace(' ', 'T') + 'Z') || 0;
     const recoveryDate = data => {
         const time = recoveryTime(data);
-        return time ? new Intl.DateTimeFormat(document.documentElement.lang || 'pl', {dateStyle: 'short', timeStyle: 'short'}).format(new Date(time)) : (data.savedAt || '');
+        return time ? new Intl.DateTimeFormat(document.documentElement.lang || 'pl', {dateStyle: 'short', timeStyle: 'medium'}).format(new Date(time)) : (data.savedAt || '');
     };
     const updateRecoveryMeta = () => {
         const data = recoveryCopies.get(recoverySelect.value);
