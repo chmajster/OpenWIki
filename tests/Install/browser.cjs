@@ -37,6 +37,9 @@ const screenshot = name => path.resolve('storage/temp/install-' + name + '.png')
             await page.locator('[data-wizard-panel="1"] [data-wizard-next]').click();
             await page.locator('[name=app_name]').fill(settings.app_name);
             await page.locator('[data-wizard-panel="2"] [data-wizard-next]').click();
+            await expect(page.locator('[name=create_database]')).toBeChecked();
+            await expect(page.locator('[name=full_database_reinstall]')).toBeChecked();
+            await expect(page.locator('[data-reinstall-warning]')).toBeVisible();
             for (const key of ['db_host', 'db_port', 'db_database', 'db_username', 'db_password']) await page.locator('[name=' + key + ']').fill(settings[key]);
             if (width === 390) {
                 await page.locator('[name=db_host]').fill('localhost;dbname=other');

@@ -13,7 +13,7 @@ final class RuntimePathsTest extends TestCase
     private array $environment = [];
     protected function setUp(): void
     {
-        foreach (['OPENWIKI_CONFIG_DIR', 'OPENWIKI_STORAGE_DIR'] as $key) { $this->environment[$key] = getenv($key); putenv($key); }
+        foreach (['OPENWIKI_CONFIG_DIR', 'OPENWIKI_STORAGE_DIR', 'OPENWIKI_MANAGED_DATABASE'] as $key) { $this->environment[$key] = getenv($key); putenv($key); }
     }
     protected function tearDown(): void
     {
@@ -64,6 +64,32 @@ final class RuntimePathsTest extends TestCase
         } finally {
             $key === false ? putenv('APP_KEY') : putenv('APP_KEY=' . $key);
             unlink($root . '/storage/installed.lock'); rmdir($root . '/storage'); rmdir($root);
+        }
+    }
+    public function testInstallerEnablesDatabaseCreationAndFullReinstallByDefault(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $runtime = sys_get_temp_dir() . '/openwiki-installer-view-' . bin2hex(random_bytes(6));
+        mkdir($runtime, 0700);
+        putenv('OPENWIKI_CONFIG_DIR=' . $runtime);
+        putenv('OPENWIKI_STORAGE_DIR=' . $runtime . '/storage');
+        try {
+            $request = new \OpenWiki\Core\Request('GET', '/install', [], [], ['HTTP_HOST' => 'wiki.example.test'], []);
+            $response = (new \OpenWiki\Http\Controllers\InstallerController(Application::boot($root, false)))->index($request);
+            self::assertSame(200, $response->status());
+            self::assertMatchesRegularExpression('/<input(?=[^>]*name="create_database")(?=[^>]*checked)[^>]*>/', $response->body());
+            self::assertMatchesRegularExpression('/<input(?=[^>]*name="full_database_reinstall")(?=[^>]*checked)[^>]*>/', $response->body());
+            self::assertStringContainsString('data-reinstall-warning', $response->body());
+
+            putenv('OPENWIKI_MANAGED_DATABASE=true');
+            $managed = (new \OpenWiki\Http\Controllers\InstallerController(Application::boot($root, false)))->index($request)->body();
+            self::assertMatchesRegularExpression('/<input(?=[^>]*name="create_database")(?=[^>]*disabled)[^>]*>/', $managed);
+            self::assertMatchesRegularExpression('/<input(?=[^>]*name="full_database_reinstall")(?=[^>]*checked)[^>]*>/', $managed);
+            self::assertDoesNotMatchRegularExpression('/<input(?=[^>]*name="full_database_reinstall")(?=[^>]*disabled)[^>]*>/', $managed);
+        } finally {
+            $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($runtime, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
+            foreach ($iterator as $file) $file->isDir() ? rmdir($file->getPathname()) : unlink($file->getPathname());
+            rmdir($runtime);
         }
     }
     public function testRuntimeStateDoesNotEnableTheSystemUpgradeGate(): void

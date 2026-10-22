@@ -125,9 +125,14 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
     const databaseTestButton = databaseTest?.querySelector('[data-database-test-button]') || null;
     const databaseTestStatus = databaseTest?.querySelector('[data-database-test-status]') || null;
     const databaseNext = wizard.querySelector('[data-database-next]');
+    const createDatabase = form?.elements.namedItem('create_database') || null;
+    const fullDatabaseReinstall = form?.elements.namedItem('full_database_reinstall') || null;
+    const reinstallWarning = wizard.querySelector('[data-reinstall-warning]');
+    const reviewReinstallWarning = wizard.querySelector('[data-review-reinstall-warning]');
+    const databaseModeSummary = wizard.querySelector('[data-database-mode-summary]');
     let currentStep = 1;
     let databaseTestPassed = databaseNext === null;
-    const connectionSnapshot = () => JSON.stringify(['db_host', 'db_port', 'db_database', 'db_username', 'db_password', 'create_database'].map(name => {
+    const connectionSnapshot = () => JSON.stringify(['db_host', 'db_port', 'db_database', 'db_username', 'db_password', 'create_database', 'full_database_reinstall'].map(name => {
         const field = form?.elements.namedItem(name);
         return field?.type === 'checkbox' ? field.checked : field?.value;
     }));
@@ -141,6 +146,17 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
     password?.addEventListener('input', validatePassword);
     confirmation?.addEventListener('input', validatePassword);
 
+    const updateDatabaseMode = () => {
+        const fullReinstallSelected = fullDatabaseReinstall?.checked === true;
+        if (reinstallWarning) reinstallWarning.hidden = !fullReinstallSelected;
+        if (reviewReinstallWarning) reviewReinstallWarning.hidden = !fullReinstallSelected;
+        if (databaseModeSummary) {
+            databaseModeSummary.textContent = t(fullReinstallSelected
+                ? 'Full reinstall (drop and recreate)'
+                : (createDatabase?.checked ? 'Create if missing' : 'Use existing empty database'));
+        }
+    };
+
     const updateSummary = () => {
         if (!form) return;
         wizard.querySelectorAll('[data-wizard-summary]').forEach((target) => {
@@ -149,6 +165,7 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
             if (!field || !('value' in field)) return;
             target.textContent = String(field.value || '—');
         });
+        updateDatabaseMode();
     };
 
     const showStep = (step) => {
@@ -250,7 +267,7 @@ document.querySelectorAll('[data-install-wizard]').forEach((wizard) => {
         form.addEventListener('input', updateSummary);
         form.addEventListener('change', updateSummary);
 
-        ['db_host', 'db_port', 'db_database', 'db_username', 'db_password', 'create_database'].forEach((name) => {
+        ['db_host', 'db_port', 'db_database', 'db_username', 'db_password', 'create_database', 'full_database_reinstall'].forEach((name) => {
             const field = form.elements.namedItem(name);
             if (!field || !('addEventListener' in field)) return;
             field.addEventListener('input', resetDatabaseTest);

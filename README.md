@@ -46,6 +46,8 @@ For Apache, the repository can be extracted directly into the virtual host web r
 
 On the first HTTP request OpenWiki automatically redirects to `/install`. The four-step browser wizard checks the runtime, collects instance settings, configures MySQL/MariaDB, applies migrations, seeds RBAC and system templates, writes `.env`, creates the installation lock and creates the initial Super Admin account.
 
+For a self-managed database, the wizard can create the named database when it is missing. The full database reinstall option is enabled by default: after a successful connection test it drops an existing database and creates it again before applying migrations. Disable it when an existing empty database must be preserved. The wizard shows the destructive action in both the database and review steps.
+
 Choose the initial administrator username, email and a unique password in the final wizard step. There is no default password. The installation lock prevents the graphical installer from running again, including when the instance configuration is lost. Filesystem and database locks serialize installation; interrupted setup can resume without rotating the application key or overwriting the administrator.
 
 ## Production installer

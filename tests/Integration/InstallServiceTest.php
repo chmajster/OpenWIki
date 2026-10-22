@@ -31,7 +31,7 @@ final class InstallServiceTest extends TestCase
     protected function tearDown(): void
     {
         if (!isset($this->basePath)) return;
-        if (isset($this->databaseName)) $this->server()->pdo()->exec('DROP DATABASE `' . $this->databaseName . '`');
+        if (isset($this->databaseName)) $this->server()->pdo()->exec('DROP DATABASE IF EXISTS `' . $this->databaseName . '`');
         if (!str_starts_with($this->basePath, sys_get_temp_dir() . '/openwiki-install-test-')) throw new \RuntimeException('Unexpected test directory.');
         $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($this->basePath, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
         foreach ($files as $file) $file->isDir() ? rmdir($file->getPathname()) : unlink($file->getPathname());
@@ -44,6 +44,39 @@ final class InstallServiceTest extends TestCase
 
         self::assertTrue($result['ok']);
         self::assertTrue($result['database_exists']);
+    }
+
+    public function testMissingDatabaseCanBeCreatedAutomatically(): void
+    {
+        $this->server()->pdo()->exec('DROP DATABASE `' . $this->databaseName . '`');
+        $input = array_replace($this->input(), ['create_database' => true]);
+        $service = new InstallService($this->basePath);
+
+        $result = $service->testDatabaseConnection($input);
+        self::assertFalse($result['database_exists']);
+        self::assertSame('create', $result['database_action']);
+
+        $service->install($input);
+        self::assertNotNull($this->database()->fetchOne('SELECT version FROM schema_migrations LIMIT 1'));
+    }
+
+    public function testFullDatabaseReinstallDropsExistingDataAndCreatesFreshSchema(): void
+    {
+        $database = $this->database();
+        $database->pdo()->exec('CREATE TABLE legacy_data (value INT)');
+        $database->pdo()->exec('INSERT INTO legacy_data VALUES (42)');
+        $input = array_replace($this->input(), ['create_database' => true, 'full_database_reinstall' => true]);
+        $service = new InstallService($this->basePath);
+
+        $result = $service->testDatabaseConnection($input);
+        self::assertSame('recreate', $result['database_action']);
+
+        $service->install($input);
+        $fresh = $this->database();
+        self::assertSame(0, (int) $fresh->fetchOne(
+            'SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = "legacy_data"'
+        )['total']);
+        self::assertNotNull($fresh->fetchOne('SELECT version FROM schema_migrations LIMIT 1'));
     }
 
     public function testMissingBuiltEditorBlocksInstallationBeforeDatabaseChanges(): void
@@ -160,7 +193,7 @@ final class InstallServiceTest extends TestCase
     {
         $service = new InstallService($this->basePath);
         foreach ([['db_host' => 'localhost;dbname=other'], ['admin_password' => 'admin'], ['admin_password' => str_repeat('x', 73)], ['admin_password' => str_repeat('🙂', 6)],
-            ['admin_email' => 'invalid'], ['app_url' => 'https://example.test/subdirectory'], ['db_database' => str_repeat('x', 65)], ['app_name' => ['invalid']]] as $invalid) {
+            ['admin_email' => 'invalid'], ['app_url' => 'https://example.test/subdirectory'], ['db_database' => str_repeat('x', 65)], ['db_database' => 'mysql'], ['app_name' => ['invalid']]] as $invalid) {
             try { $service->install(array_replace($this->input(), $invalid)); self::fail('Invalid input accepted.'); }
             catch (\InvalidArgumentException) { self::assertSame([], $this->database()->fetchAll('SHOW TABLES')); }
         }
@@ -172,6 +205,7 @@ final class InstallServiceTest extends TestCase
             'db_host' => getenv('OPENWIKI_TEST_DB_HOST'), 'db_port' => getenv('OPENWIKI_TEST_DB_PORT'),
             'db_database' => $this->databaseName, 'db_username' => getenv('OPENWIKI_TEST_DB_USERNAME'),
             'db_password' => getenv('OPENWIKI_TEST_DB_PASSWORD'), 'create_database' => false,
+            'full_database_reinstall' => false,
             'admin_username' => 'admin', 'admin_email' => 'admin@example.test', 'admin_password' => 'Install-Test-Password!42'];
     }
 

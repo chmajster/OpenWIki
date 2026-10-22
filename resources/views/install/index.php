@@ -12,6 +12,8 @@ if (!in_array('UTC', $timezones, true)) {
 }
 natcasesort($timezones);
 $timezones = array_values($timezones);
+$createDatabase = !empty($defaults['create_database']);
+$fullDatabaseReinstall = !empty($defaults['full_database_reinstall']);
 ?>
 <section class="install-layout install-layout--wizard">
     <div
@@ -182,31 +184,53 @@ $timezones = array_values($timezones);
                     </div>
 
                     <div class="form-stack">
-                        <div class="form-grid">
-                            <label><?= $e($t('Host')) ?>
-                                <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_host" required value="<?= $value('db_host', '127.0.0.1') ?>">
+                        <fieldset class="install-fieldset">
+                            <legend><?= $e($t('Connection details')) ?></legend>
+                            <p class="install-fieldset__description"><?= $e($t('Server address and credentials used during installation.')) ?></p>
+                            <div class="form-grid">
+                                <label><?= $e($t('Host')) ?>
+                                    <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_host" required value="<?= $value('db_host', '127.0.0.1') ?>">
+                                </label>
+                                <label><?= $e($t('Port')) ?>
+                                    <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_port" type="number" min="1" max="65535" required value="<?= $value('db_port', '3306') ?>">
+                                </label>
+                            </div>
+                            <label><?= $e($t('Database name')) ?>
+                                <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_database" required pattern="[A-Za-z0-9_]+" value="<?= $value('db_database', 'openwiki') ?>">
+                                <span class="field-help"><?= $e($t('Letters, numbers and underscore only.')) ?></span>
                             </label>
-                            <label><?= $e($t('Port')) ?>
-                                <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_port" type="number" min="1" max="65535" required value="<?= $value('db_port', '3306') ?>">
+                            <div class="form-grid">
+                                <label><?= $e($t('Database username')) ?>
+                                    <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_username" required autocomplete="username" value="<?= $value('db_username') ?>">
+                                </label>
+                                <label><?= $e($t('Database password')) ?>
+                                    <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_password" type="password" autocomplete="current-password">
+                                </label>
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="install-fieldset database-options">
+                            <legend><?= $e($t('Database preparation')) ?></legend>
+                            <p class="install-fieldset__description"><?= $e($t('Choose how the installer should prepare the selected database.')) ?></p>
+                            <label class="checkbox-row install-checkbox">
+                                <input <?= !empty($managedDatabase) ? 'disabled' : '' ?> name="create_database" type="checkbox" value="1" <?= $createDatabase ? 'checked' : '' ?>>
+                                <span>
+                                    <strong><?= $e($t('Create the database if it does not exist')) ?></strong>
+                                    <small><?= $e($t('The database account needs CREATE DATABASE permission.')) ?></small>
+                                </span>
                             </label>
-                        </div>
-                        <label><?= $e($t('Database name')) ?>
-                            <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_database" required pattern="[A-Za-z0-9_]+" value="<?= $value('db_database', 'openwiki') ?>">
-                            <span class="field-help"><?= $e($t('Letters, numbers and underscore only.')) ?></span>
-                        </label>
-                        <label><?= $e($t('Database username')) ?>
-                            <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_username" required autocomplete="username" value="<?= $value('db_username') ?>">
-                        </label>
-                        <label><?= $e($t('Database password')) ?>
-                            <input <?= !empty($managedDatabase) ? 'readonly' : '' ?> name="db_password" type="password" autocomplete="current-password">
-                        </label>
-                        <label class="checkbox-row install-checkbox">
-                            <input <?= !empty($managedDatabase) ? 'disabled' : '' ?> name="create_database" type="checkbox" value="1" <?= !empty($defaults['create_database']) ? 'checked' : '' ?>>
-                            <span>
-                                <strong><?= $e($t('Create database automatically if it does not exist')) ?></strong>
-                                <small><?= $e($t('The supplied database account must have CREATE DATABASE permission.')) ?></small>
-                            </span>
-                        </label>
+                            <label class="checkbox-row install-checkbox install-checkbox--danger">
+                                <input name="full_database_reinstall" type="checkbox" value="1" <?= $fullDatabaseReinstall ? 'checked' : '' ?> data-full-database-reinstall>
+                                <span>
+                                    <strong><?= $e($t('Full database reinstall')) ?></strong>
+                                    <small><?= $e($t('Enabled by default. If the database exists, it will be dropped and created again before migrations run.')) ?></small>
+                                </span>
+                            </label>
+                            <div class="database-danger-note" data-reinstall-warning role="alert" <?= $fullDatabaseReinstall ? '' : 'hidden' ?>>
+                                <strong><?= $e($t('Permanent data deletion')) ?></strong>
+                                <span><?= $e($t('Warning: full reinstall permanently deletes every table and all data in the selected database.')) ?></span>
+                            </div>
+                        </fieldset>
 
                         <?php if (!empty($managedDatabase)): ?><p class="muted">Docker: baza i konto są przygotowane. Hasło pochodzi z prywatnej konfiguracji kontenera; nie wpisuj go w formularzu.</p><?php endif; ?>
                         <div class="database-test" data-database-test data-test-url="/install/test-database">
@@ -248,7 +272,13 @@ $timezones = array_values($timezones);
                         <div><dt><?= $e($t('URL')) ?></dt><dd data-wizard-summary="app_url"><?= $value('app_url') ?></dd></div>
                         <div><dt><?= $e($t('Timezone')) ?></dt><dd data-wizard-summary="timezone"><?= $value('timezone', 'UTC') ?></dd></div>
                         <div><dt><?= $e($t('Database')) ?></dt><dd><span data-wizard-summary="db_host"><?= $value('db_host', '127.0.0.1') ?></span>:<span data-wizard-summary="db_port"><?= $value('db_port', '3306') ?></span> / <span data-wizard-summary="db_database"><?= $value('db_database', 'openwiki') ?></span></dd></div>
+                        <div><dt><?= $e($t('Database preparation')) ?></dt><dd data-database-mode-summary><?= $e($t($fullDatabaseReinstall ? 'Full reinstall (drop and recreate)' : ($createDatabase ? 'Create if missing' : 'Use existing empty database'))) ?></dd></div>
                     </dl>
+
+                    <div class="database-danger-note" data-review-reinstall-warning role="alert" <?= $fullDatabaseReinstall ? '' : 'hidden' ?>>
+                        <strong><?= $e($t('Full database reinstall is selected')) ?></strong>
+                        <span><?= $e($t('Installing will permanently delete all existing data in this database.')) ?></span>
+                    </div>
 
                     <div class="form-stack">
                         <h4><?= $e($t('Initial administrator')) ?></h4>

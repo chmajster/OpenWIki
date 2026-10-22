@@ -24,6 +24,7 @@ final class InstallerController extends Controller
         }
 
         $service = new InstallService($this->app->basePath());
+        $managedDatabase = Env::bool('OPENWIKI_MANAGED_DATABASE');
 
         return $this->render('install/index', [
             'title' => 'Install OpenWiki',
@@ -35,11 +36,12 @@ final class InstallerController extends Controller
                 'db_host' => Env::get('DB_HOST', '127.0.0.1'),
                 'db_port' => Env::get('DB_PORT', '3306'),
                 'db_database' => Env::get('DB_DATABASE', 'openwiki'),
-                'db_username' => Env::bool('OPENWIKI_MANAGED_DATABASE') ? Env::get('DB_USERNAME') : '',
-                'create_database' => false,
+                'db_username' => $managedDatabase ? Env::get('DB_USERNAME') : '',
+                'create_database' => !$managedDatabase,
+                'full_database_reinstall' => true,
                 'admin_username' => 'admin',
             ],
-            'managedDatabase' => Env::bool('OPENWIKI_MANAGED_DATABASE'),
+            'managedDatabase' => $managedDatabase,
         ]);
     }
 
@@ -98,7 +100,7 @@ final class InstallerController extends Controller
             return $this->render('install/index', [
                 'title' => 'Install OpenWiki',
                 'requirements' => (new InstallService($this->app->basePath()))->requirements(),
-                'defaults' => array_filter(array_intersect_key($this->installationInput($request), array_flip(['app_name', 'app_url', 'timezone', 'db_host', 'db_port', 'db_database', 'db_username', 'create_database', 'admin_username', 'admin_email'])), 'is_scalar'),
+                'defaults' => array_filter(array_intersect_key($this->installationInput($request), array_flip(['app_name', 'app_url', 'timezone', 'db_host', 'db_port', 'db_database', 'db_username', 'create_database', 'full_database_reinstall', 'admin_username', 'admin_email'])), 'is_scalar'),
                 'managedDatabase' => Env::bool('OPENWIKI_MANAGED_DATABASE'),
                 'installError' => $this->failureMessage($exception),
             ], 422);
