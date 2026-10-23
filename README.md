@@ -32,6 +32,10 @@ Archiwum **Source code / Download ZIP** z GitHub zawiera źródła i wymaga poni
 
 Wdrożenie pod adresem głównym domeny jest obsługiwane; instalacja w podkatalogu URL nie jest obsługiwana. Dla Nginx ustaw katalog WWW na `public/` i regułę `try_files $uri $uri/ /index.php?$query_string` — Nginx nie czyta `.htaccess`. Zadania planowane (kolejki webhooków, przypomnienia i konserwacja) wymagają cyklicznego `php /pełna/ścieżka/bin/console cron:run`, które można ustawić w panelu hostingu; ich stan jest widoczny w Administracja → Informacje o systemie.
 
+### Błąd „No input file specified.”
+
+Ten tekst generuje PHP-FPM, zanim OpenWiki uruchomi router. Oznacza zwykle, że serwer WWW przekazał do PHP nieistniejącą ścieżkę skryptu albo nie skierował żądania do front controllera. Dla Nginx ustaw katalog dokumentów na `public/`, kieruj nieistniejące adresy przez `try_files $uri /index.php?$query_string` i w lokalizacji PHP przekazuj prawidłowy `SCRIPT_FILENAME` (na przykład `$document_root$fastcgi_script_name`). Dla Apache sprawdź, czy ukryty plik `.htaccess` został wgrany, `mod_rewrite` jest aktywny, a konfiguracja domeny zezwala na `AllowOverride All`. W przypadku adresu `/spaces/.../pages/...` żądanie powinno trafić do `public/index.php`; jeśli router je otrzyma, brak strony pokaże aplikacyjną stronę 404.
+
 ## Install from source
 
 ```bash

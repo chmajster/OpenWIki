@@ -27,6 +27,7 @@ final class ApplicationErrorResponse
             ? '<details class="system-error-details"><summary>' . $e($t('Technical details')) . '</summary><pre>'
                 . $e($error::class . ': ' . $error->getMessage()) . '</pre></details>'
             : '';
+        $statusLabel = $failure['status'] === 503 ? 'Service temporarily unavailable' : 'Unexpected error';
 
         $body = '<!doctype html><html lang="' . $e($locale) . '"><head>'
             . '<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -35,7 +36,7 @@ final class ApplicationErrorResponse
             . '</head><body><main class="system-error-layout" id="main-content">'
             . '<section class="card system-error-card" role="alert">'
             . '<div class="system-error-brand"><span aria-hidden="true">OW</span><strong>OpenWiki</strong></div>'
-            . '<div class="system-error-status">' . $e($t('Service temporarily unavailable')) . '</div>'
+            . '<div class="system-error-status">' . $e($t($statusLabel)) . '</div>'
             . '<h1>' . $e($t($failure['title'])) . '</h1>'
             . '<p class="system-error-message">' . $e($t($failure['message'])) . '</p>'
             . '<div class="system-error-advice"><strong>' . $e($t('How to fix it')) . '</strong><p>'
@@ -48,10 +49,9 @@ final class ApplicationErrorResponse
                 . $e($t('Technical status')) . '</a></div>'
             . '</section></main></body></html>';
 
-        return Response::html($body, $failure['status'], [
-            'Cache-Control' => 'no-store',
-            'Retry-After' => '30',
-        ]);
+        $headers = ['Cache-Control' => 'no-store'];
+        if ($failure['status'] === 503) $headers['Retry-After'] = '30';
+        return Response::html($body, $failure['status'], $headers);
     }
 
     /** @return array{code: string, title: string, message: string, action: string, status: int}|null */

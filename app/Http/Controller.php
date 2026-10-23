@@ -64,7 +64,8 @@ abstract class Controller
 
     protected function render(string $template, array $data = [], int $status = 200): Response
     {
-        return Response::html($this->app->view()->render($template, $data), $status);
+        $headers = $status >= 400 ? ['Cache-Control' => 'no-store'] : [];
+        return Response::html($this->app->view()->render($template, $data), $status, $headers);
     }
 
     protected function requireAuth(Request $request): ?Response
@@ -92,9 +93,7 @@ abstract class Controller
             return null;
         }
 
-        return $request->expectsJson()
-            ? Response::json(['error' => ['code' => 'forbidden', 'message' => 'Permission denied.']], 403)
-            : $this->render('errors/403', ['title' => 'Permission denied'], 403);
+        return \OpenWiki\Core\HttpErrorResponse::response($this->app, $request, 403);
     }
 
     protected function verifyCsrf(Request $request): ?Response
@@ -104,8 +103,6 @@ abstract class Controller
             return null;
         }
 
-        return $request->expectsJson()
-            ? Response::json(['error' => ['code' => 'csrf_failed', 'message' => 'Invalid CSRF token.']], 419)
-            : $this->render('errors/419', ['title' => 'Session expired'], 419);
+        return \OpenWiki\Core\HttpErrorResponse::response($this->app, $request, 419);
     }
 }

@@ -66,15 +66,17 @@ final class Router
     {
         $path = $this->normalizePath($request->path());
         $method = $request->method() === 'HEAD' ? 'GET' : $request->method();
+        $pathMatched = false;
+        $allowedMethods = [];
 
         foreach ($this->routes as $route) {
-            if ($route['method'] !== $method) {
-                continue;
-            }
-
             if (!preg_match($route['regex'], $path, $matches)) {
                 continue;
             }
+
+            $pathMatched = true;
+            $allowedMethods[] = $route['method'];
+            if ($route['method'] !== $method) continue;
 
             $params = [];
             foreach ($matches as $key => $value) {
@@ -97,9 +99,20 @@ final class Router
             return $response;
         }
 
-        return $request->expectsJson()
-            ? Response::json(['error' => ['code' => 'not_found', 'message' => 'Resource not found.']], 404)
-            : Response::html($app->view()->render('errors/404', ['title' => 'Page not found']), 404);
+        if (!$pathMatched) {
+            return HttpErrorResponse::response($app, $request, 404);
+        }
+
+        if (in_array('GET', $allowedMethods, true)) $allowedMethods[] = 'HEAD';
+        $allowedMethods[] = 'OPTIONS';
+        $allowedMethods = array_values(array_unique($allowedMethods));
+        $allowHeader = implode(', ', $allowedMethods);
+
+        if ($request->method() === 'OPTIONS') {
+            return new Response('', 204, ['Allow' => $allowHeader]);
+        }
+
+        return HttpErrorResponse::response($app, $request, 405, headers: ['Allow' => $allowHeader]);
     }
 
     private function normalizePath(string $path): string
