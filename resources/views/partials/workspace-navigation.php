@@ -1,5 +1,5 @@
 <?php
-$navigationEntries = ['home' => ['home', 'Home'], 'recent' => ['clock', 'Recently viewed'], 'favorites' => ['star', 'Favorites'], 'work' => ['check', 'Your work'], 'spaces' => ['spaces', 'Spaces']];
+$navigationEntries = ['home' => ['home', 'Home'], 'recent' => ['clock', 'Recently viewed'], 'favorites' => ['star', 'Favorites'], 'popular' => ['trending', 'Popular'], 'work' => ['check', 'Your work'], 'spaces' => ['spaces', 'Spaces']];
 $navigationView = $data['dashboardView'] ?? null;
 ?>
 <aside class="workspace-navigation" id="workspace-navigation" data-workspace-navigation data-page-panel aria-label="<?= $e($t('Workspace navigation')) ?>">
@@ -26,6 +26,7 @@ $navigationView = $data['dashboardView'] ?? null;
             <nav class="navigation-space-links" aria-label="<?= $e($t('Space navigation')) ?>">
                 <a class="navigation-link<?= $template === 'spaces/show' && ($spaceTab ?? '') === 'overview' ? ' is-active' : '' ?>" href="/spaces/<?= rawurlencode($space['space_key']) ?>"<?= $template === 'spaces/show' && ($spaceTab ?? '') === 'overview' ? ' aria-current="page"' : '' ?>><?= $uiIcon('home') ?><span><?= $e($t('Overview')) ?></span></a>
                 <a class="navigation-link<?= $template === 'spaces/show' && ($spaceTab ?? '') === 'content' ? ' is-active' : '' ?>" href="/spaces/<?= rawurlencode($space['space_key']) ?>?tab=content"<?= $template === 'spaces/show' && ($spaceTab ?? '') === 'content' ? ' aria-current="page"' : '' ?>><?= $uiIcon('document') ?><span><?= $e($t('All pages')) ?></span></a>
+                <a class="navigation-link<?= $template === 'spaces/news' || $template === 'spaces/news-form' ? ' is-active' : '' ?>" href="/spaces/<?= rawurlencode($space['space_key']) ?>/news"<?= $template === 'spaces/news' || $template === 'spaces/news-form' ? ' aria-current="page"' : '' ?>><?= $uiIcon('megaphone') ?><span><?= $e($t('News')) ?></span></a>
                 <?php if ($navigationCanCreate): ?><a class="navigation-link<?= $template === 'pages/templates' ? ' is-active' : '' ?>" href="/spaces/<?= rawurlencode($space['space_key']) ?>/templates"<?= $template === 'pages/templates' ? ' aria-current="page"' : '' ?>><?= $uiIcon('spaces') ?><span><?= $e($t('Templates')) ?></span></a><?php endif; ?>
             </nav>
             <div class="navigation-section-heading"><h2><?= $uiIcon('document') ?><span><?= $e($t('Pages')) ?></span></h2><?php if ($navigationCanCreate): ?><a class="shell-icon-button" href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/create" aria-label="<?= $e($t('Create page')) ?>"><?= $uiIcon('plus') ?></a><?php endif; ?></div>

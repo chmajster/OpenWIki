@@ -2,6 +2,8 @@
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $displayName = trim((string) ($profile['first_name'] ?? '') . ' ' . (string) ($profile['last_name'] ?? ''));
 if ($displayName === '') $displayName = (string) $profile['username'];
+$dateFormat = (string) ($profile['date_format'] ?? 'locale');
+$datePreview = \OpenWiki\Core\DateFormatter::formatDateTime('2026-10-23 15:45:00', $dateFormat, $locale);
 ?>
 <section class="content-container account-settings-page">
     <header class="page-heading">
@@ -44,8 +46,18 @@ if ($displayName === '') $displayName = (string) $profile['username'];
 
         <section class="card account-settings-card">
             <h2><?= $e($t('Preferences')) ?></h2>
-            <p class="muted"><?= $e($t('Choose the language used for the interface.')) ?></p>
+            <p class="muted"><?= $e($t('Choose your language and date display format.')) ?></p>
             <?php require __DIR__ . '/../partials/language-form.php'; ?>
+            <form method="post" action="/account/preferences" class="account-date-format-form">
+                <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
+                <label for="account-date-format"><?= $e($t('Date format')) ?>
+                    <select id="account-date-format" name="date_format">
+                        <?php foreach ($dateFormats as $value => $label): ?><option value="<?= $e($value) ?>" <?= $dateFormat === $value ? 'selected' : '' ?>><?= $e($t($label)) ?></option><?php endforeach; ?>
+                    </select>
+                </label>
+                <button class="button button--secondary" type="submit"><?= $e($t('Save preferences')) ?></button>
+            </form>
+            <p class="field-help account-date-format-preview"><?= $e($t('Date preview')) ?>: <strong><?= $e($datePreview) ?></strong></p>
             <p class="field-help account-settings-theme-help"><?= $e($t('Change the color theme from the appearance button in the top bar.')) ?></p>
         </section>
     </div>

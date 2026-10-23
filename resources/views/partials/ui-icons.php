@@ -26,6 +26,10 @@ $uiIcon = static function (string $name): string {
         'edit' => '<path d="m15 4 5 5-11 11H4v-5ZM12 7l5 5"/>',
         'link' => '<path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.2 1.2M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7.1l1.2-1.2"/>',
         'arrow' => '<path d="M4 12h16m-6-6 6 6-6 6"/>',
+        'megaphone' => '<path d="m3 11 18-5v12L3 13v-2Z"/><path d="M11.6 15.4 13 21l3-1-1.5-4.3M5 13.5V18h4"/>',
+        'trending' => '<path d="m3 17 6-6 4 4 8-9M15 6h6v6"/>',
+        'shield' => '<path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m9 12 2 2 4-4"/>',
+        'move' => '<rect x="4" y="4" width="10" height="10" rx="2"/><path d="M14 9h5m-2-2 2 2-2 2M10 14v5m-2-2 2 2 2-2"/>',
     ];
     return '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($paths[$name] ?? $paths['document']) . '</svg>';
 };

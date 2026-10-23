@@ -212,6 +212,9 @@ final class PageController extends Controller
         $contentOwnerName = $this->app->database()->fetchOne('SELECT username FROM users WHERE id = ?', [$page['content_owner_id']])['username'] ?? 'Nieaktywne konto';
         $rendered = (new MacroService($this->app))->renderPage($page, $space);
         if ($page['published_revision'] !== null && ((bool) $space['review_workflow'] || $headVersion > (int) $page['published_revision'])) $rendered['html'] = (new \OpenWiki\Wiki\RevisionAccessService($this->app->database()))->renderedHtml($rendered['html'], (int) $page['id'], (int) $page['published_revision']);
+        $comments = (new CommentService($this->app->database()))->listForPage((int) $page['id'], isset($user['id']) ? (int) $user['id'] : null);
+        $reactions = new \OpenWiki\Wiki\ReactionService($this->app->database());
+        $canReact = $user !== null && $space['status'] === 'active' && $page['status'] !== 'archived' && $page['published_revision'] !== null;
 
         return $this->render('pages/show', [
             'structureEnabled' => true,
@@ -221,15 +224,19 @@ final class PageController extends Controller
             'pages' => [],
             'breadcrumbs' => (new \OpenWiki\Spaces\DocumentationTreeService($this->app))->breadcrumbs($space, $page, $user['id'] ?? null, $this->app->auth()->can('*'), $this->app->auth()->can('page.view')),
             'canEdit' => $pageAccess->canEdit($page, $space),
+            'dateFormat' => (string) ($user['date_format'] ?? 'locale'),
             'canReadWorking' => $workingAccess, 'headVersion' => $headVersion, 'contentOwnerName' => $contentOwnerName,
             'canMove' => $pageAccess->can($page, $space, 'page.move'),
             'canCopy' => $user !== null && $this->app->auth()->can('page.create'),
             'visibleParentId' => $page['parent_id'] === null ? null : (($parent = $repository->findById((int) $page['parent_id'])) !== null && $pageAccess->canView($parent, $space) ? (int) $parent['id'] : null),
             'canManagePermissions' => $pageAccess->canEdit($page, $space),
+            'canReact' => $canReact,
+            'pageReactions' => $reactions->pageSummary((int) $page['id'], isset($user['id']) ? (int) $user['id'] : null),
+            'commentReactions' => $reactions->commentSummaries(array_column($comments, 'id'), isset($user['id']) ? (int) $user['id'] : null),
             'canDeletePage' => $user !== null && $pageAccess->can($page, $space, 'page.delete'),
             'isFavorite' => $user !== null && $engagement->isFavorite((int) $user['id'], (int) $page['id']),
             'isWatching' => $user !== null && $engagement->isWatching((int) $user['id'], 'page', (int) $page['id']),
-            'comments' => (new CommentService($this->app->database()))->listForPage((int) $page['id'], isset($user['id']) ? (int) $user['id'] : null),
+            'comments' => $comments,
             'canComment' => $user !== null && $space['status'] === 'active' && $page['status'] !== 'archived' && $this->app->auth()->can('comment.create'),
             'canDeleteComment' => $user !== null && $space['status'] === 'active' && $page['status'] !== 'archived' && $this->app->auth()->can('comment.delete'),
             'attachments' => (new \OpenWiki\Attachments\AttachmentVisibility($this->app->database()))->forPage((new AttachmentService($this->app->database(), $this->app->basePath()))->listForPage((int) $page['id'], true), $user['id'] ?? null, $this->app->auth()->can('*')),

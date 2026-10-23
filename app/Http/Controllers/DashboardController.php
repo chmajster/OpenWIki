@@ -19,7 +19,7 @@ final class DashboardController extends Controller
     {
         $user = $this->app->auth()->user();
         $view = $request->query('view', array_intersect(array_keys((array) $request->query()), ['attention', 'type', 'status', 'deadline', 'sort', 'space', 'page']) !== [] ? 'work' : 'home');
-        if (!is_string($view) || !in_array($view, ['home', 'recent', 'favorites', 'work', 'spaces'], true)) {
+        if (!is_string($view) || !in_array($view, ['home', 'recent', 'favorites', 'popular', 'work', 'spaces'], true)) {
             return $this->render('errors/404', ['title' => 'Page not found'], 404);
         }
         if ($user === null && in_array($view, ['recent', 'favorites', 'work'], true)) return Response::redirect('/login');
@@ -73,9 +73,12 @@ final class DashboardController extends Controller
                 return $pageAccess->canView($page, $space);
             }));
         };
+        $popular = $view === 'popular'
+            ? array_slice($filterAccessible((new \OpenWiki\Wiki\ReactionService($this->app->database()))->popularPages()), 0, 20)
+            : [];
 
         return $this->render('dashboard/index', [
-            'title' => ['home' => 'Home', 'recent' => 'Recently viewed', 'favorites' => 'Favorites', 'work' => 'Your work', 'spaces' => 'Spaces'][$view],
+            'title' => ['home' => 'Home', 'recent' => 'Recently viewed', 'favorites' => 'Favorites', 'popular' => 'Popular', 'work' => 'Your work', 'spaces' => 'Spaces'][$view],
             'dashboardView' => $view,
             'workCenter' => $workCenter,
             'spaces' => $spaces,
@@ -88,6 +91,7 @@ final class DashboardController extends Controller
             'favorites' => $user === null || $view !== 'favorites' ? [] : $filterAccessible(
                 (new PageEngagementService($this->app->database()))->favoritesForUser((int) $user['id'], 20)
             ),
+            'popular' => $popular,
             'canCreateSpace' => $this->app->auth()->can('space.create'),
         ]);
     }

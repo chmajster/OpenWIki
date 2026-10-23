@@ -64,22 +64,22 @@ $typeLabels = [
                 <label class="search-filter-chip"><span><?= $e($t('Last updated')) ?></span><select name="updated_period" data-search-updated-period>
                     <?php foreach (['any' => 'Any time', 'today' => 'Today', 'yesterday' => 'Yesterday', '7' => 'Past 7 days', '30' => 'Past 30 days', '365' => 'Past year', 'custom' => 'Custom range'] as $value => $label): ?><option value="<?= $e($value) ?>" <?= $updatedPeriod === $value ? 'selected' : '' ?>><?= $e($t($label)) ?></option><?php endforeach; ?>
                 </select></label>
-                <details class="search-filter-popover" <?= !empty($filters['space']) ? 'open' : '' ?>>
+                <details class="search-filter-popover" name="search-filter-popovers">
                     <summary><?= $e($t('Space')) ?><?php if (!empty($filters['space'])): ?><span class="search-filter-chip__value"><?= $e($filters['space']) ?></span><?php endif; ?><span class="search-filter-chevron" aria-hidden="true"></span></summary>
                     <div class="search-filter-popover__panel"><label><?= $e($t('Space')) ?><input name="space" maxlength="191" value="<?= $e($filters['space'] ?? '') ?>" placeholder="<?= $e($t('Key or name')) ?>"></label></div>
                 </details>
-                <details class="search-filter-popover" <?= $searchAuthor !== '' ? 'open' : '' ?>>
+                <details class="search-filter-popover" name="search-filter-popovers">
                     <summary><?= $e($t('Edited or created by')) ?><?php if ($searchAuthor !== ''): ?><span class="search-filter-chip__value"><?= $e($searchAuthor) ?></span><?php endif; ?><span class="search-filter-chevron" aria-hidden="true"></span></summary>
                     <div class="search-filter-popover__panel"><label><?= $e($t('Username')) ?><input name="author" maxlength="100" value="<?= $e($searchAuthor) ?>" placeholder="<?= $e($t('Username')) ?>"></label></div>
                 </details>
-                <details class="search-filter-popover" <?= !empty($filters['tag']) ? 'open' : '' ?>>
+                <details class="search-filter-popover" name="search-filter-popovers">
                     <summary><?= $e($t('Label')) ?><?php if (!empty($filters['tag'])): ?><span class="search-filter-chip__value"><?= $e($filters['tag']) ?></span><?php endif; ?><span class="search-filter-chevron" aria-hidden="true"></span></summary>
                     <div class="search-filter-popover__panel"><label><?= $e($t('Label')) ?><input name="tag" maxlength="100" value="<?= $e($filters['tag'] ?? '') ?>" placeholder="<?= $e($t('Tag name or slug')) ?>"></label></div>
                 </details>
                 <label class="search-filter-chip"><span><?= $e($t('Type')) ?></span><select name="type">
                     <?php foreach ($types as $searchType): ?><option value="<?= $e($searchType) ?>" <?= $type === $searchType ? 'selected' : '' ?>><?= $e($t($typeLabels[$searchType] ?? ucfirst($searchType))) ?></option><?php endforeach; ?>
                 </select></label>
-                <details class="search-filter-popover search-more-filters" <?= $searchAdvancedOpen ? 'open' : '' ?>>
+                <details class="search-filter-popover search-more-filters" name="search-filter-popovers" <?= $searchAdvancedOpen ? 'open' : '' ?>>
                     <summary><span aria-hidden="true">+</span><?= $e($t('More filters')) ?><span class="search-filter-chevron" aria-hidden="true"></span></summary>
                     <div class="search-filter-popover__panel search-more-filters__panel">
                         <label><?= $e($t('Revision visibility')) ?><select name="visibility">

@@ -13,6 +13,14 @@
     };
 
     document.querySelectorAll('[data-search-form]').forEach(form => {
+        const filterPopovers = [...form.querySelectorAll('.search-filter-row > .search-filter-popover')];
+        filterPopovers.forEach(popover => popover.addEventListener('toggle', () => {
+            if (!popover.open) return;
+            filterPopovers.forEach(other => {
+                if (other !== popover) other.open = false;
+            });
+        }));
+
         const input = form.querySelector('[data-search-query]');
         const globalPanel = form.querySelector('[data-global-search-panel]');
         const globalMode = Boolean(globalPanel);

@@ -40,7 +40,7 @@ final class AuthService
         }
 
         $this->user = $this->app->database()->fetchOne(
-            'SELECT id, username, email, first_name, last_name, avatar_path, status, force_password_change
+            'SELECT id, username, email, first_name, last_name, avatar_path, date_format, status, force_password_change
              FROM users
              WHERE id = :id AND deleted_at IS NULL
              LIMIT 1',

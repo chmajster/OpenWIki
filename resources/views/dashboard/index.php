@@ -1,9 +1,10 @@
 <?php
 require __DIR__ . '/../partials/ui-icons.php';
-$viewLabels = ['home' => 'For you', 'recent' => 'Recently viewed', 'favorites' => 'Favorites', 'work' => 'Your work', 'spaces' => 'Spaces'];
+$viewLabels = ['home' => 'For you', 'recent' => 'Recently viewed', 'favorites' => 'Favorites', 'popular' => 'Popular', 'work' => 'Your work', 'spaces' => 'Spaces'];
 $listPages = match ($dashboardView) {
     'recent' => $recentViewed,
     'favorites' => $favorites,
+    'popular' => $popular,
     default => $recentViewed !== [] ? $recentViewed : $recentUpdated,
 };
 ?>
@@ -18,7 +19,7 @@ $listPages = match ($dashboardView) {
     </div>
     <?php if ($dashboardView !== 'spaces'): ?>
         <nav class="workspace-tabs" aria-label="<?= $e($t('Home views')) ?>">
-            <?php foreach (['home', 'recent', 'favorites', 'work'] as $tab): if ($currentUser === null && $tab !== 'home') continue; ?>
+            <?php foreach (['home', 'recent', 'favorites', 'popular', 'work'] as $tab): if ($currentUser === null && !in_array($tab, ['home', 'popular'], true)) continue; ?>
                 <a href="/<?= $tab === 'home' ? '' : '?view=' . $tab ?>"<?= $dashboardView === $tab ? ' aria-current="page"' : '' ?>><?= $e($t($viewLabels[$tab])) ?></a>
             <?php endforeach; ?>
         </nav>
@@ -43,15 +44,15 @@ $listPages = match ($dashboardView) {
             <?php if ($dashboardView === 'spaces'): require __DIR__ . '/../partials/browse-pagination.php'; endif; ?>
         </section>
     <?php endif; ?>
-    <?php if (in_array($dashboardView, ['home', 'recent', 'favorites'], true)): ?>
+    <?php if (in_array($dashboardView, ['home', 'recent', 'favorites', 'popular'], true)): ?>
         <section class="home-section" aria-labelledby="home-documents-heading">
-            <div class="panel__header"><h2 id="home-documents-heading"><?= $e($t($dashboardView === 'favorites' ? 'Favorites' : ($dashboardView === 'recent' || $recentViewed !== [] ? 'Recently viewed' : 'Recently updated'))) ?></h2></div>
+            <div class="panel__header"><h2 id="home-documents-heading"><?= $e($t($dashboardView === 'favorites' ? 'Favorites' : ($dashboardView === 'popular' ? 'Popular pages' : ($dashboardView === 'recent' || $recentViewed !== [] ? 'Recently viewed' : 'Recently updated')))) ?></h2></div>
             <?php if ($listPages === []): ?>
-                <div class="workspace-empty"><?= $uiIcon($dashboardView === 'favorites' ? 'star' : 'document') ?><h3><?= $e($t($dashboardView === 'favorites' ? 'Keep useful pages close' : 'Make room for your next idea')) ?></h3><p><?= $e($t($dashboardView === 'favorites' ? 'Save a page with Favorite in its actions menu to find it here.' : 'Pages you open will appear here.')) ?></p><a class="button button--secondary" href="/?view=spaces"><?= $e($t('Browse all spaces')) ?></a></div>
+                <div class="workspace-empty"><?= $uiIcon($dashboardView === 'favorites' ? 'star' : ($dashboardView === 'popular' ? 'trending' : 'document')) ?><h3><?= $e($t($dashboardView === 'favorites' ? 'Keep useful pages close' : ($dashboardView === 'popular' ? 'No popular pages yet' : 'Make room for your next idea'))) ?></h3><p><?= $e($t($dashboardView === 'favorites' ? 'Save a page with Favorite in its actions menu to find it here.' : ($dashboardView === 'popular' ? 'Pages with the most reactions will appear here.' : 'Pages you open will appear here.'))) ?></p><a class="button button--secondary" href="/?view=spaces"><?= $e($t('Browse all spaces')) ?></a></div>
             <?php else: ?>
                 <ul class="home-document-list">
                     <?php foreach ($listPages as $homePage): ?>
-                        <li><a href="/spaces/<?= rawurlencode($homePage['space_key']) ?>/pages/<?= rawurlencode($homePage['slug']) ?>"><span class="document-list-icon"><?= $uiIcon('document') ?></span><span class="document-list-title"><strong><?= $e($homePage['title']) ?></strong><small><?= $e($homePage['space_name']) ?></small></span><span class="document-list-date"><?= $e($homePage['updated_at']) ?></span><?= $uiIcon('chevron') ?></a></li>
+                        <li><a href="/spaces/<?= rawurlencode($homePage['space_key']) ?>/pages/<?= rawurlencode($homePage['slug']) ?>"><span class="document-list-icon"><?= $uiIcon('document') ?></span><span class="document-list-title"><strong><?= $e($homePage['title']) ?></strong><small><?= $e($homePage['space_name']) ?></small></span><?php if (isset($homePage['reaction_count'])): ?><span class="document-list-reactions" aria-label="<?= $e($t('Reactions')) ?>">👍 <?= (int) $homePage['reaction_count'] ?></span><?php endif; ?><span class="document-list-date"><?= $e($homePage['updated_at']) ?></span><?= $uiIcon('chevron') ?></a></li>
                     <?php endforeach; ?>
                 </ul>
             <?php endif; ?>

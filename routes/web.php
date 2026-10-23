@@ -26,6 +26,8 @@ use OpenWiki\Http\Controllers\PageDraftController;
 use OpenWiki\Http\Controllers\PageEngagementController;
 use OpenWiki\Http\Controllers\SearchController;
 use OpenWiki\Http\Controllers\SpaceController;
+use OpenWiki\Http\Controllers\SpaceNewsController;
+use OpenWiki\Http\Controllers\ReactionController;
 use OpenWiki\Http\Controllers\SystemAdminController;
 use OpenWiki\Http\Controllers\TemplateAdminController;
 use OpenWiki\Http\Controllers\TrashController;
@@ -48,6 +50,7 @@ $router->post('/logout', [AuthController::class, 'logout']);
 $router->get('/mfa/challenge', [MfaController::class, 'challenge']);
 $router->post('/mfa/challenge', [MfaController::class, 'verify']);
 $router->get('/account', [AccountController::class, 'index']);
+$router->post('/account/preferences', [AccountController::class, 'savePreferences']);
 $router->get('/account/mfa/setup', [MfaController::class, 'setup']);
 $router->post('/account/mfa/confirm', [MfaController::class, 'confirm']);
 
@@ -61,6 +64,12 @@ $router->post('/structure/pages/{id}/preview', [\OpenWiki\Http\Controllers\Struc
 $router->post('/structure/pages/{id}', [\OpenWiki\Http\Controllers\StructureController::class, 'commit']);
 $router->post('/spaces', [SpaceController::class, 'store']);
 $router->get('/spaces/{spaceKey}', [SpaceController::class, 'show']);
+$router->get('/spaces/{spaceKey}/news', [SpaceNewsController::class, 'index']);
+$router->get('/spaces/{spaceKey}/news/create', [SpaceNewsController::class, 'create']);
+$router->post('/spaces/{spaceKey}/news', [SpaceNewsController::class, 'store']);
+$router->get('/spaces/{spaceKey}/news/{id}/edit', [SpaceNewsController::class, 'edit']);
+$router->post('/spaces/{spaceKey}/news/{id}', [SpaceNewsController::class, 'update']);
+$router->post('/spaces/{spaceKey}/news/{id}/delete', [SpaceNewsController::class, 'delete']);
 $router->get('/spaces/{spaceKey}/mission-control', [SpaceController::class, 'missionControl']);
 $router->get('/spaces/{spaceKey}/settings', [SpaceController::class, 'settings']);
 $router->get('/spaces/{spaceKey}/tree', [SpaceController::class, 'tree']);
@@ -200,6 +209,8 @@ $router->delete('/api/v1/attachments/{id}', [ApiV1Controller::class, 'deleteAtta
 $router->post('/spaces/{spaceKey}/pages/{slug}/comments', [CommentController::class, 'create']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/comments/{id}/edit', [CommentController::class, 'update']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/comments/{id}/delete', [CommentController::class, 'delete']);
+$router->post('/spaces/{spaceKey}/pages/{slug}/reactions/page', [ReactionController::class, 'page']);
+$router->post('/spaces/{spaceKey}/pages/{slug}/comments/{id}/reactions', [ReactionController::class, 'comment']);
 
 $router->post('/spaces/{spaceKey}/pages/{slug}/attachments', [AttachmentController::class, 'upload']);
 $router->post('/spaces/{spaceKey}/pages/{slug}/images', [AttachmentController::class, 'imageUpload']);

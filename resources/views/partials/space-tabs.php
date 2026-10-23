@@ -2,6 +2,7 @@
 <nav class="workspace-tabs" aria-label="<?= $e($t('Space navigation')) ?>">
     <a href="<?= $e($spaceBase) ?>"<?= $spaceTab === 'overview' ? ' aria-current="page"' : '' ?>><?= $e($t('Overview')) ?></a>
     <a href="<?= $e($spaceBase) ?>?tab=content"<?= $spaceTab === 'content' ? ' aria-current="page"' : '' ?>><?= $e($t('Content')) ?></a>
+    <a href="<?= $e($spaceBase) ?>/news"<?= $spaceTab === 'news' ? ' aria-current="page"' : '' ?>><?= $e($t('News')) ?></a>
     <?php if ($canCreatePage): ?><a href="<?= $e($spaceBase) ?>/templates"<?= $spaceTab === 'templates' ? ' aria-current="page"' : '' ?>><?= $e($t('Templates')) ?></a><?php endif; ?>
     <?php if ($canMissionControl ?? false): ?><a href="<?= $e($spaceBase) ?>/mission-control"<?= $spaceTab === 'mission' ? ' aria-current="page"' : '' ?>><?= $e($t('Mission Control')) ?></a><?php endif; ?>
     <a href="/search?space=<?= rawurlencode($space['space_key']) ?>&amp;type=page"<?= $spaceTab === 'search' ? ' aria-current="page"' : '' ?>><?= $e($t('Search')) ?></a>

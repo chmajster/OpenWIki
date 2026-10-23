@@ -43,19 +43,19 @@ $commentAvatarHue = static function (int $authorId): int {
                 <a class="button button--ghost" href="<?= $e($pageUrl) ?>/history"><?= $e($t('History')) ?></a>
                 <details class="page-menu" data-close-on-escape><summary class="button button--ghost" aria-label="<?= $e($t('More actions')) ?>" title="<?= $e($t('More actions')) ?>"><span aria-hidden="true">•••</span></summary><div class="menu-items">
                 <?php if (!empty($canManagePermissions)): ?>
-                    <a class="button button--ghost" href="<?= $e($pageUrl) ?>/permissions"><?= $e($t('Permissions')) ?></a>
+                    <a class="button button--ghost" href="<?= $e($pageUrl) ?>/permissions"><?= $uiIcon('shield') ?><span><?= $e($t('Permissions')) ?></span></a>
                 <?php endif; ?>
-                <?php if ($canMove || $canCopy): ?><button type="button" class="button button--ghost" data-structure-page="<?= $e(json_encode(['id' => (int) $page['id'], 'title' => $page['title'], 'version' => $headVersion, 'parent_id' => $visibleParentId, 'space_id' => (int) $space['id'], 'can_move' => $canMove, 'can_copy' => $canCopy], JSON_THROW_ON_ERROR)) ?>">Przenieś lub kopiuj</button><?php endif; ?>
+                <?php if ($canMove || $canCopy): ?><button type="button" class="button button--ghost" data-structure-page="<?= $e(json_encode(['id' => (int) $page['id'], 'title' => $page['title'], 'version' => $headVersion, 'parent_id' => $visibleParentId, 'space_id' => (int) $space['id'], 'can_move' => $canMove, 'can_copy' => $canCopy], JSON_THROW_ON_ERROR)) ?>"><?= $uiIcon('move') ?><span>Przenieś lub kopiuj</span></button><?php endif; ?>
                 <?php if ($currentUser !== null): ?>
 
                     <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/watch">
                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
                         <input type="hidden" name="enabled" value="<?= $isWatching ? '0' : '1' ?>">
-                        <button class="button button--ghost" type="submit"><?= $e($t($isWatching ? 'Stop watching' : 'Watch')) ?></button>
+                        <button class="button button--ghost" type="submit"><?= $uiIcon('eye') ?><span><?= $e($t($isWatching ? 'Stop watching' : 'Watch')) ?></span></button>
                     </form>
                 <?php endif; ?>
                 <details class="export-menu" data-close-on-escape>
-                    <summary class="button button--ghost"><?= $e($t('Export')) ?></summary>
+                    <summary class="button button--ghost"><?= $uiIcon('download') ?><span><?= $e($t('Export')) ?></span></summary>
                     <div class="export-menu__items">
                         <a href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/export/html">HTML</a>
                         <a href="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/export/markdown">Markdown</a>
@@ -65,7 +65,7 @@ $commentAvatarHue = static function (int $authorId): int {
                 <?php if ($canDeletePage): ?>
                     <form class="inline-form" method="post" action="/spaces/<?= rawurlencode($space['space_key']) ?>/pages/<?= rawurlencode($page['slug']) ?>/delete" data-confirm="<?= $e($t('Move this page and all its descendants to trash?')) ?>">
                         <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">
-                        <button class="button button--ghost" type="submit"><?= $e($t('Delete')) ?></button>
+                        <button class="button button--ghost menu-item--danger" type="submit"><?= $uiIcon('trash') ?><span><?= $e($t('Delete')) ?></span></button>
                     </form>
                 <?php endif; ?>
                 </div></details>
@@ -77,7 +77,11 @@ $commentAvatarHue = static function (int $authorId): int {
                     <span class="reader-author-avatar" aria-hidden="true"><?= $e(mb_substr($page['author_username'], 0, 1)) ?></span>
                     <span><?= $e($t('Created by')) ?> <strong><?= $e($page['author_username']) ?></strong></span>
                     <span class="reader-meta-separator" aria-hidden="true">·</span>
-                    <span><?= $e($t('Updated')) ?> <time datetime="<?= $e(str_replace(' ', 'T', $page['updated_at'])) ?>Z"><?= $e($page['updated_at']) ?></time></span>
+                    <span><?= $e($t('Created')) ?> <time datetime="<?= $e(\OpenWiki\Core\DateFormatter::machineValue($page['created_at'] ?? null)) ?>"><?= $e(\OpenWiki\Core\DateFormatter::formatDateTime($page['created_at'] ?? null, $dateFormat ?? 'locale', $locale)) ?></time></span>
+                    <span class="reader-meta-separator" aria-hidden="true">·</span>
+                    <span><?= $e($t('Updated')) ?> <time datetime="<?= $e(\OpenWiki\Core\DateFormatter::machineValue($page['updated_at'] ?? null)) ?>"><?= $e(\OpenWiki\Core\DateFormatter::formatDateTime($page['updated_at'] ?? null, $dateFormat ?? 'locale', $locale)) ?></time></span>
+                    <span class="reader-meta-separator" aria-hidden="true">·</span>
+                    <span><?= $e($t('Updated by')) ?> <strong><?= $e($page['updated_by_username'] ?? $page['author_username']) ?></strong></span>
                     <span class="reader-meta-separator" aria-hidden="true">·</span>
                     <span><?= $readMinutes ?> <?= $e($t('min read')) ?></span>
                     <span class="reader-meta-separator" aria-hidden="true">·</span>
@@ -91,6 +95,7 @@ $commentAvatarHue = static function (int $authorId): int {
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
+                <?php $reactionSummary = $pageReactions; $reactionAction = $pageUrl . '/reactions/page'; require __DIR__ . '/../partials/reaction-bar.php'; ?>
         </header>
 
         <?php $reviewIsOverdue = $page['review_due_at'] !== null && $page['review_due_at'] < gmdate('Y-m-d'); ?>
@@ -271,6 +276,8 @@ $commentAvatarHue = static function (int $authorId): int {
                                 <?php if ($comment['updated_at'] !== $comment['created_at']): ?><span><?= $e($t('edited')) ?></span><?php endif; ?>
                             </div>
                             <div class="comment__body"><?= $comment['body_html'] ?></div>
+
+                            <?php $reactionSummary = $commentReactions[(int) $comment['id']] ?? ['counts' => [], 'selected' => null]; $reactionAction = $pageUrl . '/comments/' . (int) $comment['id'] . '/reactions'; require __DIR__ . '/../partials/reaction-bar.php'; ?>
 
                             <div class="comment__actions">
                                 <?php if ($canComment): ?>

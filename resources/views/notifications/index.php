@@ -24,7 +24,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
                 <?php foreach ($notifications as $notification): ?>
                     <li class="notification-item <?= $notification['read_at'] === null ? 'is-unread' : '' ?>">
                         <div>
-                            <strong><?= $e($notification['title']) ?></strong>
+                            <strong><?= $e($t($notification['title'])) ?></strong>
                             <?php if ($notification['body']): ?>
                                 <p><?= $e($notification['body']) ?></p>
                             <?php endif; ?>
